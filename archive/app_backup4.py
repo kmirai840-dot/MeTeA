@@ -1,14 +1,7 @@
 from pathlib import Path
-from dataclasses import dataclass
-from html import escape
 import base64
 
 import streamlit as st
-
-
-# ========================================
-# 基本設定
-# ========================================
 
 
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -22,324 +15,12 @@ st.set_page_config(
 )
 
 
-# ========================================
-# 表示データ用クラス
-# ========================================
-
-
-@dataclass(frozen=True)
-class NavItem:
-    label: str
-    icon: str
-    href: str = "#"
-
-
-@dataclass(frozen=True)
-class ActionCard:
-    title: str
-    description: str
-    icon: str
-    color_class: str
-    href: str = "#"
-
-
-@dataclass(frozen=True)
-class TaskItem:
-    dot_class: str
-    date: str
-    company: str
-    task: str
-    remaining: str
-    deadline_class: str
-
-
-@dataclass(frozen=True)
-class ActivityItem:
-    text: str
-    time: str
-    icon: str
-    color_class: str
-
-# ========================================
-# ヘッダーメニュー
-# ========================================
-
-
-NAV_ITEMS = [
-    NavItem(
-        label="使い方",
-        icon="help.svg",
-    ),
-    NavItem(
-        label="設定",
-        icon="nav-settings.svg",
-    ),
-    NavItem(
-        label="ログアウト",
-        icon="logout.svg",
-    ),
-]
-
-# ========================================
-# メインメニュー
-# ========================================
-
-
-ACTION_CARDS = [
-    ActionCard(
-        title="① 自分を知る",
-        description="あなたの情報や価値観を整理しましょう",
-        icon="user.svg",
-        color_class="metea-bubble-blue",
-    ),
-    ActionCard(
-        title="② 求人を比較する",
-        description="求人は比較・分析して、相性を見える化します",
-        icon="compare.svg",
-        color_class="metea-bubble-green",
-    ),
-    ActionCard(
-        title="③ 応募後を管理する",
-        description="応募状況やマイルストーンを管理しましょう",
-        icon="flag.svg",
-        color_class="metea-bubble-orange",
-    ),
-    ActionCard(
-        title="設定",
-        description="アカウント情報や各種設定を行います",
-        icon="settings.svg",
-        color_class="metea-bubble-purple",
-    ),
-]
-
-# ========================================
-# 期限が近いタスク
-# ========================================
-
-
-TASK_ITEMS = [
-    TaskItem(
-        dot_class="metea-dot-red",
-        date="7/24（水）",
-        company="A社",
-        task="履歴書を提出",
-        remaining="あと1日",
-        deadline_class="metea-deadline-red",
-    ),
-    TaskItem(
-        dot_class="metea-dot-orange",
-        date="7/25（金）",
-        company="B社",
-        task="面接準備",
-        remaining="あと2日",
-        deadline_class="metea-deadline-orange",
-    ),
-    TaskItem(
-        dot_class="metea-dot-amber",
-        date="7/26（土）",
-        company="C社",
-        task="企業研究を深める",
-        remaining="あと3日",
-        deadline_class="metea-deadline-amber",
-    ),
-]
-
-# ========================================
-# 最近の活動
-# ========================================
-
-
-ACTIVITY_ITEMS = [
-    ActivityItem(
-        text="プロフィールを更新しました",
-        time="7/22 14:30",
-        icon="user.svg",
-        color_class="metea-activity-blue",
-    ),
-    ActivityItem(
-        text="A社の求人を登録しました",
-        time="7/22 10:15",
-        icon="compare.svg",
-        color_class="metea-activity-green",
-    ),
-    ActivityItem(
-        text="比較結果を保存しました",
-        time="7/21 16:45",
-        icon="compare.svg",
-        color_class="metea-activity-green",
-    ),
-]
-
-# ========================================
-# SVG読み込み
-# ========================================
-
-
 def svg_data_uri(filename):
-    """assets内のSVGをHTMLで表示できる形式に変換する。"""
-
+    """assets内のSVGを、HTMLのimg要素で表示できる形式に変換する。"""
     path = ASSETS_DIR / filename
     svg = path.read_text(encoding="utf-8")
-    encoded = base64.b64encode(
-        svg.encode("utf-8")
-    ).decode("ascii")
-
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
     return f"data:image/svg+xml;base64,{encoded}"
-
-# ========================================
-# ヘッダーメニューHTML生成
-# ========================================
-
-
-def render_nav_item(item):
-    icon = svg_data_uri(item.icon)
-
-    return f"""
-    <a
-        class="metea-nav-link"
-        href="{escape(item.href)}"
-    >
-        <img
-            src="{icon}"
-            alt=""
-        >
-        <span>{escape(item.label)}</span>
-    </a>
-    """
-
-
-def render_nav_items():
-    return "".join(
-        render_nav_item(item)
-        for item in NAV_ITEMS
-    )
-
-# ========================================
-# メインメニューHTML生成
-# ========================================
-
-
-def render_action_card(card):
-    icon = svg_data_uri(card.icon)
-
-    return f"""
-    <a
-        class="metea-action-card"
-        href="{escape(card.href)}"
-    >
-        <span class="
-            metea-icon-bubble
-            {escape(card.color_class)}
-        ">
-            <img
-                src="{icon}"
-                alt=""
-            >
-        </span>
-
-        <span>
-            <span class="metea-action-title">
-                {escape(card.title)}
-            </span>
-
-            <span class="metea-action-desc">
-                {escape(card.description)}
-            </span>
-        </span>
-
-        <i
-            class="metea-chevron"
-            aria-hidden="true"
-        ></i>
-    </a>
-    """
-
-
-def render_action_cards():
-    return "".join(
-        render_action_card(card)
-        for card in ACTION_CARDS
-    )
-
-# ========================================
-# タスクHTML生成
-# ========================================
-
-
-def render_task_item(item):
-    return f"""
-    <div class="metea-task-row">
-        <i class="
-            metea-dot
-            {escape(item.dot_class)}
-        "></i>
-
-        <span>{escape(item.date)}</span>
-        <span>{escape(item.company)}</span>
-        <span>{escape(item.task)}</span>
-
-        <span class="
-            metea-deadline
-            {escape(item.deadline_class)}
-        ">
-            {escape(item.remaining)}
-        </span>
-
-        <i class="metea-mini-chevron"></i>
-    </div>
-    """
-
-
-def render_task_items():
-    return "".join(
-        render_task_item(item)
-        for item in TASK_ITEMS
-    )
-
-# ========================================
-# 最近の活動HTML生成
-# ========================================
-
-
-def render_activity_item(item):
-    icon = svg_data_uri(item.icon)
-
-    return f"""
-    <div class="metea-activity-row">
-        <span class="
-            metea-activity-icon
-            {escape(item.color_class)}
-        ">
-            <img
-                src="{icon}"
-                alt=""
-            >
-        </span>
-
-        <span>{escape(item.text)}</span>
-
-        <time class="metea-activity-time">
-            {escape(item.time)}
-        </time>
-    </div>
-    """
-
-
-def render_activity_items():
-    return "".join(
-        render_activity_item(item)
-        for item in ACTIVITY_ITEMS
-    )
-
-# ========================================
-# 各ブロックのHTMLを生成
-# ========================================
-
-nav_items_html = render_nav_items()
-action_cards_html = render_action_cards()
-task_items_html = render_task_items()
-activity_items_html = render_activity_items()
-
 
 
 page = """
@@ -845,8 +526,19 @@ page = """
       </div>
 
       <nav class="metea-nav" aria-label="メインナビゲーション">
-        __NAV_ITEMS_HTML__
-        </nav>
+        <a class="metea-nav-link" href="#">
+          <img src="__HELP__" alt="">
+          <span>使い方</span>
+        </a>
+        <a class="metea-nav-link" href="#">
+          <img src="__NAV_SETTINGS__" alt="">
+          <span>設定</span>
+        </a>
+        <a class="metea-nav-link" href="#">
+          <img src="__LOGOUT__" alt="">
+          <span>ログアウト</span>
+        </a>
+      </nav>
     </div>
   </header>
 
@@ -860,7 +552,49 @@ page = """
       </p>
 
       <div class="metea-action-list">
-      __ACTION_CARDS_HTML__
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-blue">
+            <img src="__USER__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">① 自分を知る</span>
+            <span class="metea-action-desc">あなたの情報や価値観を整理しましょう</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-green">
+            <img src="__COMPARE__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">② 求人を比較する</span>
+            <span class="metea-action-desc">求人は比較・分析して、相性を見える化します</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-orange">
+            <img src="__FLAG__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">③ 応募後を管理する</span>
+            <span class="metea-action-desc">応募状況やマイルストーンを管理しましょう</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-purple">
+            <img src="__SETTINGS__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">設定</span>
+            <span class="metea-action-desc">アカウント情報や各種設定を行います</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
       </div>
     </section>
 
@@ -882,8 +616,21 @@ page = """
           <h2>期限が近いタスク</h2>
           <a href="#">すべてのタスクを見る</a>
         </div>
-
-        __TASK_ITEMS_HTML__
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-red"></i><span>7/24（水）</span><span>A社</span>
+          <span>履歴書を提出</span><span class="metea-deadline metea-deadline-red">あと1日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-orange"></i><span>7/25（金）</span><span>B社</span>
+          <span>面接準備</span><span class="metea-deadline metea-deadline-orange">あと2日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-amber"></i><span>7/26（土）</span><span>C社</span>
+          <span>企業研究を深める</span><span class="metea-deadline metea-deadline-amber">あと3日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
       </article>
 
       <article class="metea-panel metea-activity-panel">
@@ -891,8 +638,21 @@ page = """
           <h2>最近の活動</h2>
           <a href="#">すべて見る</a>
         </div>
-
-        __ACTIVITY_ITEMS_HTML__
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-blue"><img src="__USER__" alt=""></span>
+          <span>プロフィールを更新しました</span>
+          <time class="metea-activity-time">7/22 14:30</time>
+        </div>
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-green"><img src="__COMPARE__" alt=""></span>
+          <span>A社の求人を登録しました</span>
+          <time class="metea-activity-time">7/22 10:15</time>
+        </div>
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-green"><img src="__COMPARE__" alt=""></span>
+          <span>比較結果を保存しました</span>
+          <time class="metea-activity-time">7/21 16:45</time>
+        </div>
       </article>
 
       <article class="metea-panel metea-quote-panel">
@@ -905,54 +665,22 @@ page = """
 </div>
 """
 
-# ========================================
-# Pythonで生成したHTMLをページへ差し込む
-# ========================================
-
-
-page = page.replace(
-    "__NAV_ITEMS_HTML__",
-    nav_items_html,
-)
-
-page = page.replace(
-    "__ACTION_CARDS_HTML__",
-    action_cards_html,
-)
-
-page = page.replace(
-    "__TASK_ITEMS_HTML__",
-    task_items_html,
-)
-
-page = page.replace(
-    "__ACTIVITY_ITEMS_HTML__",
-    activity_items_html,
-)
-
-# ========================================
-# ページ固定SVG
-# ========================================
-
 
 assets = {
     "__LOGO__": "logo.svg",
+    "__HELP__": "help.svg",
+    "__NAV_SETTINGS__": "nav-settings.svg",
+    "__LOGOUT__": "logout.svg",
+    "__USER__": "user.svg",
+    "__COMPARE__": "compare.svg",
+    "__FLAG__": "flag.svg",
+    "__SETTINGS__": "settings.svg",
     "__SPARKLE__": "sparkle.svg",
     "__LEAF__": "leaf.svg",
     "__SCENERY__": "scenery.svg",
 }
 
-
 for placeholder, filename in assets.items():
-    page = page.replace(
-        placeholder,
-        svg_data_uri(filename),
-    )
-
-
-# ========================================
-# ページ表示
-# ========================================
-
+    page = page.replace(placeholder, svg_data_uri(filename))
 
 st.html(page)
