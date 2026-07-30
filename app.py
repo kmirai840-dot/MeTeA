@@ -21,6 +21,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+
+
 # ========================================
 # 表示画面の判定
 # ========================================
@@ -30,6 +32,20 @@ current_page = st.query_params.get(
     "home",
 )
 
+valid_pages = {
+    "home",
+    "basic_info",
+    "job_list",
+    "application_list",
+    "settings",
+    "help",
+    "logout",
+}
+
+
+if current_page not in valid_pages:
+    st.query_params.clear()
+    st.rerun()
 
 if current_page == "basic_info":
     st.title("基本情報")
@@ -43,6 +59,76 @@ if current_page == "basic_info":
         st.rerun()
 
     st.stop()
+
+elif current_page == "job_list":
+    st.title("求人一覧")
+
+    st.write(
+        "求人一覧画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "application_list":
+    st.title("応募企業一覧")
+
+    st.write(
+        "応募企業一覧画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "settings":
+    st.title("設定")
+
+    st.write(
+        "設定画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "help":
+    st.title("使い方")
+
+    st.write(
+        "使い方画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "logout":
+    st.title("ログアウト")
+
+    st.write(
+        "ログアウトしますか？"
+    )
+
+    st.info(
+        "実際のログアウト処理は、認証機能の実装時に追加します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
 
 # ========================================
 # 表示データ用クラス
@@ -91,14 +177,17 @@ NAV_ITEMS = [
     NavItem(
         label="使い方",
         icon="help.svg",
+        href="?page=help",
     ),
     NavItem(
         label="設定",
         icon="nav-settings.svg",
+        href="?page=settings",
     ),
     NavItem(
         label="ログアウト",
         icon="logout.svg",
+        href="?page=logout",
     ),
 ]
 
@@ -114,24 +203,28 @@ ACTION_CARDS = [
         icon="user.svg",
         color_class="metea-bubble-blue",
         href="?page=basic_info",
+        
     ),
     ActionCard(
         title="② 求人を比較する",
         description="求人は比較・分析して、相性を見える化します",
         icon="compare.svg",
         color_class="metea-bubble-green",
+        href="?page=job_list",
     ),
     ActionCard(
         title="③ 応募後を管理する",
         description="応募状況やマイルストーンを管理しましょう",
         icon="flag.svg",
         color_class="metea-bubble-orange",
+        href="?page=application_list",
     ),
     ActionCard(
         title="設定",
         description="アカウント情報や各種設定を行います",
         icon="settings.svg",
         color_class="metea-bubble-purple",
+        href="?page=settings",
     ),
 ]
 
@@ -895,8 +988,8 @@ page = """
         <div class="metea-next-body">
           <h2>次の一歩</h2>
           <p>まだ入力が完了していない項目があります。</p>
-          <p>まずは「<a class="metea-text-link" href="#">基本情報</a>」から始めてみましょう。</p>
-          <a class="metea-primary-button" href="#">基本情報を入力する <span>→</span></a>
+          <p>まずは「<a class="metea-text-link" href="?page=basic_info">基本情報</a>」から始めてみましょう。</p>
+          <a class="metea-primary-button" href="?page=basic_info">基本情報を入力する <span>→</span></a>
         </div>
       </article>
 
