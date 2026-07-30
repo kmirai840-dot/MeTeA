@@ -21,6 +21,28 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ========================================
+# 表示画面の判定
+# ========================================
+
+current_page = st.query_params.get(
+    "page",
+    "home",
+)
+
+
+if current_page == "basic_info":
+    st.title("基本情報")
+
+    st.write(
+        "基本情報画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
 
 # ========================================
 # 表示データ用クラス
@@ -91,6 +113,7 @@ ACTION_CARDS = [
         description="あなたの情報や価値観を整理しましょう",
         icon="user.svg",
         color_class="metea-bubble-blue",
+        href="?page=basic_info",
     ),
     ActionCard(
         title="② 求人を比較する",
