@@ -1,509 +1,686 @@
 from pathlib import Path
 import base64
-from textwrap import dedent
+
 import streamlit as st
+
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 
-
-# ========================================
-# ページ設定
-# ========================================
 
 st.set_page_config(
     page_title="MeTeA",
     page_icon="🧭",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
-# ========================================
-# assets
-# ========================================
 
-ASSETS_DIR = Path(__file__).parent / "assets"
-
-
-# ========================================
-# SVG表示
-# ========================================
-
-def svg_image(filename, width=48):
-
+def svg_data_uri(filename):
+    """assets内のSVGを、HTMLのimg要素で表示できる形式に変換する。"""
     path = ASSETS_DIR / filename
+    svg = path.read_text(encoding="utf-8")
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
-    if not path.exists():
-        return f"""
-        <div style="color:red;">
-        {filename} が見つかりません
+
+page = """
+<style>
+  :root {
+    --ink: #071a36;
+    --muted: #53627a;
+    --blue: #146cff;
+    --line: #e4e9f1;
+    --panel: #ffffff;
+    --page: #fbfcfe;
+  }
+
+  header[data-testid="stHeader"], #MainMenu, footer {
+    display: none !important;
+  }
+
+  .stApp {
+    background: var(--page);
+  }
+
+  .block-container {
+    width: 100%;
+    max-width: none;
+    padding: 0 0 48px;
+  }
+
+  .metea-shell,
+  .metea-shell * {
+    box-sizing: border-box;
+  }
+
+  .metea-shell {
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN",
+      "Noto Sans JP", sans-serif;
+    font-weight: 600;
+    letter-spacing: .01em;
+  }
+
+  .metea-shell a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .metea-header {
+    height: 84px;
+    background: rgba(255, 255, 255, .96);
+    border-bottom: 1px solid #e8ecf2;
+    box-shadow: 0 2px 8px rgba(20, 39, 73, .035);
+  }
+
+  .metea-header-inner {
+    width: min(1174px, calc(100% - 72px));
+    height: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .metea-brand-group {
+    display: flex;
+    align-items: center;
+    gap: 42px;
+  }
+
+  .metea-logo-frame {
+    width: 139px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .metea-logo {
+    display: block;
+    width: 139px;
+    height: 56px;
+    object-fit: contain;
+    transform: scale(2);
+  }
+
+  .metea-tagline {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    white-space: nowrap;
+  }
+
+  .metea-nav {
+    display: flex;
+    align-items: center;
+    gap: 38px;
+  }
+
+  .metea-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .metea-nav-link img {
+    width: 24px;
+    height: 24px;
+  }
+
+  .metea-dashboard {
+    width: min(1168px, calc(100% - 72px));
+    margin: 25px auto 0;
+    display: grid;
+    grid-template-columns: 545px 1fr;
+    gap: 42px;
+    align-items: start;
+  }
+
+  .metea-intro {
+    padding: 20px 8px 0;
+  }
+
+  .metea-intro h1 {
+    margin: 0 0 20px;
+    color: var(--ink);
+    font-size: 43px;
+    line-height: 1.28;
+    letter-spacing: .015em;
+    font-weight: 800;
+  }
+
+  .metea-lead {
+    margin: 0 0 33px;
+    color: var(--ink);
+    font-size: 17px;
+    line-height: 1.85;
+    font-weight: 600;
+  }
+
+  .metea-action-list {
+    display: grid;
+    gap: 16px;
+  }
+
+  .metea-action-card,
+  .metea-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 3px 10px rgba(17, 42, 82, .055);
+  }
+
+  .metea-action-card {
+    min-height: 104px;
+    border-radius: 12px;
+    padding: 16px 30px 16px 17px;
+    display: grid;
+    grid-template-columns: 78px 1fr 28px;
+    align-items: center;
+    gap: 25px;
+  }
+
+  .metea-icon-bubble {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+
+  .metea-icon-bubble img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .metea-bubble-blue { background: #eef5ff; }
+  .metea-bubble-green { background: #eaf9f4; }
+  .metea-bubble-orange { background: #fff3e8; }
+  .metea-bubble-purple { background: #f3efff; }
+
+  .metea-action-title {
+    display: block;
+    margin: 0 0 8px;
+    color: var(--ink);
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 800;
+  }
+
+  .metea-action-desc {
+    display: block;
+    margin: 0;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .metea-chevron {
+    width: 14px;
+    height: 14px;
+    border-top: 2px solid var(--ink);
+    border-right: 2px solid var(--ink);
+    transform: rotate(45deg);
+  }
+
+  .metea-right-column {
+    display: grid;
+    gap: 15px;
+  }
+
+  .metea-panel {
+    border-radius: 12px;
+  }
+
+  .metea-next-step {
+    min-height: 186px;
+    padding: 21px 24px;
+    display: grid;
+    grid-template-columns: 91px 1fr;
+    gap: 22px;
+    align-items: start;
+  }
+
+  .metea-next-icon {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    background: #eef5ff;
+    display: grid;
+    place-items: center;
+  }
+
+  .metea-next-icon img {
+    width: 52px;
+    height: 52px;
+  }
+
+  .metea-next-body h2 {
+    margin: 0 0 10px;
+    color: var(--ink);
+    font-size: 21px;
+  }
+
+  .metea-next-body p {
+    margin: 0 0 8px;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .metea-text-link {
+    color: var(--blue) !important;
+    font-weight: 800;
+  }
+
+  .metea-primary-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 8px;
+    padding: 11px 25px;
+    color: #fff !important;
+    background: linear-gradient(180deg, #2878ff, #0862f1);
+    border-radius: 7px;
+    box-shadow: 0 4px 8px rgba(20, 108, 255, .2);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .metea-info-panel {
+    padding: 14px 22px 11px;
+  }
+
+  .metea-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .metea-panel-head h2 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 18px;
+  }
+
+  .metea-panel-head a {
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .metea-task-row {
+    min-height: 43px;
+    display: grid;
+    grid-template-columns: 17px 82px 53px 1fr 69px 13px;
+    align-items: center;
+    gap: 9px;
+    border-top: 1px solid #edf0f5;
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  .metea-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .metea-dot-red { background: #ff3340; }
+  .metea-dot-orange { background: #ff6729; }
+  .metea-dot-amber { background: #ffb118; }
+
+  .metea-deadline {
+    justify-self: end;
+    padding: 3px 9px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    line-height: 1;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .metea-deadline-red { color: #ff4c57; }
+  .metea-deadline-orange { color: #ff692d; }
+  .metea-deadline-amber { color: #eea000; }
+
+  .metea-mini-chevron {
+    width: 8px;
+    height: 8px;
+    border-top: 1.5px solid #52627a;
+    border-right: 1.5px solid #52627a;
+    transform: rotate(45deg);
+  }
+
+  .metea-activity-panel {
+    padding: 14px 22px 10px;
+  }
+
+  .metea-activity-row {
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    align-items: center;
+    border-top: 1px solid #edf0f5;
+    color: var(--ink);
+    font-size: 14px;
+  }
+
+  .metea-activity-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+
+  .metea-activity-icon img {
+    width: 21px;
+    height: 21px;
+  }
+
+  .metea-activity-blue { background: #edf4ff; }
+  .metea-activity-green { background: #eaf9f4; }
+
+  .metea-activity-time {
+    color: #8997ad;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .metea-quote-panel {
+    min-height: 108px;
+    padding: 17px 21px;
+    overflow: hidden;
+    position: relative;
+    background: linear-gradient(110deg, #edf6ff 0%, #f6faff 58%, #e8f1ff 100%);
+  }
+
+  .metea-quote-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 7px;
+    color: #126dff;
+    font-size: 15px;
+  }
+
+  .metea-quote-title img {
+    width: 19px;
+    height: 19px;
+  }
+
+  .metea-quote-panel p {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .metea-scenery {
+    position: absolute;
+    right: 8px;
+    bottom: 0;
+    width: 225px;
+    height: 100px;
+    object-fit: contain;
+    object-position: bottom right;
+  }
+
+  div[data-testid="stToast"] {
+    display: none !important;
+  }
+
+  @media (max-width: 980px) {
+    .metea-header-inner,
+    .metea-dashboard {
+      width: min(92%, 680px);
+    }
+
+    .metea-tagline {
+      display: none;
+    }
+
+    .metea-nav {
+      gap: 16px;
+    }
+
+    .metea-dashboard {
+      grid-template-columns: 1fr;
+    }
+
+    .metea-intro {
+      padding-top: 0;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .metea-header {
+      height: 70px;
+    }
+
+    .metea-header-inner {
+      width: calc(100% - 30px);
+    }
+
+    .metea-logo {
+      width: 115px;
+    }
+
+    .metea-nav-link span {
+      display: none;
+    }
+
+    .metea-dashboard {
+      width: calc(100% - 28px);
+      margin-top: 22px;
+    }
+
+    .metea-intro h1 {
+      font-size: 34px;
+    }
+
+    .metea-action-card {
+      grid-template-columns: 62px 1fr 20px;
+      gap: 14px;
+      padding-left: 12px;
+    }
+
+    .metea-icon-bubble {
+      width: 58px;
+      height: 58px;
+    }
+
+    .metea-next-step {
+      grid-template-columns: 72px 1fr;
+      padding: 18px;
+      gap: 14px;
+    }
+
+    .metea-next-icon {
+      width: 66px;
+      height: 66px;
+    }
+
+    .metea-task-row {
+      grid-template-columns: 14px 63px 42px 1fr 58px 9px;
+      gap: 5px;
+      font-size: 11px;
+    }
+  }
+</style>
+
+<div class="metea-shell">
+  <header class="metea-header">
+    <div class="metea-header-inner">
+      <div class="metea-brand-group">
+        <span class="metea-logo-frame"><img class="metea-logo" src="__LOGO__" alt="MeTeA"></span>
+        <div class="metea-tagline">自分が見えた、道が見えた。</div>
+      </div>
+
+      <nav class="metea-nav" aria-label="メインナビゲーション">
+        <a class="metea-nav-link" href="#">
+          <img src="__HELP__" alt="">
+          <span>使い方</span>
+        </a>
+        <a class="metea-nav-link" href="#">
+          <img src="__NAV_SETTINGS__" alt="">
+          <span>設定</span>
+        </a>
+        <a class="metea-nav-link" href="#">
+          <img src="__LOGOUT__" alt="">
+          <span>ログアウト</span>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="metea-dashboard">
+    <section class="metea-intro">
+      <h1>納得できる一歩を。</h1>
+      <p class="metea-lead">
+        あなたの価値観や経験を整理し、<br>
+        求人との相性を見える化することで、<br>
+        納得できる応募判断をサポートします。
+      </p>
+
+      <div class="metea-action-list">
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-blue">
+            <img src="__USER__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">① 自分を知る</span>
+            <span class="metea-action-desc">あなたの情報や価値観を整理しましょう</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-green">
+            <img src="__COMPARE__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">② 求人を比較する</span>
+            <span class="metea-action-desc">求人は比較・分析して、相性を見える化します</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-orange">
+            <img src="__FLAG__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">③ 応募後を管理する</span>
+            <span class="metea-action-desc">応募状況やマイルストーンを管理しましょう</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+
+        <a class="metea-action-card" href="#">
+          <span class="metea-icon-bubble metea-bubble-purple">
+            <img src="__SETTINGS__" alt="">
+          </span>
+          <span>
+            <span class="metea-action-title">設定</span>
+            <span class="metea-action-desc">アカウント情報や各種設定を行います</span>
+          </span>
+          <i class="metea-chevron" aria-hidden="true"></i>
+        </a>
+      </div>
+    </section>
+
+    <section class="metea-right-column">
+      <article class="metea-panel metea-next-step">
+        <div class="metea-next-icon">
+          <img src="__SPARKLE__" alt="">
         </div>
-        """
+        <div class="metea-next-body">
+          <h2>次の一歩</h2>
+          <p>まだ入力が完了していない項目があります。</p>
+          <p>まずは「<a class="metea-text-link" href="#">基本情報</a>」から始めてみましょう。</p>
+          <a class="metea-primary-button" href="#">基本情報を入力する <span>→</span></a>
+        </div>
+      </article>
 
-    svg = path.read_text(
-        encoding="utf-8"
-    )
+      <article class="metea-panel metea-info-panel">
+        <div class="metea-panel-head">
+          <h2>期限が近いタスク</h2>
+          <a href="#">すべてのタスクを見る</a>
+        </div>
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-red"></i><span>7/24（水）</span><span>A社</span>
+          <span>履歴書を提出</span><span class="metea-deadline metea-deadline-red">あと1日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-orange"></i><span>7/25（金）</span><span>B社</span>
+          <span>面接準備</span><span class="metea-deadline metea-deadline-orange">あと2日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
+        <div class="metea-task-row">
+          <i class="metea-dot metea-dot-amber"></i><span>7/26（土）</span><span>C社</span>
+          <span>企業研究を深める</span><span class="metea-deadline metea-deadline-amber">あと3日</span>
+          <i class="metea-mini-chevron"></i>
+        </div>
+      </article>
 
-    svg = base64.b64encode(
-        svg.encode("utf-8")
-    ).decode()
+      <article class="metea-panel metea-activity-panel">
+        <div class="metea-panel-head">
+          <h2>最近の活動</h2>
+          <a href="#">すべて見る</a>
+        </div>
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-blue"><img src="__USER__" alt=""></span>
+          <span>プロフィールを更新しました</span>
+          <time class="metea-activity-time">7/22 14:30</time>
+        </div>
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-green"><img src="__COMPARE__" alt=""></span>
+          <span>A社の求人を登録しました</span>
+          <time class="metea-activity-time">7/22 10:15</time>
+        </div>
+        <div class="metea-activity-row">
+          <span class="metea-activity-icon metea-activity-green"><img src="__COMPARE__" alt=""></span>
+          <span>比較結果を保存しました</span>
+          <time class="metea-activity-time">7/21 16:45</time>
+        </div>
+      </article>
 
-    return f"""
-    <img
-        src="data:image/svg+xml;base64,{svg}"
-        width="{width}"
-        style="
-            display:block;
-        "
-    >
-    """
-
-
-# ========================================
-# 丸アイコン
-# ========================================
-
-def circle_icon(filename, color):
-
-    return f"""
-<div style="
-width:82px;
-height:82px;
-background:{color};
-border-radius:50%;
-display:flex;
-justify-content:center;
-align-items:center;
-">
-    {svg_image(filename)}
+      <article class="metea-panel metea-quote-panel">
+        <h2 class="metea-quote-title"><img src="__LEAF__" alt="">今日のひとこと</h2>
+        <p>焦らなくても大丈夫です。<br>納得できる一歩は、きっと未来につながります。</p>
+        <img class="metea-scenery" src="__SCENERY__" alt="">
+      </article>
+    </section>
+  </main>
 </div>
 """
 
 
-# ========================================
-# CSS
-# ========================================
-
-st.markdown(
-    """
-<style>
-
-.stApp{
-background:#F8FAFC;
+assets = {
+    "__LOGO__": "logo.svg",
+    "__HELP__": "help.svg",
+    "__NAV_SETTINGS__": "nav-settings.svg",
+    "__LOGOUT__": "logout.svg",
+    "__USER__": "user.svg",
+    "__COMPARE__": "compare.svg",
+    "__FLAG__": "flag.svg",
+    "__SETTINGS__": "settings.svg",
+    "__SPARKLE__": "sparkle.svg",
+    "__LEAF__": "leaf.svg",
+    "__SCENERY__": "scenery.svg",
 }
 
-.block-container{
+for placeholder, filename in assets.items():
+    page = page.replace(placeholder, svg_data_uri(filename))
 
-max-width:1280px;
-
-padding-top:2rem;
-
-padding-bottom:3rem;
-
-}
-
-h1,h2,h3{
-
-color:#1E293B;
-
-}
-
-p{
-
-color:#475569;
-
-line-height:1.8;
-
-}
-
-div[data-testid="stVerticalBlockBorderWrapper"]{
-
-border-radius:18px;
-
-border:1px solid #E2E8F0;
-
-box-shadow:
-0 8px 24px rgba(0,0,0,.04);
-
-background:white;
-
-}
-
-/* 通常ボタン */
-.stButton > button {
-    width: 100%;
-    min-height: 46px;
-    border-radius: 10px;
-    border: 1px solid #D9E0EA;
-    background-color: #FFFFFF;
-    color: #253550;
-    font-size: 15px;
-    font-weight: 600;
-    transition: 0.2s;
-}
-
-/* ボタン内の文字 */
-.stButton > button p {
-    color: inherit;
-    white-space: nowrap;
-}
-
-/* 通常ボタンにマウスを乗せたとき */
-.stButton > button:hover {
-    border-color: #246BFD;
-    color: #246BFD;
-    background-color: #F5F8FF;
-}
-
-/* 強調ボタン */
-.stButton > button[kind="primary"] {
-    background-color: #246BFD;
-    border-color: #246BFD;
-    color: #FFFFFF;
-}
-
-/* 強調ボタンにマウスを乗せたとき */
-.stButton > button[kind="primary"]:hover {
-    background-color: #1858D8;
-    border-color: #1858D8;
-    color: #FFFFFF;
-}
-
-</style>
-""",
-    unsafe_allow_html=True
-)
-
-# ========================================
-# ヘッダー
-# ========================================
-
-logo_col, menu_col = st.columns([1.65, 1.35])
-
-with logo_col:
-
-    left, right = st.columns([1, 2])
-
-    with left:
-        st.image(
-            ASSETS_DIR / "logo.svg",
-            width=190
-        )
-
-    with right:
-
-        st.html(
-            """
-            <div style="
-                padding-top:28px;
-                font-size:17px;
-                font-weight:600;
-                color:#334155;
-            ">
-            自分が見えた、道が見えた。
-            </div>
-            """
-        )
-
-with menu_col:
-
-    col1, col2, col3 = st.columns([1.3, 1.3, 1.6])
-
-    with col1:
-        st.button(
-            "❓ 使い方",
-            use_container_width=True
-        )
-
-    with col2:
-        st.button(
-            "⚙ 設定",
-            use_container_width=True
-        )
-
-    with col3:
-        st.button(
-            "⇥ ログアウト",
-            use_container_width=True
-        )
-
-st.divider()
-
-
-
-
-# ========================================
-# メインレイアウト
-# ========================================
-
-left_column, right_column = st.columns(
-    [1, 1.1],
-    gap="large"
-)
-
-with left_column:
-
-    st.markdown(
-        dedent(
-            """
-            # 納得できる一歩を。
-
-            あなたの価値観や経験を整理し、  
-            求人との相性を見える化することで、  
-            納得できる応募判断をサポートします。
-            """
-        )
-    )
-
-    st.write("")
-
-    # ========================================
-    # 自分を知る
-    # ========================================
-
-    with st.container(border=True):
-
-        icon, text = st.columns(
-            [0.9, 4.8],
-            gap="medium"
-            )
-
-        with icon:
-
-            st.html(
-                circle_icon(
-                    "user.svg",
-                    "#EEF4FF"
-                 )
-            )
-
-        with text:
-
-            st.subheader("① 自分を知る")
-
-            st.write(
-                "あなたの情報や価値観を整理しましょう。"
-            )
-
-            st.button(
-                "自分を知るページを開く →",
-                key="profile"
-            )
-
-    st.write("")
-
-    # ========================================
-    # 求人を比較する
-    # ========================================
-
-    with st.container(border=True):
-
-        icon, text = st.columns([1, 4])
-
-        with icon:
-            st.html(
-                circle_icon(
-                    "compare.svg",
-                    "#EAF9F4"
-                )
-            )
-
-        with text:
-
-            st.subheader("② 求人を比較する")
-
-            st.write(
-                "求人を比較・分析して、相性を見える化します。"
-            )
-
-            st.button(
-                "求人比較ページを開く →",
-                key="compare"
-            )
-
-    st.write("")
-
-    # ========================================
-    # 応募後を管理する
-    # ========================================
-
-    with st.container(border=True):
-
-        icon, text = st.columns([1, 4])
-
-        with icon:
-            st.html(
-                circle_icon(
-                    "flag.svg",
-                    "#FFF4E8"
-                )
-            )
-
-        with text:
-
-            st.subheader("③ 応募後を管理する")
-
-            st.write(
-                "応募状況やマイルストーンを管理します。"
-            )
-
-            st.button(
-                "応募管理ページを開く →",
-                key="application"
-            )
-
-    st.write("")
-
-    # ========================================
-    # 設定
-    # ========================================
-
-    with st.container(border=True):
-
-        icon, text = st.columns([1, 4])
-
-        with icon:
-            st.html(
-                circle_icon(
-                    "settings.svg",
-                    "#F4EFFF"
-                )
-            )
-
-        with text:
-
-            st.subheader("設定")
-
-            st.write(
-                "アカウント情報や各種設定を変更できます。"
-            )
-
-            st.button(
-                "設定を開く →",
-                key="settings"
-            )
-
-
-with right_column:
-
-    # ========================================
-    # 次の一歩
-    # ========================================
-
-    with st.container(border=True):
-
-        icon, text = st.columns([1,4])
-
-        with icon:
-
-            st.html(
-                circle_icon(
-                    "sparkle.svg",
-                    "#EEF4FF"
-                )
-            )
-
-        with text:
-
-            st.subheader("次の一歩")
-
-            st.write(
-                "まだ入力が完了していない項目があります。"
-            )
-
-            st.write(
-                "まずは基本情報から入力してみましょう。"
-            )
-
-        st.button(
-            "基本情報を入力する →",
-            type="primary",
-            key="next_action"
-            )
-
-    st.write("")
-
-    # ========================================
-    # 期限が近いタスク
-    # ========================================
-
-    with st.container(border=True):
-
-        st.subheader("📅 期限が近いタスク")
-
-        task_list = [
-
-            ("🔴","7/24","A社","履歴書提出","あと1日"),
-
-            ("🟠","7/25","B社","面接準備","あと2日"),
-
-            ("🟡","7/26","C社","企業研究","あと3日"),
-
-        ]
-
-        for color,date,company,task,remain in task_list:
-
-            c1,c2,c3,c4,c5 = st.columns(
-                [0.5,1.2,1,2.4,1]
-            )
-
-            c1.write(color)
-
-            c2.write(date)
-
-            c3.write(company)
-
-            c4.write(task)
-
-            c5.caption(remain)
-
-    st.write("")
-
-    # ========================================
-    # 最近の活動
-    # ========================================
-
-    with st.container(border=True):
-
-        st.subheader("📝 最近の活動")
-
-        activity = [
-
-            ("👤","プロフィールを更新しました","7/22"),
-
-            ("📄","A社の求人を登録しました","7/22"),
-
-            ("⚖","比較結果を保存しました","7/21"),
-
-        ]
-
-        for icon,text,time in activity:
-
-            c1,c2,c3 = st.columns(
-                [0.5,3.5,1]
-            )
-
-            c1.write(icon)
-
-            c2.write(text)
-
-            c3.caption(time)
-
-    st.write("")
-
-    # ========================================
-    # 今日のひとこと
-    # ========================================
-
-    with st.container(border=True):
-
-        st.html(
-            """
-### 🌱 今日のひとこと
-
-焦らなくても大丈夫。
-
-納得できる一歩は、
-
-きっと未来につながります。
-"""
-        )
+st.html(page)
