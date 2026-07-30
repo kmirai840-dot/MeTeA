@@ -37,6 +37,8 @@ valid_pages = {
     "basic_info",
     "job_list",
     "application_list",
+    "milestones",
+    "activity_history",
     "settings",
     "help",
     "logout",
@@ -78,6 +80,32 @@ elif current_page == "application_list":
 
     st.write(
         "応募企業一覧画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "milestones":
+    st.title("マイルストーン")
+
+    st.write(
+        "期限が近いタスクの一覧画面は、今後この場所に実装します。"
+    )
+
+    if st.button("トップ画面へ戻る"):
+        st.query_params.clear()
+        st.rerun()
+
+    st.stop()
+
+elif current_page == "activity_history":
+    st.title("活動履歴")
+
+    st.write(
+        "最近の活動の一覧画面は、今後この場所に実装します。"
     )
 
     if st.button("トップ画面へ戻る"):
@@ -401,7 +429,6 @@ def render_task_item(item):
             {escape(item.remaining)}
         </span>
 
-        <i class="metea-mini-chevron"></i>
     </div>
     """
 
@@ -752,7 +779,7 @@ page = """
   .metea-task-row {
     min-height: 43px;
     display: grid;
-    grid-template-columns: 17px 82px 53px 1fr 69px 13px;
+    grid-template-columns: 17px 82px 53px 1fr 69px;
     align-items: center;
     gap: 9px;
     border-top: 1px solid #edf0f5;
@@ -783,14 +810,6 @@ page = """
   .metea-deadline-red { color: #ff4c57; }
   .metea-deadline-orange { color: #ff692d; }
   .metea-deadline-amber { color: #eea000; }
-
-  .metea-mini-chevron {
-    width: 8px;
-    height: 8px;
-    border-top: 1.5px solid #52627a;
-    border-right: 1.5px solid #52627a;
-    transform: rotate(45deg);
-  }
 
   .metea-activity-panel {
     padding: 14px 22px 10px;
@@ -945,11 +964,18 @@ page = """
     }
 
     .metea-task-row {
-      grid-template-columns: 14px 63px 42px 1fr 58px 9px;
+      grid-template-columns: 14px 63px 42px 1fr 58px;
       gap: 5px;
       font-size: 11px;
     }
   }
+
+/* PC画面全体を80％に縮小 */
+@media (min-width: 1000px) {
+    .metea-shell {
+        zoom: 0.8;
+    }
+}
 </style>
 
 <div class="metea-shell">
@@ -996,7 +1022,7 @@ page = """
       <article class="metea-panel metea-info-panel">
         <div class="metea-panel-head">
           <h2>期限が近いタスク</h2>
-          <a href="#">すべてのタスクを見る</a>
+          <a href="?page=milestones">すべてのタスクを見る</a>
         </div>
 
         __TASK_ITEMS_HTML__
@@ -1005,7 +1031,7 @@ page = """
       <article class="metea-panel metea-activity-panel">
         <div class="metea-panel-head">
           <h2>最近の活動</h2>
-          <a href="#">すべて見る</a>
+          <a href="?page=activity_history">すべて見る</a>
         </div>
 
         __ACTIVITY_ITEMS_HTML__
