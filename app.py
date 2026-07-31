@@ -4,6 +4,7 @@ from html import escape
 import base64
 
 import streamlit as st
+from pages.basic_info import render_basic_info_page
 
 
 # ========================================
@@ -35,6 +36,7 @@ current_page = st.query_params.get(
 valid_pages = {
     "home",
     "basic_info",
+    "job_change_reason",
     "job_list",
     "application_list",
     "milestones",
@@ -50,14 +52,18 @@ if current_page not in valid_pages:
     st.rerun()
 
 if current_page == "basic_info":
-    st.title("基本情報")
+    render_basic_info_page()
+    st.stop()
+
+elif current_page == "job_change_reason":
+    st.title("転職理由")
 
     st.write(
-        "基本情報画面は、今後この場所に実装します。"
+        "転職理由画面は、今後この場所に実装します。"
     )
 
-    if st.button("トップ画面へ戻る"):
-        st.query_params.clear()
+    if st.button("基本情報画面へ戻る"):
+        st.query_params["page"] = "basic_info"
         st.rerun()
 
     st.stop()
