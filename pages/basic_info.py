@@ -6,14 +6,16 @@ import streamlit as st
 from data.master_data import GENDER_LABELS, PREFECTURES
 from models import BasicInfo
 from services.basic_info_service import (
+    load_basic_info,
     load_basic_info_draft,
+    save_basic_info,
     save_basic_info_draft,
     validate_basic_info,
 )
 
-
 SAVED_DATA_KEY = "basic_info"
 ERRORS_KEY = "basic_info_errors"
+SAVE_MESSAGE_KEY = "basic_info_save_message"
 
 # 入力内容を一時的に保持するための識別名
 FAMILY_NAME_KEY = "basic_family_name"
@@ -181,7 +183,13 @@ def initialize_basic_info_state() -> None:
         if draft_data is not None:
             defaults = build_draft_form_values(draft_data)
         else:
-            defaults = build_empty_form_values()
+            saved_profile = load_basic_info()
+
+            if saved_profile is not None:
+                st.session_state[SAVED_DATA_KEY] = saved_profile
+                defaults = build_saved_form_values(saved_profile)
+            else:
+                defaults = build_empty_form_values()
 
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -409,8 +417,21 @@ def render_basic_info_page() -> None:
 
     assert basic_info is not None
 
+    try:
+        save_basic_info(basic_info)
+    except Exception:
+        st.error(
+            "基本情報を保存できませんでした。"
+            "入力内容は下書きとして保存されています。"
+            "時間をおいて、もう一度「次へ」を押してください。"
+        )
+        return
+
     st.session_state[SAVED_DATA_KEY] = basic_info
     st.session_state[ERRORS_KEY] = {}
+    st.session_state[SAVE_MESSAGE_KEY] = (
+        "基本情報を保存しました。"
+        "次の「転職理由」を入力してください。"
+    )
 
     st.query_params["page"] = "job_change_reason"
-    st.rerun()

@@ -6,8 +6,10 @@ import base64
 import streamlit as st
 
 from database.initialize import initialize_database
-from pages.basic_info import render_basic_info_page
-
+from pages.basic_info import (
+    SAVE_MESSAGE_KEY,
+    render_basic_info_page,
+)
 
 # ========================================
 # 基本設定
@@ -61,6 +63,14 @@ if current_page == "basic_info":
 
 elif current_page == "job_change_reason":
     st.title("転職理由")
+
+    save_message = st.session_state.pop(
+        SAVE_MESSAGE_KEY,
+        None,
+    )
+
+    if save_message:
+        st.success(save_message)
 
     st.write(
         "転職理由画面は、今後この場所に実装します。"

@@ -4,6 +4,10 @@ from datetime import date
 
 from data.master_data import GENDER_LABELS, PREFECTURES
 from database.repositories.draft_repository import get_draft, save_draft
+from database.repositories.user_repository import (
+    get_user_profile,
+    save_user_profile,
+)
 from models import BasicInfo
 from services.current_user_service import get_current_user_id
 
@@ -140,4 +144,24 @@ def load_basic_info_draft() -> dict[str, object] | None:
     return get_draft(
         user_id=get_current_user_id(),
         form_name=BASIC_INFO_FORM_NAME,
+    )
+
+
+def save_basic_info(
+    basic_info: BasicInfo,
+) -> None:
+    """基本情報を正式保存する。"""
+
+    save_user_profile(
+        user_id=get_current_user_id(),
+        basic_info=basic_info,
+        draft_form_name=BASIC_INFO_FORM_NAME,
+    )
+
+
+def load_basic_info() -> BasicInfo | None:
+    """正式保存済みの基本情報を取得する。"""
+
+    return get_user_profile(
+        user_id=get_current_user_id(),
     )
