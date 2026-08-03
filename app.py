@@ -4,6 +4,8 @@ from html import escape
 import base64
 
 import streamlit as st
+
+from database.initialize import initialize_database
 from pages.basic_info import render_basic_info_page
 
 
@@ -21,6 +23,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+initialize_database()
 
 
 

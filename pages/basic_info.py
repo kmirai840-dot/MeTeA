@@ -5,7 +5,11 @@ import streamlit as st
 
 from data.master_data import GENDER_LABELS, PREFECTURES
 from models import BasicInfo
-from services.basic_info_service import validate_basic_info
+from services.basic_info_service import (
+    load_basic_info_draft,
+    save_basic_info_draft,
+    validate_basic_info,
+)
 
 
 SAVED_DATA_KEY = "basic_info"
@@ -118,8 +122,37 @@ def build_empty_form_values() -> dict[str, str | int | None]:
     }
 
 
+def build_current_form_values() -> dict[str, object]:
+    """現在の入力欄の値を下書き保存用の辞書へまとめる。"""
+
+    return {
+        FAMILY_NAME_KEY: st.session_state.get(FAMILY_NAME_KEY, ""),
+        GIVEN_NAME_KEY: st.session_state.get(GIVEN_NAME_KEY, ""),
+        GENDER_KEY: st.session_state.get(GENDER_KEY),
+        BIRTH_YEAR_KEY: st.session_state.get(BIRTH_YEAR_KEY),
+        BIRTH_MONTH_KEY: st.session_state.get(BIRTH_MONTH_KEY),
+        BIRTH_DAY_KEY: st.session_state.get(BIRTH_DAY_KEY),
+        PREFECTURE_KEY: st.session_state.get(PREFECTURE_KEY),
+        MUNICIPALITY_KEY: st.session_state.get(MUNICIPALITY_KEY, ""),
+    }
+
+
+def build_draft_form_values(
+    draft_data: dict[str, object],
+) -> dict[str, object]:
+    """SQLiteの下書きを入力欄の初期値へ変換する。"""
+
+    values: dict[str, object] = build_empty_form_values()
+
+    for key in values:
+        if key in draft_data:
+            values[key] = draft_data[key]
+
+    return values
+
+
 def build_saved_form_values(
-        saved_data:BasicInfo,
+        saved_data: BasicInfo,
 ) -> dict[str, str | int | None]:
     """保存済みの基本情報から入力欄の値を作る。"""
 
@@ -136,14 +169,19 @@ def build_saved_form_values(
 
 
 def initialize_basic_info_state() -> None:
-    """入力欄とエラー一覧の初期状態を設定する。"""
+    """基本情報画面で使う入力値を初期化する。"""
 
     saved_data = st.session_state.get(SAVED_DATA_KEY)
 
-    if isinstance(saved_data,BasicInfo):
+    if isinstance(saved_data, BasicInfo):
         defaults = build_saved_form_values(saved_data)
     else:
-        defaults = build_empty_form_values()
+        draft_data = load_basic_info_draft()
+
+        if draft_data is not None:
+            defaults = build_draft_form_values(draft_data)
+        else:
+            defaults = build_empty_form_values()
 
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -343,8 +381,15 @@ def render_basic_info_page() -> None:
             "次へ →",
             use_container_width=True,
         )
+
+
     if not submitted:
         return
+
+    save_basic_info_draft(
+        build_current_form_values(),
+    )
+
 
     basic_info, validation_errors = validate_basic_info(
         st.session_state[FAMILY_NAME_KEY],

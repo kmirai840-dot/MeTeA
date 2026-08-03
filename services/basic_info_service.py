@@ -3,11 +3,14 @@
 from datetime import date
 
 from data.master_data import GENDER_LABELS, PREFECTURES
+from database.repositories.draft_repository import get_draft, save_draft
 from models import BasicInfo
+from services.current_user_service import get_current_user_id
 
 
 MAX_NAME_LENGTH = 30
 MAX_MUNICIPALITY_LENGTH = 50
+BASIC_INFO_FORM_NAME = "basic_info"
 
 
 def validate_basic_info(
@@ -117,3 +120,24 @@ def validate_basic_info(
     )
 
     return basic_info, {}
+
+
+def save_basic_info_draft(
+    draft_data: dict[str, object],
+) -> None:
+    """基本情報の入力途中データを保存する。"""
+
+    save_draft(
+        user_id=get_current_user_id(),
+        form_name=BASIC_INFO_FORM_NAME,
+        draft_data=draft_data,
+    )
+
+
+def load_basic_info_draft() -> dict[str, object] | None:
+    """基本情報の入力途中データを取得する。"""
+
+    return get_draft(
+        user_id=get_current_user_id(),
+        form_name=BASIC_INFO_FORM_NAME,
+    )

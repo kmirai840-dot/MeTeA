@@ -179,3 +179,9 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# MeTeA SQLite database
+database/metea.db
+database/metea.db-journal
+database/metea.db-wal
+database/metea.db-shm
