@@ -16,8 +16,433 @@ from data.master_data import (
     WORKSTYLE_CONDITIONS,
 )
 
+from models import HopeCondition, HopeConditionItem
+from services.hope_condition_service import (
+    load_hope_conditions_data,
+    load_hope_conditions_draft,
+    save_hope_conditions_data,
+    save_hope_conditions_draft,
+)
+
 
 DRAFT_MESSAGE_KEY = "hope_conditions_draft_message"
+DRAFT_LOADED_KEY = "hope_conditions_draft_loaded"
+
+
+def initialize_hope_conditions_state() -> None:
+    """下書きまたは正式保存データを画面へ復元する。"""
+
+    if st.session_state.get(DRAFT_LOADED_KEY):
+        return
+
+    draft_data = load_hope_conditions_draft()
+
+    if draft_data:
+        for key, value in draft_data.items():
+            if (
+                key == "hope_available_date"
+                and isinstance(value, str)
+                and value
+            ):
+                value = date.fromisoformat(value)
+
+            st.session_state[key] = value
+
+    else:
+        hope_condition, items = load_hope_conditions_data()
+
+        if hope_condition is not None:
+            st.session_state["hope_minimum_salary"] = (
+                hope_condition.minimum_salary
+            )
+            st.session_state["hope_desired_salary"] = (
+                hope_condition.desired_salary
+            )
+            st.session_state["hope_ideal_salary"] = (
+                hope_condition.ideal_salary
+            )
+            st.session_state["hope_commute_minutes"] = (
+                hope_condition.commute_minutes
+            )
+            st.session_state["hope_transfer"] = (
+                hope_condition.transfer_condition
+            )
+            st.session_state["hope_commute_priority"] = (
+                hope_condition.commute_priority
+            )
+            st.session_state["hope_transfer_priority"] = (
+                hope_condition.transfer_priority
+            )
+            st.session_state["hope_overtime_limit"] = (
+                hope_condition.overtime_limit
+            )
+            st.session_state["hope_overtime_priority"] = (
+                hope_condition.overtime_priority
+            )
+            st.session_state["hope_start_time"] = (
+                hope_condition.start_time
+            )
+            st.session_state["hope_start_time_priority"] = (
+                hope_condition.start_time_priority
+            )
+            st.session_state["hope_end_time"] = (
+                hope_condition.end_time
+            )
+            st.session_state["hope_end_time_priority"] = (
+                hope_condition.end_time_priority
+            )
+            st.session_state["hope_shift_work"] = (
+                hope_condition.shift_work
+            )
+            st.session_state["hope_shift_work_priority"] = (
+                hope_condition.shift_work_priority
+            )
+            st.session_state["hope_night_work"] = (
+                hope_condition.night_work
+            )
+            st.session_state["hope_night_work_priority"] = (
+                hope_condition.night_work_priority
+            )
+            st.session_state["hope_holiday_priority"] = (
+                hope_condition.holiday_priority
+            )
+            st.session_state["hope_annual_holidays"] = (
+                hope_condition.annual_holidays
+            )
+            st.session_state["hope_annual_holiday_priority"] = (
+                hope_condition.annual_holiday_priority
+            )
+            st.session_state["hope_available_date"] = (
+                hope_condition.available_date
+            )
+            st.session_state["hope_other_jobs"] = (
+                hope_condition.other_jobs
+            )
+            st.session_state["hope_other_conditions"] = (
+                hope_condition.other_conditions
+            )
+
+        st.session_state["hope_industries"] = [
+            item.condition_value
+            for item in items
+            if item.condition_type == "industry"
+        ]
+
+        st.session_state["hope_occupations"] = [
+            item.condition_value
+            for item in items
+            if item.condition_type == "occupation"
+        ]
+
+        st.session_state["hope_prefectures"] = [
+            item.condition_value
+            for item in items
+            if item.condition_type == "location"
+        ]
+
+        st.session_state["hope_employment_types"] = [
+            item.condition_value
+            for item in items
+            if item.condition_type == "employment_type"
+        ]
+
+    st.session_state[DRAFT_LOADED_KEY] = True
+
+
+def collect_hope_conditions_draft() -> dict[str, object]:
+    """希望条件画面の入力値を下書き保存用に集める。"""
+
+    excluded_keys = {
+        "hope_conditions_back_top",
+        "hope_conditions_back_bottom",
+        "hope_conditions_temporary_save",
+        "hope_conditions_confirm",
+        DRAFT_MESSAGE_KEY,
+        DRAFT_LOADED_KEY,
+    }
+
+    draft_data: dict[str, object] = {}
+
+    for key, value in st.session_state.items():
+        if not key.startswith("hope_"):
+            continue
+
+        if key in excluded_keys:
+            continue
+
+        if isinstance(value, date):
+            draft_data[key] = value.isoformat()
+        else:
+            draft_data[key] = value
+
+    return draft_data
+
+def build_hope_condition() -> HopeCondition:
+    """画面の単一値を正式保存用データへ変換する。"""
+
+    return HopeCondition(
+        minimum_salary=st.session_state.get(
+            "hope_minimum_salary",
+            0,
+        ),
+        desired_salary=st.session_state.get(
+            "hope_desired_salary",
+            0,
+        ),
+        ideal_salary=st.session_state.get(
+            "hope_ideal_salary",
+            0,
+        ),
+        commute_minutes=st.session_state.get(
+            "hope_commute_minutes",
+            0,
+        ),
+        transfer_condition=st.session_state.get(
+            "hope_transfer",
+            "こだわらない",
+        ),
+        commute_priority=st.session_state.get(
+            "hope_commute_priority",
+            "no_preference",
+        ),
+        transfer_priority=st.session_state.get(
+            "hope_transfer_priority",
+            "no_preference",
+        ),
+        overtime_limit=st.session_state.get(
+            "hope_overtime_limit",
+            0,
+        ),
+        overtime_priority=st.session_state.get(
+            "hope_overtime_priority",
+            "no_preference",
+        ),
+        start_time=st.session_state.get(
+            "hope_start_time",
+            "こだわらない",
+        ),
+        start_time_priority=st.session_state.get(
+            "hope_start_time_priority",
+            "no_preference",
+        ),
+        end_time=st.session_state.get(
+            "hope_end_time",
+            "こだわらない",
+        ),
+        end_time_priority=st.session_state.get(
+            "hope_end_time_priority",
+            "no_preference",
+        ),
+        shift_work=st.session_state.get(
+            "hope_shift_work",
+            "こだわらない",
+        ),
+        shift_work_priority=st.session_state.get(
+            "hope_shift_work_priority",
+            "no_preference",
+        ),
+        night_work=st.session_state.get(
+            "hope_night_work",
+            "こだわらない",
+        ),
+        night_work_priority=st.session_state.get(
+            "hope_night_work_priority",
+            "no_preference",
+        ),
+        holiday_priority=st.session_state.get(
+            "hope_holiday_priority",
+            "no_preference",
+        ),
+        annual_holidays=st.session_state.get(
+            "hope_annual_holidays",
+            0,
+        ),
+        annual_holiday_priority=st.session_state.get(
+            "hope_annual_holiday_priority",
+            "no_preference",
+        ),
+        available_date=st.session_state.get(
+            "hope_available_date"
+        ),
+        other_jobs=st.session_state.get(
+            "hope_other_jobs",
+            "",
+        ),
+        other_conditions=st.session_state.get(
+            "hope_other_conditions",
+            "",
+        ),
+    )
+
+
+def build_hope_condition_items() -> list[HopeConditionItem]:
+    """画面の複数選択値を正式保存用データへ変換する。"""
+
+    items: list[HopeConditionItem] = []
+
+    # 希望業種
+    for rank, value in enumerate(
+        st.session_state.get("hope_industries", []),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="industry",
+                condition_value=value,
+                priority=st.session_state.get(
+                    f"hope_industry_priority_{rank}_{value}",
+                    "want",
+                ),
+                rank=rank,
+            )
+        )
+
+    # 希望職種
+    for rank, value in enumerate(
+        st.session_state.get("hope_occupations", []),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="occupation",
+                condition_value=value,
+                priority=st.session_state.get(
+                    f"hope_occupation_priority_{rank}_{value}",
+                    "want",
+                ),
+                rank=rank,
+            )
+        )
+
+    # 希望勤務地
+    for rank, value in enumerate(
+        st.session_state.get("hope_prefectures", []),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="location",
+                condition_value=value,
+                priority=st.session_state.get(
+                    f"hope_location_priority_{rank}_{value}",
+                    "want",
+                ),
+                rank=rank,
+                detail_value=st.session_state.get(
+                    f"hope_city_{rank}_{value}",
+                    "",
+                ),
+            )
+        )
+
+    # 雇用形態
+    for rank, value in enumerate(
+        st.session_state.get(
+            "hope_employment_types",
+            [],
+        ),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="employment_type",
+                condition_value=value,
+                priority=st.session_state.get(
+                    f"hope_employment_priority_{rank}_{value}",
+                    "want",
+                ),
+                rank=rank,
+            )
+        )
+
+    # 希望休日
+    for rank, value in enumerate(
+        st.session_state.get("hope_holidays", []),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="holiday",
+                condition_value=value,
+                priority=st.session_state.get(
+                    "hope_holiday_priority",
+                    "no_preference",
+                ),
+                rank=rank,
+            )
+        )
+
+    # 希望する職場の年齢層
+    for rank, value in enumerate(
+        st.session_state.get("hope_age_groups", []),
+        start=1,
+    ):
+        items.append(
+            HopeConditionItem(
+                condition_type="age_group",
+                condition_value=value,
+                priority=st.session_state.get(
+                    "hope_age_group_priority",
+                    "no_preference",
+                ),
+                rank=rank,
+            )
+        )
+
+    # 勤務制度
+    time_system_conditions = (
+        ("flex_time", "フレックスタイム制"),
+        ("short_time", "時短勤務制度"),
+    )
+
+    for code, label in time_system_conditions:
+        priority = st.session_state.get(
+            f"hope_time_system_{code}",
+            "no_preference",
+        )
+
+        if priority != "no_preference":
+            items.append(
+                HopeConditionItem(
+                    condition_type="time_system",
+                    condition_value=label,
+                    priority=priority,
+                )
+            )
+
+    # 働き方
+    for code, label in WORKSTYLE_CONDITIONS:
+        priority = st.session_state.get(
+            f"hope_workstyle_{code}",
+            "no_preference",
+        )
+
+        if priority != "no_preference":
+            items.append(
+                HopeConditionItem(
+                    condition_type="workstyle",
+                    condition_value=label,
+                    priority=priority,
+                )
+            )
+
+    # キャリア・組織風土
+    for code, label in CAREER_CONDITIONS:
+        priority = st.session_state.get(
+            f"hope_career_{code}",
+            "no_preference",
+        )
+
+        if priority != "no_preference":
+            items.append(
+                HopeConditionItem(
+                    condition_type="career_condition",
+                    condition_value=label,
+                    priority=priority,
+                )
+            )
+
+    return items
 
 # --------------------------------------------------
 # 優先度の表示
@@ -103,6 +528,8 @@ def render_condition_priorities(
 
 def render_hope_conditions_page() -> None:
     """希望条件の入力画面を表示する。"""
+
+    initialize_hope_conditions_state()
 
     if st.button(
         "← トップ画面へ戻る",
@@ -531,7 +958,7 @@ def render_hope_conditions_page() -> None:
 
 
 
-    # --------------------------------------------------
+       # --------------------------------------------------
     # 画面下部の操作
     # --------------------------------------------------
 
@@ -554,19 +981,46 @@ def render_hope_conditions_page() -> None:
             key="hope_conditions_temporary_save",
             use_container_width=True,
         ):
-            st.session_state[DRAFT_MESSAGE_KEY] = (
-                "入力内容を現在のセッション内に"
-                "保持しました。"
-            )
+            try:
+                draft_data = collect_hope_conditions_draft()
+                save_hope_conditions_draft(draft_data)
+
+                st.session_state[DRAFT_MESSAGE_KEY] = (
+                    "入力内容を一時保存しました。"
+                )
+
+            except Exception as error:
+                st.error(
+                    "一時保存に失敗しました。"
+                    f"\n\n{error}"
+                )
 
     with action_columns[2]:
-        st.button(
-            "確認画面へ進む →",
-            key="hope_conditions_confirm",
+        if st.button(
+            "保存する",
+            key="hope_conditions_save",
             use_container_width=True,
-            disabled=True,
-            help="確認画面は別の実装タスクで作成します。",
-        )
+        ):
+            try:
+                hope_condition = build_hope_condition()
+                hope_condition_items = (
+                    build_hope_condition_items()
+                )
+
+                save_hope_conditions_data(
+                    hope_condition,
+                    hope_condition_items,
+                )
+
+                st.session_state[DRAFT_MESSAGE_KEY] = (
+                    "希望条件を保存しました。"
+                )
+
+            except Exception as error:
+                st.error(
+                    "保存に失敗しました。"
+                    f"\n\n{error}"
+                )
 
     saved_message = st.session_state.get(
         DRAFT_MESSAGE_KEY
@@ -576,7 +1030,6 @@ def render_hope_conditions_page() -> None:
         st.success(saved_message)
 
     st.caption(
-        "今回の一時保存はst.session_stateへの保持です。"
-        "アプリを停止した後も残るSQLite保存は、"
-        "データ構造確定後の別タスクで実装します。"
+        "一時保存した内容はSQLiteへ保存されます。"
+        "正式保存が完了すると、下書きデータは削除されます。"
     )
