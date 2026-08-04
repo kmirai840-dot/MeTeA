@@ -10,6 +10,7 @@ from pages.basic_info import (
     SAVE_MESSAGE_KEY,
     render_basic_info_page,
 )
+from pages.hope_conditions import render_hope_conditions_page
 
 # ========================================
 # 基本設定
@@ -42,6 +43,7 @@ current_page = st.query_params.get(
 valid_pages = {
     "home",
     "basic_info",
+    "hope_conditions",
     "job_change_reason",
     "job_list",
     "application_list",
@@ -59,6 +61,10 @@ if current_page not in valid_pages:
 
 if current_page == "basic_info":
     render_basic_info_page()
+    st.stop()
+
+elif current_page == "hope_conditions":
+    render_hope_conditions_page()
     st.stop()
 
 elif current_page == "job_change_reason":
