@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS user_hope_condition_items (
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
+CREATE TABLE IF NOT EXISTS user_job_hunting_axes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    axis_title TEXT NOT NULL,
+    axis_description TEXT NOT NULL DEFAULT '',
+    priority_rank INTEGER NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+
 CREATE TABLE IF NOT EXISTS form_drafts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

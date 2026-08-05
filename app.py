@@ -12,6 +12,10 @@ from pages.basic_info import (
 )
 from pages.hope_conditions import render_hope_conditions_page
 
+from pages.job_hunting_axis import (
+    render_job_hunting_axis_page,
+)
+
 # ========================================
 # 基本設定
 # ========================================
@@ -44,6 +48,7 @@ valid_pages = {
     "home",
     "basic_info",
     "hope_conditions",
+    "job_hunting_axis",
     "job_change_reason",
     "job_list",
     "application_list",
@@ -66,6 +71,10 @@ if current_page == "basic_info":
 elif current_page == "hope_conditions":
     render_hope_conditions_page()
     st.stop()
+
+elif current_page == "job_hunting_axis":
+    render_job_hunting_axis_page()
+    st.stop()    
 
 elif current_page == "job_change_reason":
     st.title("転職理由")

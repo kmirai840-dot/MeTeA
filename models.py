@@ -54,3 +54,16 @@ class HopeConditionItem:
     priority: str
     rank: int | None = None
     detail_value: str | None = None
+
+
+# ========================================
+# 就活の軸
+# ========================================
+@dataclass(frozen=True)
+class JobHuntingAxis:
+    """入力確認を通過した就活の軸を1件保持するクラス。"""
+
+    axis_title: str
+    axis_description: str
+    priority_rank: int
+    source_type: str
