@@ -20,6 +20,7 @@ CAREER_ITEMS_KEY = "career_items"
 CAREER_FORM_RESET_KEY = "career_form_reset"
 CAREER_MESSAGE_KEY = "career_message"
 CAREER_ERRORS_KEY = "career_errors"
+CAREER_ENTRY_MODE_KEY = "career_entry_mode"
 
 
 def initialize_career_state() -> None:
@@ -241,6 +242,86 @@ def add_current_company() -> None:
         "続けて次の会社を入力してください。"
     )
 
+def render_company_list() -> None:
+    """登録済み会社一覧を表示する。"""
+
+    career_items = st.session_state.get(
+        CAREER_ITEMS_KEY,
+        [],
+    )
+
+    header_left, header_right = st.columns(
+        [4, 1]
+    )
+
+    with header_left:
+        st.subheader("登録済みの会社")
+
+    with header_right:
+        if st.button(
+            "＋会社を追加",
+            key="career_add_company_top",
+            use_container_width=True,
+        ):
+            reset_current_career_form_state()
+            st.rerun()
+
+    if not career_items:
+        st.info(
+            "まだ会社は登録されていません。"
+        )
+        return
+
+    for index, (
+        career,
+        _,
+    ) in enumerate(
+        career_items,
+        start=1,
+    ):
+        with st.container(
+            border=True,
+        ):
+            st.markdown(
+                f"### {career.company_name}"
+            )
+
+            if career.is_current:
+                period = (
+                    f"{career.start_year}/"
+                    f"{career.start_month}"
+                    " ～ 現在"
+                )
+            else:
+                period = (
+                    f"{career.start_year}/"
+                    f"{career.start_month}"
+                    " ～ "
+                    f"{career.end_year}/"
+                    f"{career.end_month}"
+                )
+
+            st.caption(period)
+            st.write(career.employment_type)
+
+            button_left, button_right = (
+                st.columns(2)
+            )
+
+            with button_left:
+                st.button(
+                    "✏ 編集",
+                    key=f"career_edit_{index}",
+                    use_container_width=True,
+                )
+
+            with button_right:
+                st.button(
+                    "🗑 削除",
+                    key=f"career_delete_{index}",
+                    use_container_width=True,
+                )
+
 
 def show_page() -> None:
     """職務経歴入力画面を表示する。"""
@@ -261,9 +342,73 @@ def show_page() -> None:
 
     st.divider()
 
-    st.info(
-        "まずは1社目を入力できるようにします。"
+    entry_mode = st.session_state.get(
+        "career_entry_mode"
     )
+
+    if entry_mode is None:
+
+        st.subheader("登録方法を選択")
+
+        st.caption(
+            "既に職務経歴書をお持ちの方はアップロード、"
+            "初めて作成する方は手入力がおすすめです。"
+        )
+
+        upload_col, manual_col = st.columns(2)
+
+        with upload_col:
+            with st.container(border=True):
+                st.markdown("## 📄")
+
+                st.markdown(
+                    "### 職務経歴書から取り込む"
+                )
+
+                st.write(
+                    "PDF・Wordの職務経歴書を読み込み、"
+                    "AIが内容を整理します。"
+                )
+
+                st.caption(
+                    "対応予定：PDF / Word"
+                )
+
+                st.button(
+                    "ファイルを選択する",
+                    key="career_upload",
+                    use_container_width=True,
+                )
+
+        with manual_col:
+            with st.container(border=True):
+                st.markdown("## ✍")
+
+                st.markdown(
+                    "### 手入力する"
+                )
+
+                st.write(
+                    "会社・部署・役割ごとに"
+                    "職務経歴を入力します。"
+                )
+
+                st.caption(
+                    "初めて職務経歴書を作る方向け"
+                )
+
+                if st.button(
+                    "入力を始める",
+                    key="career_manual",
+                    use_container_width=True,
+                ):
+                    st.session_state[
+                        CAREER_ENTRY_MODE_KEY
+                    ] = "manual"
+
+                    st.rerun()
+
+        st.stop()
 
     career_errors = st.session_state.pop(
         CAREER_ERRORS_KEY,
@@ -280,6 +425,8 @@ def show_page() -> None:
 
     if career_message:
         st.success(career_message)
+
+    render_company_list()
 
     st.subheader("会社情報")
 
@@ -386,7 +533,6 @@ def show_page() -> None:
             key="career_occupation",
         )
 
-
     st.text_area(
         "業務内容",
         placeholder=(
@@ -409,16 +555,7 @@ def show_page() -> None:
         key="career_achievements",
     )
 
-
     st.divider()
-
-
-    st.button(
-        "＋会社を追加",
-        key="career_add_company",
-        use_container_width=True,
-        on_click=add_current_company,
-    )
 
     action_columns = st.columns([1, 1, 1])
 
