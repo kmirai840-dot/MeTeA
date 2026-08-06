@@ -680,9 +680,7 @@ def render_job_hunting_axis_page() -> None:
                         st.error(error)
 
                 else:
-                    st.session_state[MESSAGE_KEY] = (
-                        "就活の軸を保存しました。"
-                    )
+                    st.query_params["page"] = "work_values"
                     st.rerun()
 
             except Exception as error:

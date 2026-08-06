@@ -91,5 +91,83 @@ CREATE TABLE IF NOT EXISTS form_drafts (
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
+CREATE TABLE IF NOT EXISTS user_work_value_rankings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    question_type TEXT NOT NULL,
+    selected_value TEXT NOT NULL,
+    priority_rank INTEGER NOT NULL,
+    custom_value TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS user_work_value_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    detail_type TEXT NOT NULL,
+    detail_text TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS user_work_style_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    question_type TEXT NOT NULL,
+    answer_score INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- ========================================
+-- 職務経歴：会社
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_careers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    company_name TEXT NOT NULL,
+    employment_type TEXT NOT NULL,
+    start_year INTEGER NOT NULL,
+    start_month INTEGER NOT NULL,
+    end_year INTEGER,
+    end_month INTEGER,
+    is_current INTEGER NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- ========================================
+-- 職務経歴：部署・役割
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_career_histories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    career_id INTEGER NOT NULL,
+    department TEXT NOT NULL DEFAULT '',
+    position TEXT NOT NULL DEFAULT '',
+    industry TEXT NOT NULL,
+    occupation TEXT NOT NULL,
+    start_year INTEGER NOT NULL,
+    start_month INTEGER NOT NULL,
+    end_year INTEGER,
+    end_month INTEGER,
+    job_description TEXT NOT NULL DEFAULT '',
+    achievements TEXT NOT NULL DEFAULT '',
+    display_order INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (career_id) REFERENCES user_careers (id)
+);
+
 INSERT OR IGNORE INTO users (id)
 VALUES (1);
