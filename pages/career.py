@@ -1007,13 +1007,13 @@ def show_page() -> None:
                 )
 
                 st.caption(
-                    "対応予定：PDF / Word"
+                    "対応形式：PDF / Word（.docx）"
                 )
 
-                st.button(
-                    "ファイルを選択する",
+                uploaded_career_file = st.file_uploader(
+                    "PDFまたはWordファイルを選択してください",
+                    type=["pdf", "docx"],
                     key="career_upload",
-                    use_container_width=True,
                 )
 
         with manual_col:
