@@ -24,6 +24,8 @@ CAREER_MESSAGE_KEY = "career_message"
 CAREER_ERRORS_KEY = "career_errors"
 CAREER_ENTRY_MODE_KEY = "career_entry_mode"
 CAREER_EDIT_INDEX_KEY = "career_edit_index"
+CAREER_HISTORIES_KEY = "career_histories"
+CAREER_HISTORY_EDIT_INDEX_KEY = "career_history_edit_index"
 
 
 def initialize_career_state() -> None:
@@ -33,6 +35,14 @@ def initialize_career_state() -> None:
         return
 
     career_items = load_career_data()
+
+    st.session_state[
+        CAREER_HISTORIES_KEY
+    ] = []
+
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = None
 
     # 複数社分を、そのまま画面内の一覧として保持する
     st.session_state[CAREER_ITEMS_KEY] = list(
@@ -70,6 +80,14 @@ def initialize_career_state() -> None:
             )
 
         if histories:
+            st.session_state[
+                CAREER_HISTORIES_KEY
+            ] = list(histories)
+
+            st.session_state[
+                CAREER_HISTORY_EDIT_INDEX_KEY
+            ] = 0
+
             history = histories[0]
 
             st.session_state["career_department"] = (
@@ -78,9 +96,7 @@ def initialize_career_state() -> None:
             st.session_state["career_position"] = (
                 history.position
             )
-            st.session_state["career_industry"] = (
-                history.industry
-            )
+
             st.session_state["career_occupation"] = (
                 history.occupation
             )
@@ -117,6 +133,88 @@ def reset_current_career_form_state() -> None:
     st.session_state["career_job_description"] = ""
     st.session_state["career_achievements"] = ""
 
+    st.session_state[
+        CAREER_HISTORIES_KEY
+    ] = []
+
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = None
+
+
+def reset_current_history_form_state() -> None:
+    """次の部署・役割を入力するため、関連項目だけ初期化する。"""
+
+    st.session_state["career_department"] = ""
+    st.session_state["career_position"] = ""
+    st.session_state["career_occupation"] = ""
+
+    st.session_state[
+        "career_job_description"
+    ] = ""
+
+    st.session_state["career_achievements"] = ""
+
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = None
+
+
+def build_current_history(
+    display_order: int,
+) -> CareerHistory:
+    """現在の入力フォームを1件の部署・役割へ変換する。"""
+
+    is_current = st.session_state.get(
+        "career_is_current",
+        False,
+    )
+
+    end_year = None
+    end_month = None
+
+    if not is_current:
+        end_year = st.session_state.get(
+            "career_end_year"
+        )
+        end_month = st.session_state.get(
+            "career_end_month"
+        )
+
+    return CareerHistory(
+        department=st.session_state.get(
+            "career_department",
+            "",
+        ),
+        position=st.session_state.get(
+            "career_position",
+            "",
+        ),
+        occupation=st.session_state.get(
+            "career_occupation",
+            "",
+        ),
+        start_year=st.session_state.get(
+            "career_start_year",
+            2020,
+        ),
+        start_month=st.session_state.get(
+            "career_start_month",
+            1,
+        ),
+        end_year=end_year,
+        end_month=end_month,
+        job_description=st.session_state.get(
+            "career_job_description",
+            "",
+        ),
+        achievements=st.session_state.get(
+            "career_achievements",
+            "",
+        ),
+        display_order=display_order,
+    )
+
 
 def build_current_career_item(
     display_order: int,
@@ -124,7 +222,7 @@ def build_current_career_item(
     Career,
     list[CareerHistory],
 ]:
-    """現在の入力フォームを1社分の職務経歴へ変換する。"""
+    """現在の入力内容を1社分の職務経歴へ変換する。"""
 
     is_current = st.session_state.get(
         "career_is_current",
@@ -151,6 +249,10 @@ def build_current_career_item(
             "career_employment_type",
             "",
         ),
+        industry=st.session_state.get(
+            "career_industry",
+            "",
+        ),
         start_year=st.session_state.get(
             "career_start_year",
             2020,
@@ -165,41 +267,152 @@ def build_current_career_item(
         display_order=display_order,
     )
 
-    history = CareerHistory(
-        department=st.session_state.get(
-            "career_department",
-            "",
-        ),
-        position=st.session_state.get(
-            "career_position",
-            "",
-        ),
-        industry=st.session_state.get(
-            "career_industry",
-            "",
-        ),
-        occupation=st.session_state.get(
-            "career_occupation",
-            "",
-        ),
-        start_year=career.start_year,
-        start_month=career.start_month,
-        end_year=career.end_year,
-        end_month=career.end_month,
-        job_description=st.session_state.get(
-            "career_job_description",
-            "",
-        ),
-        achievements=st.session_state.get(
-            "career_achievements",
-            "",
-        ),
-        display_order=1,
+    histories = list(
+        st.session_state.get(
+            CAREER_HISTORIES_KEY,
+            [],
+        )
     )
+
+    history_edit_index = st.session_state.get(
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    )
+
+    history_form_has_input = any(
+        [
+            st.session_state.get(
+                "career_department",
+                "",
+            ),
+            st.session_state.get(
+                "career_position",
+                "",
+            ),
+            st.session_state.get(
+                "career_occupation",
+                "",
+            ),
+            st.session_state.get(
+                "career_job_description",
+                "",
+            ),
+            st.session_state.get(
+                "career_achievements",
+                "",
+            ),
+        ]
+    )
+
+    if history_form_has_input:
+        current_history = build_current_history(
+            display_order=(
+                history_edit_index + 1
+                if history_edit_index is not None
+                else len(histories) + 1
+            ),
+        )
+
+        if history_edit_index is None:
+            histories.append(
+                current_history
+            )
+
+        elif (
+            0
+            <= history_edit_index
+            < len(histories)
+        ):
+            histories[history_edit_index] = (
+                current_history
+            )
+
+    ordered_histories = [
+        replace(
+            history,
+            display_order=index,
+        )
+        for index, history in enumerate(
+            histories,
+            start=1,
+        )
+    ]
 
     return (
         career,
-        [history],
+        ordered_histories,
+    )
+
+
+def add_current_history() -> None:
+    """現在入力中の部署・役割を追加または更新する。"""
+
+    st.session_state.pop(
+        CAREER_ERRORS_KEY,
+        None,
+    )
+
+    histories = list(
+        st.session_state.get(
+            CAREER_HISTORIES_KEY,
+            [],
+        )
+    )
+
+    edit_index = st.session_state.get(
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    )
+
+    current_history = build_current_history(
+        display_order=(
+            edit_index + 1
+            if edit_index is not None
+            else len(histories) + 1
+        ),
+    )
+
+    if not (
+        current_history.occupation or ""
+    ).strip():
+        st.session_state[CAREER_ERRORS_KEY] = [
+            "職種を入力してください。"
+        ]
+        return
+
+    if edit_index is None:
+        histories.append(
+            current_history
+        )
+
+        message = (
+            "部署・役割を追加しました。"
+            "続けて次の部署・役割を入力できます。"
+        )
+
+    elif (
+        0 <= edit_index < len(histories)
+    ):
+        histories[edit_index] = (
+            current_history
+        )
+
+        message = (
+            "部署・役割を更新しました。"
+        )
+
+    else:
+        st.session_state[CAREER_ERRORS_KEY] = [
+            "編集対象の部署・役割が見つかりませんでした。"
+        ]
+        return
+
+    st.session_state[
+        CAREER_HISTORIES_KEY
+    ] = histories
+
+    reset_current_history_form_state()
+
+    st.session_state[CAREER_MESSAGE_KEY] = (
+        message
     )
 
 
@@ -403,13 +616,22 @@ def load_company_for_edit(
         CAREER_EDIT_INDEX_KEY
     ] = target_index
 
+    st.session_state[
+        CAREER_HISTORIES_KEY
+    ] = list(histories)
+
     st.session_state["career_company_name"] = (
         career.company_name
     )
     st.session_state["career_employment_type"] = (
         career.employment_type
     )
-
+    st.session_state["career_industry"] = (
+        career.industry
+    )
+    st.session_state["career_industry"] = (
+        career.industry
+    )
     st.session_state["career_start_year"] = (
         career.start_year
     )
@@ -433,6 +655,10 @@ def load_company_for_edit(
         else 10
     )
 
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = 0
+
     if histories:
         history = histories[0]
 
@@ -442,9 +668,7 @@ def load_company_for_edit(
         st.session_state["career_position"] = (
             history.position
         )
-        st.session_state["career_industry"] = (
-            history.industry
-        )
+
         st.session_state["career_occupation"] = (
             history.occupation
         )
@@ -458,7 +682,6 @@ def load_company_for_edit(
     else:
         st.session_state["career_department"] = ""
         st.session_state["career_position"] = ""
-        st.session_state["career_industry"] = ""
         st.session_state["career_occupation"] = ""
         st.session_state[
             "career_job_description"
@@ -482,6 +705,169 @@ def cancel_company_edit() -> None:
     st.session_state[CAREER_MESSAGE_KEY] = (
         "編集をキャンセルしました。"
     )
+
+
+def load_history_for_edit(
+    target_index: int,
+) -> None:
+    """選択した部署・役割を入力フォームへ復元する。"""
+
+    histories = st.session_state.get(
+        CAREER_HISTORIES_KEY,
+        [],
+    )
+
+    if not (
+        0 <= target_index < len(histories)
+    ):
+        st.session_state[CAREER_ERRORS_KEY] = [
+            "編集対象の部署・役割が見つかりませんでした。"
+        ]
+        return
+
+    history = histories[target_index]
+
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = target_index
+
+    st.session_state["career_department"] = (
+        history.department
+    )
+    st.session_state["career_position"] = (
+        history.position
+    )
+    st.session_state["career_occupation"] = (
+        history.occupation
+    )
+    st.session_state[
+        "career_job_description"
+    ] = history.job_description
+    st.session_state["career_achievements"] = (
+        history.achievements
+    )
+
+    st.session_state[CAREER_MESSAGE_KEY] = (
+        f"部署・役割 {target_index + 1} を編集中です。"
+    )
+
+
+def delete_history(
+    target_index: int,
+) -> None:
+    """指定した部署・役割を一覧から削除する。"""
+
+    histories = list(
+        st.session_state.get(
+            CAREER_HISTORIES_KEY,
+            [],
+        )
+    )
+
+    if not (
+        0 <= target_index < len(histories)
+    ):
+        st.session_state[CAREER_ERRORS_KEY] = [
+            "削除対象の部署・役割が見つかりませんでした。"
+        ]
+        return
+
+    histories.pop(
+        target_index
+    )
+
+    updated_histories = [
+        replace(
+            history,
+            display_order=index,
+        )
+        for index, history in enumerate(
+            histories,
+            start=1,
+        )
+    ]
+
+    st.session_state[
+        CAREER_HISTORIES_KEY
+    ] = updated_histories
+
+    st.session_state[
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    ] = None
+
+    reset_current_history_form_state()
+
+    st.session_state[CAREER_MESSAGE_KEY] = (
+        "部署・役割を削除しました。"
+    )
+
+
+def render_history_list() -> None:
+    """現在の会社に登録した部署・役割一覧を表示する。"""
+
+    histories = st.session_state.get(
+        CAREER_HISTORIES_KEY,
+        [],
+    )
+
+    if not histories:
+        return
+
+    st.markdown("#### 登録済みの部署・役割")
+
+    for index, history in enumerate(
+        histories,
+        start=1,
+    ):
+        with st.container(border=True):
+
+            department_name = (
+                history.department
+                or "部署名未入力"
+            )
+
+            st.markdown(
+                f"**{index}. {department_name}**"
+            )
+
+            detail_parts = [
+                value
+                for value in [
+                    history.position,
+                    history.occupation,
+                ]
+                if value
+            ]
+
+            if detail_parts:
+                st.caption(
+                    " / ".join(detail_parts)
+                )
+
+            if history.job_description:
+                st.write(
+                    history.job_description
+                )
+
+            button_left, button_right = st.columns(2)
+
+            with button_left:
+                st.button(
+                    "✏ 編集",
+                    key=f"career_history_edit_{index}",
+                    use_container_width=True,
+                    on_click=load_history_for_edit,
+                    args=(index - 1,),
+                )
+
+            with button_right:
+                st.button(
+                    "🗑 削除",
+                    key=f"career_history_delete_{index}",
+                    use_container_width=True,
+                    on_click=delete_history,
+                    args=(index - 1,),
+                )
 
 
 def render_company_list() -> None:
@@ -660,14 +1046,6 @@ def show_page() -> None:
 
         st.stop()
 
-    career_errors = st.session_state.pop(
-        CAREER_ERRORS_KEY,
-        [],
-    )
-
-    for error in career_errors:
-        st.error(error)
-
     render_company_list()
 
     edit_index = st.session_state.get(
@@ -716,6 +1094,12 @@ def show_page() -> None:
         "雇用形態",
         employment_types,
         key="career_employment_type",
+    )
+
+    st.text_input(
+        "業種",
+        placeholder="例：金融・クレジットカード",
+         key="career_industry",
     )
 
     year_columns = st.columns(2)
@@ -770,6 +1154,8 @@ def show_page() -> None:
 
     st.subheader("部署・役割")
 
+    render_history_list()
+
     detail_columns = st.columns(2)
 
     with detail_columns[0]:
@@ -786,21 +1172,11 @@ def show_page() -> None:
             key="career_position",
         )
 
-    job_columns = st.columns(2)
-
-    with job_columns[0]:
-        st.text_input(
-            "業種",
-            placeholder="例：金融・クレジットカード",
-            key="career_industry",
-        )
-
-    with job_columns[1]:
-        st.text_input(
-            "職種",
-            placeholder="例：業務企画",
-            key="career_occupation",
-        )
+    st.text_input(
+        "職種",
+        placeholder="例：業務企画",
+        key="career_occupation",
+    )
 
     st.text_area(
         "業務内容",
@@ -822,6 +1198,31 @@ def show_page() -> None:
         max_chars=1000,
         height=160,
         key="career_achievements",
+    )
+
+
+    career_errors = st.session_state.pop(
+    CAREER_ERRORS_KEY,
+    [],
+)
+
+    for error in career_errors:
+        st.error(error)
+
+    history_edit_index = st.session_state.get(
+        CAREER_HISTORY_EDIT_INDEX_KEY
+    )
+
+    if history_edit_index is None:
+        history_button_label = "＋部署・役割を追加"
+    else:
+        history_button_label = "✓ 変更を反映する"
+
+    st.button(
+        history_button_label,
+        key="career_add_history",
+        use_container_width=True,
+        on_click=add_current_history,
     )
 
     st.divider()

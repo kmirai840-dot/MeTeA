@@ -58,6 +58,7 @@ def save_careers(
                     user_id,
                     company_name,
                     employment_type,
+                    industry,
                     start_year,
                     start_month,
                     end_year,
@@ -65,12 +66,13 @@ def save_careers(
                     is_current,
                     display_order
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
                     career.company_name,
                     career.employment_type,
+                    career.industry,
                     career.start_year,
                     career.start_month,
                     career.end_year,
@@ -85,37 +87,35 @@ def save_careers(
             for history in histories:
                 connection.execute(
                     """
-                    INSERT INTO user_career_histories (
-                        career_id,
-                        department,
-                        position,
-                        industry,
-                        occupation,
-                        start_year,
-                        start_month,
-                        end_year,
-                        end_month,
-                        job_description,
-                        achievements,
-                        display_order
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        career_id,
-                        history.department,
-                        history.position,
-                        history.industry,
-                        history.occupation,
-                        history.start_year,
-                        history.start_month,
-                        history.end_year,
-                        history.end_month,
-                        history.job_description,
-                        history.achievements,
-                        history.display_order,
-                    ),
+                INSERT INTO user_career_histories (
+                    career_id,
+                    department,
+                    position,
+                    occupation,
+                    start_year,
+                    start_month,
+                    end_year,
+                    end_month,
+                    job_description,
+                    achievements,
+                    display_order
                 )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    career_id,
+                    history.department,
+                    history.position,
+                    history.occupation,
+                    history.start_year,
+                    history.start_month,
+                    history.end_year,
+                    history.end_month,
+                    history.job_description,
+                    history.achievements,
+                    history.display_order,
+                ),
+            )
 
         connection.commit()
 
@@ -145,6 +145,7 @@ def get_careers(
                 id,
                 company_name,
                 employment_type,
+                industry,
                 start_year,
                 start_month,
                 end_year,
@@ -168,7 +169,6 @@ def get_careers(
                 SELECT
                     department,
                     position,
-                    industry,
                     occupation,
                     start_year,
                     start_month,
@@ -190,6 +190,7 @@ def get_careers(
             career = Career(
                 company_name=career_row["company_name"],
                 employment_type=career_row["employment_type"],
+                industry=career_row["industry"] or "",
                 start_year=career_row["start_year"],
                 start_month=career_row["start_month"],
                 end_year=career_row["end_year"],
@@ -208,7 +209,6 @@ def get_careers(
                     CareerHistory(
                         department=history_row["department"],
                         position=history_row["position"],
-                        industry=history_row["industry"],
                         occupation=history_row["occupation"],
                         start_year=history_row["start_year"],
                         start_month=history_row["start_month"],

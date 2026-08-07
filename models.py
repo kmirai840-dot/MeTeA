@@ -107,6 +107,7 @@ class Career:
 
     company_name: str
     employment_type: str
+    industry: str
     start_year: int
     start_month: int
     end_year: int | None
@@ -121,7 +122,6 @@ class CareerHistory:
 
     department: str
     position: str
-    industry: str
     occupation: str
     start_year: int
     start_month: int

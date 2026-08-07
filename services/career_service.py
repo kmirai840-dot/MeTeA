@@ -36,17 +36,17 @@ def validate_careers(
                 "会社名を入力してください。"
             )
 
+        if not (career.industry or "").strip():
+            errors.append(
+                f"{career.company_name}：業種を入力してください。"
+            )
+
         if not histories:
             errors.append(
                 f"{career.company_name}の職歴を1件以上入力してください。"
             )
 
         for history in histories:
-
-            if not history.industry.strip():
-                errors.append(
-                    f"{career.company_name}：業種を入力してください。"
-                )
 
             if not history.occupation.strip():
                 errors.append(
