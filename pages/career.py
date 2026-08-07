@@ -15,6 +15,10 @@ from services.career_service import (
     validate_careers,
 )   
 
+from services.career_document_service import (
+    extract_text_from_docx,
+)
+
 PAGE_TITLE = "職務経歴"
 
 CAREER_LOADED_KEY = "career_loaded"
@@ -1015,6 +1019,33 @@ def show_page() -> None:
                     type=["pdf", "docx"],
                     key="career_upload",
                 )
+
+                if uploaded_career_file is not None:
+
+                    if uploaded_career_file.name.lower().endswith(
+                        ".docx"
+                    ):
+                        extracted_text = (
+                            extract_text_from_docx(
+                                uploaded_career_file
+                            )
+                        )
+
+                        st.success(
+                            "Wordファイルを読み取りました。"
+                        )
+
+                        st.text_area(
+                            "読み取り結果（確認用）",
+                            value=extracted_text,
+                            height=300,
+                            disabled=True,
+                        )
+
+                    else:
+                        st.info(
+                            "PDFの読み取りは次のステップで対応します。"
+                        )
 
         with manual_col:
             with st.container(border=True):
