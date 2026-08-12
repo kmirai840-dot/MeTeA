@@ -169,5 +169,120 @@ CREATE TABLE IF NOT EXISTS user_career_histories (
     FOREIGN KEY (career_id) REFERENCES user_careers (id)
 );
 
+
+-- ========================================
+-- 求人情報
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+
+    -- 情報元
+    registration_method TEXT NOT NULL DEFAULT '',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_text TEXT NOT NULL DEFAULT '',
+    acquired_at TEXT NOT NULL DEFAULT '',
+    source_name TEXT NOT NULL DEFAULT '',
+
+    -- 求人基本情報
+    company_name TEXT NOT NULL DEFAULT '',
+    job_title TEXT NOT NULL DEFAULT '',
+    job_number TEXT NOT NULL DEFAULT '',
+    publication_start_date TEXT NOT NULL DEFAULT '',
+    publication_end_date TEXT NOT NULL DEFAULT '',
+    industry TEXT NOT NULL DEFAULT '',
+    business_description TEXT NOT NULL DEFAULT '',
+    employee_count TEXT NOT NULL DEFAULT '',
+    established_date TEXT NOT NULL DEFAULT '',
+    capital TEXT NOT NULL DEFAULT '',
+    listing_status TEXT NOT NULL DEFAULT '',
+
+    -- 募集内容
+    occupation TEXT NOT NULL DEFAULT '',
+    department TEXT NOT NULL DEFAULT '',
+    planned_hires TEXT NOT NULL DEFAULT '',
+    recruitment_reason TEXT NOT NULL DEFAULT '',
+
+    -- 仕事内容
+    job_summary TEXT NOT NULL DEFAULT '',
+    responsibility_scope TEXT NOT NULL DEFAULT '',
+    customers TEXT NOT NULL DEFAULT '',
+    internal_stakeholders TEXT NOT NULL DEFAULT '',
+    external_partners TEXT NOT NULL DEFAULT '',
+    goals_kpi TEXT NOT NULL DEFAULT '',
+    expected_results TEXT NOT NULL DEFAULT '',
+
+    -- 勤務条件
+    employment_type TEXT NOT NULL DEFAULT '',
+    probation_period TEXT NOT NULL DEFAULT '',
+    prefecture TEXT NOT NULL DEFAULT '',
+    municipality TEXT NOT NULL DEFAULT '',
+    nearest_station TEXT NOT NULL DEFAULT '',
+    transfer_required TEXT NOT NULL DEFAULT '',
+    work_style TEXT NOT NULL DEFAULT '',
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
+    break_minutes TEXT NOT NULL DEFAULT '',
+    scheduled_work_hours TEXT NOT NULL DEFAULT '',
+    flextime TEXT NOT NULL DEFAULT '',
+    overtime TEXT NOT NULL DEFAULT '',
+    holidays TEXT NOT NULL DEFAULT '',
+    annual_holidays TEXT NOT NULL DEFAULT '',
+
+    -- 給与・待遇
+    monthly_salary TEXT NOT NULL DEFAULT '',
+    annual_salary TEXT NOT NULL DEFAULT '',
+    expected_salary_min TEXT NOT NULL DEFAULT '',
+    expected_salary_max TEXT NOT NULL DEFAULT '',
+    fixed_overtime_hours TEXT NOT NULL DEFAULT '',
+    fixed_overtime_pay TEXT NOT NULL DEFAULT '',
+    bonus TEXT NOT NULL DEFAULT '',
+    salary_increase TEXT NOT NULL DEFAULT '',
+    incentive TEXT NOT NULL DEFAULT '',
+
+    -- 福利厚生
+    social_insurance TEXT NOT NULL DEFAULT '',
+    commuting_allowance TEXT NOT NULL DEFAULT '',
+    housing_allowance TEXT NOT NULL DEFAULT '',
+    retirement_plan TEXT NOT NULL DEFAULT '',
+    qualification_support TEXT NOT NULL DEFAULT '',
+    training_program TEXT NOT NULL DEFAULT '',
+
+    -- 選考情報
+    document_screening TEXT NOT NULL DEFAULT '',
+    interview TEXT NOT NULL DEFAULT '',
+    aptitude_test TEXT NOT NULL DEFAULT '',
+    interview_count TEXT NOT NULL DEFAULT '',
+    expected_join_date TEXT NOT NULL DEFAULT '',
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users (id)
+);
+
+
+-- ========================================
+-- 求人情報：複数値項目
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+
+    item_type TEXT NOT NULL,
+    item_value TEXT NOT NULL,
+    display_order INTEGER NOT NULL DEFAULT 0,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id)
+);
+
+
 INSERT OR IGNORE INTO users (id)
 VALUES (1);

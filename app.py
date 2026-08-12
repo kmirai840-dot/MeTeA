@@ -24,6 +24,10 @@ from pages.career import (
     show_page as render_career_page,
 )
 
+from pages.job_registration import (
+    show_page as render_job_registration_page,
+)
+
 # ========================================
 # 基本設定
 # ========================================
@@ -60,6 +64,7 @@ valid_pages = {
     "work_values",
     "career",
     "job_change_reason",
+    "job_registration",
     "job_list",
     "application_list",
     "milestones",
@@ -92,6 +97,10 @@ elif current_page == "work_values":
 
 elif current_page == "career":
     render_career_page()
+    st.stop()
+
+elif current_page == "job_registration":
+    render_job_registration_page()
     st.stop()
 
 elif current_page == "job_change_reason":

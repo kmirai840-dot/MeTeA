@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 
@@ -130,3 +130,136 @@ class CareerHistory:
     job_description: str
     achievements: str
     display_order: int
+
+# ========================================
+# 求人情報
+# ========================================
+@dataclass
+class Job:
+    """登録した求人1件分の情報を保持するクラス。"""
+
+    # ------------------------------------
+    # 情報元
+    # ------------------------------------
+    registration_method: str = ""
+    source_url: str = ""
+    source_text: str = ""
+    acquired_at: str = ""
+    source_name: str = ""
+
+    # ------------------------------------
+    # 求人基本情報
+    # ------------------------------------
+    company_name: str = ""
+    job_title: str = ""
+    job_number: str = ""
+    publication_start_date: str = ""
+    publication_end_date: str = ""
+    industry: str = ""
+    business_description: str = ""
+    employee_count: str = ""
+    established_date: str = ""
+    capital: str = ""
+    listing_status: str = ""
+
+    # ------------------------------------
+    # 募集内容
+    # ------------------------------------
+    occupation: str = ""
+    department: str = ""
+    planned_hires: str = ""
+    recruitment_reason: str = ""
+
+    # ------------------------------------
+    # 仕事内容
+    # ------------------------------------
+    job_summary: str = ""
+    job_details: list[str] = field(
+        default_factory=list
+    )
+    responsibility_scope: str = ""
+    customers: str = ""
+    internal_stakeholders: str = ""
+    external_partners: str = ""
+    goals_kpi: str = ""
+    expected_results: str = ""
+
+    # ------------------------------------
+    # 応募要件
+    # ------------------------------------
+    required_experience: list[str] = field(
+        default_factory=list
+    )
+    required_skills: list[str] = field(
+        default_factory=list
+    )
+    required_qualifications: list[str] = field(
+        default_factory=list
+    )
+    preferred_experience: list[str] = field(
+        default_factory=list
+    )
+    preferred_skills: list[str] = field(
+        default_factory=list
+    )
+    desired_personality: list[str] = field(
+        default_factory=list
+    )
+
+    # ------------------------------------
+    # 勤務条件
+    # ------------------------------------
+    employment_type: str = ""
+    probation_period: str = ""
+    prefecture: str = ""
+    municipality: str = ""
+    nearest_station: str = ""
+    transfer_required: str = ""
+    work_style: str = ""
+    start_time: str = ""
+    end_time: str = ""
+    break_minutes: str = ""
+    scheduled_work_hours: str = ""
+    flextime: str = ""
+    overtime: str = ""
+    holidays: str = ""
+    annual_holidays: str = ""
+
+    # ------------------------------------
+    # 給与・待遇
+    # ------------------------------------
+    monthly_salary: str = ""
+    annual_salary: str = ""
+    expected_salary_min: str = ""
+    expected_salary_max: str = ""
+    fixed_overtime_hours: str = ""
+    fixed_overtime_pay: str = ""
+    bonus: str = ""
+    salary_increase: str = ""
+    incentive: str = ""
+
+    # ------------------------------------
+    # 福利厚生
+    # ------------------------------------
+    social_insurance: str = ""
+    commuting_allowance: str = ""
+    housing_allowance: str = ""
+    retirement_plan: str = ""
+    qualification_support: str = ""
+    training_program: str = ""
+
+    # ------------------------------------
+    # 選考情報
+    # ------------------------------------
+    document_screening: str = ""
+    interview: str = ""
+    aptitude_test: str = ""
+    interview_count: str = ""
+    expected_join_date: str = ""
+
+    # ------------------------------------
+    # 情報取得状態
+    # ------------------------------------
+    not_listed_fields: list[str] = field(
+        default_factory=list
+    )
