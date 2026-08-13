@@ -8,6 +8,7 @@ from models import (
 )
 
 from database.repositories.job_repository import (
+    get_job_list_rows,
     create_job,
     delete_job,
     find_jobs_by_company,
@@ -510,6 +511,24 @@ def load_jobs(
         get_current_user_id()
     )
 
+
+def load_job_list_rows() -> list[tuple[int, Job, str | None, str | None]]:
+    """求人一覧表示用の求人情報を取得する。"""
+
+    return get_job_list_rows(
+        user_id=get_current_user_id(),
+    )
+
+
+def load_job_sources(
+    job_id: int,
+) -> list[tuple[int, JobSource]]:
+    """指定した求人の紹介経路を取得する。"""
+
+    return get_job_sources(
+        user_id=get_current_user_id(),
+        job_id=job_id,
+    )
 
 # ========================================
 # 1件取得
