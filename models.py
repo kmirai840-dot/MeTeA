@@ -211,6 +211,8 @@ class Job:
     # 勤務条件
     # ------------------------------------
     employment_type: str = ""
+    probation_period_status: str = ""
+    probation_period_months: str = ""
     probation_period: str = ""
     prefecture: str = ""
     municipality: str = ""

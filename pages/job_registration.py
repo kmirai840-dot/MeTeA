@@ -75,6 +75,13 @@ WAGE_TYPES = (
     "その他",
 )
 
+PROBATION_PERIOD_OPTIONS = (
+    "",
+    "あり",
+    "なし",
+    "不明",
+)
+
 FIXED_OVERTIME_OPTIONS = (
     "",
     "あり",
@@ -989,6 +996,29 @@ def load_job_for_edit(
         "job_form_employment_type"
     ] = job.employment_type
 
+    probation_period_status = (
+        job.probation_period_status
+    )
+
+    if (
+        not probation_period_status
+        and (
+            job.probation_period
+            or job.probation_period_months
+        )
+    ):
+        probation_period_status = "あり"
+
+    st.session_state[
+        "job_form_probation_period_status"
+    ] = probation_period_status
+
+    st.session_state[
+        "job_form_probation_period_months"
+    ] = parse_integer_value(
+        job.probation_period_months
+    )
+
     st.session_state[
         "job_form_probation_period"
     ] = job.probation_period
@@ -1640,8 +1670,43 @@ def render_job_form() -> None:
                 key="job_form_employment_type",
             )
 
-            probation_period = st.text_input(
+            probation_period_status = st.selectbox(
                 "試用期間",
+                options_with_current(
+                    PROBATION_PERIOD_OPTIONS,
+                    st.session_state.get(
+                        "job_form_probation_period_status",
+                        "",
+                    ),
+                ),
+                key="job_form_probation_period_status",
+            )
+
+            if probation_period_status == "あり":
+                probation_period_months = st.number_input(
+                    "試用期間の月数",
+                    min_value=1,
+                    max_value=60,
+                    step=1,
+                    value=None,
+                    placeholder="例：3",
+                    key="job_form_probation_period_months",
+                )
+
+                st.caption(
+                    "単位：か月。期間が日数で記載されている場合や、"
+                    "条件に補足がある場合は下の補足欄へ入力します。"
+                )
+
+            else:
+                probation_period_months = None
+
+            probation_period = st.text_input(
+                "試用期間の補足",
+                placeholder=(
+                    "例：試用期間中も待遇変更なし、"
+                    "試用期間14日間"
+                ),
                 key="job_form_probation_period",
             )
 
@@ -2307,6 +2372,12 @@ def render_job_form() -> None:
             expected_results=expected_results,
 
             employment_type=employment_type,
+            probation_period_status=(
+                probation_period_status
+            ),
+            probation_period_months=integer_to_text(
+                probation_period_months
+            ),
             probation_period=probation_period,
             prefecture=prefecture,
             municipality=municipality,

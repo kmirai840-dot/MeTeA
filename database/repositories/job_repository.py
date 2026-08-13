@@ -56,6 +56,8 @@ JOB_FIELDS = (
     "goals_kpi",
     "expected_results",
     "employment_type",
+    "probation_period_status",
+    "probation_period_months",
     "probation_period",
     "prefecture",
     "municipality",

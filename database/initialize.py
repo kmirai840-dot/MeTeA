@@ -23,6 +23,12 @@ def initialize_database() -> None:
         }
 
         required_job_columns = {
+            "probation_period_status": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "probation_period_months": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
             "source_type": (
                 "TEXT NOT NULL DEFAULT ''"
             ),

@@ -215,6 +215,8 @@ CREATE TABLE IF NOT EXISTS user_jobs (
 
     -- 勤務条件
     employment_type TEXT NOT NULL DEFAULT '',
+    probation_period_status TEXT NOT NULL DEFAULT '',
+    probation_period_months TEXT NOT NULL DEFAULT '',
     probation_period TEXT NOT NULL DEFAULT '',
     prefecture TEXT NOT NULL DEFAULT '',
     municipality TEXT NOT NULL DEFAULT '',
