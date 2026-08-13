@@ -285,5 +285,36 @@ CREATE TABLE IF NOT EXISTS user_job_items (
 );
 
 
+-- ========================================
+-- 求人情報：紹介経路
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+
+    source_type TEXT NOT NULL DEFAULT '',
+    source_name TEXT NOT NULL DEFAULT '',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_text TEXT NOT NULL DEFAULT '',
+    acquired_at TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+
+    is_primary INTEGER NOT NULL DEFAULT 0,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id),
+
+    UNIQUE (
+        job_id,
+        source_type,
+        source_name,
+        source_url
+    )
+);
+
 INSERT OR IGNORE INTO users (id)
 VALUES (1);

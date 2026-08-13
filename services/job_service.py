@@ -2,7 +2,10 @@
 
 from dataclasses import fields
 
-from models import Job
+from models import (
+    Job,
+    JobSource,
+)
 
 from database.repositories.job_repository import (
     create_job,
@@ -17,6 +20,9 @@ from services.current_user_service import (
     get_current_user_id,
 )
 
+from database.repositories.job_source_repository import (
+    sync_primary_job_source,
+)
 
 # ========================================
 # 重複判定結果
@@ -284,6 +290,22 @@ def compare_jobs(
     return differences
 
 
+def _job_to_source(
+    job: Job,
+) -> JobSource:
+    """求人情報から主紹介経路を作成する。"""
+
+    return JobSource(
+        source_type=job.source_type,
+        source_name=job.source_name,
+        source_url=job.source_url,
+        source_text=job.source_text,
+        acquired_at=job.acquired_at,
+        notes="",
+        is_primary=True,
+    )
+
+
 # ========================================
 # 新規保存
 # ========================================
@@ -291,17 +313,34 @@ def compare_jobs(
 def create_job_data(
     job: Job,
 ) -> tuple[int | None, list[str]]:
-    """求人を新規保存する。"""
+    """求人と主紹介経路を新規保存する。"""
 
     errors = validate_job(job)
 
     if errors:
         return None, errors
 
+    user_id = get_current_user_id()
+
     job_id = create_job(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         job=job,
     )
+
+    source_id = sync_primary_job_source(
+        user_id=user_id,
+        job_id=job_id,
+        job_source=_job_to_source(job),
+    )
+
+    if source_id is None:
+        return (
+            job_id,
+            [
+                "求人は保存されましたが、"
+                "紹介経路を保存できませんでした。"
+            ],
+        )
 
     return job_id, []
 
@@ -371,15 +410,17 @@ def update_job_data(
     job_id: int,
     job: Job,
 ) -> list[str]:
-    """求人情報を確認して更新する。"""
+    """求人情報と主紹介経路を更新する。"""
 
     errors = validate_job(job)
 
     if errors:
         return errors
 
+    user_id = get_current_user_id()
+
     updated = update_job(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         job_id=job_id,
         job=job,
     )
@@ -387,6 +428,18 @@ def update_job_data(
     if not updated:
         return [
             "更新対象の求人が見つかりませんでした。"
+        ]
+
+    source_id = sync_primary_job_source(
+        user_id=user_id,
+        job_id=job_id,
+        job_source=_job_to_source(job),
+    )
+
+    if source_id is None:
+        return [
+            "求人情報は更新されましたが、"
+            "紹介経路を更新できませんでした。"
         ]
 
     return []

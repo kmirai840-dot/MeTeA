@@ -3,6 +3,7 @@
 import streamlit as st
 
 from pages.job_registration import (
+    JOB_FORM_RETURN_PAGE_KEY,
     load_job_for_edit,
 )
 from services.job_service import (
@@ -210,6 +211,10 @@ def render_job_card(
                 key=f"edit_job_{job_id}",
                 width="stretch",
             ):
+                st.session_state[
+                    JOB_FORM_RETURN_PAGE_KEY
+                ] = "job_list"
+
                 load_job_for_edit(
                     job_id
                 )

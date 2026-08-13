@@ -28,6 +28,9 @@ JOB_EDIT_ID_KEY = "job_edit_id"
 JOB_PENDING_DATA_KEY = "job_pending_data"
 JOB_DUPLICATE_ID_KEY = "job_duplicate_id"
 JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
+JOB_FORM_RETURN_PAGE_KEY = (
+    "job_form_return_page"
+)
 
 SOURCE_TYPES = (
     "選択してください",
@@ -814,18 +817,53 @@ def load_job_for_edit(
 def render_job_form() -> None:
     """求人情報の入力フォームを表示する。"""
 
-    if st.button(
-        "← 登録方法の選択に戻る",
-        key="job_form_back",
-    ):
-        st.session_state[
-            JOB_FORM_STEP_KEY
-        ] = "select"
-        st.rerun()
-
     edit_job_id = st.session_state.get(
         JOB_EDIT_ID_KEY
     )
+
+    return_page = st.session_state.get(
+        JOB_FORM_RETURN_PAGE_KEY
+    )
+
+    back_button_label = (
+        "← 求人一覧へ戻る"
+        if (
+            edit_job_id is not None
+            and return_page == "job_list"
+        )
+        else "← 登録方法の選択に戻る"
+    )
+
+    if st.button(
+        back_button_label,
+        key="job_form_back",
+    ):
+        if (
+            edit_job_id is not None
+            and return_page == "job_list"
+        ):
+            st.session_state[
+                JOB_EDIT_ID_KEY
+            ] = None
+
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "select"
+
+            st.session_state[
+                JOB_FORM_RETURN_PAGE_KEY
+            ] = None
+
+            st.query_params["page"] = (
+                "job_list"
+            )
+
+        else:
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "select"
+
+        st.rerun()
 
     if edit_job_id is not None:
         st.info(

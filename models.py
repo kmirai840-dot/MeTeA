@@ -264,3 +264,20 @@ class Job:
     not_listed_fields: list[str] = field(
         default_factory=list
     )
+
+
+# ========================================
+# 求人の紹介経路
+# ========================================
+
+@dataclass
+class JobSource:
+    """求人を紹介・取得した経路を保持するクラス。"""
+
+    source_type: str = ""
+    source_name: str = ""
+    source_url: str = ""
+    source_text: str = ""
+    acquired_at: str = ""
+    notes: str = ""
+    is_primary: bool = False

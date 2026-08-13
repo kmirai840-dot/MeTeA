@@ -31,6 +31,34 @@ def initialize_database() -> None:
                 """
             )
 
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO user_job_sources (
+                job_id,
+                source_type,
+                source_name,
+                source_url,
+                source_text,
+                acquired_at,
+                is_primary
+            )
+            SELECT
+                id,
+                source_type,
+                source_name,
+                source_url,
+                source_text,
+                acquired_at,
+                1
+            FROM user_jobs
+            WHERE
+                source_type <> ''
+                OR source_name <> ''
+                OR source_url <> ''
+                OR source_text <> ''
+            """
+        )
+
         connection.commit()
 
     except Exception:
