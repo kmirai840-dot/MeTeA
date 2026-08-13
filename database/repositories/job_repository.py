@@ -40,6 +40,8 @@ JOB_FIELDS = (
     "publication_end_date",
     "industry",
     "business_description",
+    "employee_count_min",
+    "employee_count_max",
     "employee_count",
     "established_date",
     "capital",
@@ -101,6 +103,8 @@ JOB_FIELDS = (
     "interview",
     "aptitude_test_status",
     "aptitude_test",
+    "interview_count_min",
+    "interview_count_max",
     "interview_count",
     "expected_join_date",
 )
@@ -347,6 +351,47 @@ def get_job(
             connection,
             row,
         )
+
+    finally:
+        connection.close()
+
+
+def find_jobs_by_company(
+    user_id: int,
+    company_name: str,
+) -> list[tuple[int, Job]]:
+    """同じ会社の登録済み求人を取得する。"""
+
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM user_jobs
+            WHERE
+                user_id = ?
+                AND company_name = ?
+                AND deleted_at IS NULL
+            ORDER BY
+                id ASC
+            """,
+            (
+                user_id,
+                company_name.strip(),
+            ),
+        ).fetchall()
+
+        return [
+            (
+                int(row["id"]),
+                _row_to_job(
+                    connection,
+                    row,
+                ),
+            )
+            for row in rows
+        ]
 
     finally:
         connection.close()

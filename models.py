@@ -158,6 +158,8 @@ class Job:
     publication_end_date: str = ""
     industry: str = ""
     business_description: str = ""
+    employee_count_min: str = ""
+    employee_count_max: str = ""
     employee_count: str = ""
     established_date: str = ""
     capital: str = ""
@@ -269,6 +271,8 @@ class Job:
     interview: str = ""
     aptitude_test_status: str = ""
     aptitude_test: str = ""
+    interview_count_min: str = ""
+    interview_count_max: str = ""
     interview_count: str = ""
     expected_join_date: str = ""
 

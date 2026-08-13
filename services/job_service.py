@@ -10,7 +10,7 @@ from models import (
 from database.repositories.job_repository import (
     create_job,
     delete_job,
-    find_jobs_by_company_and_occupation,
+    find_jobs_by_company,
     get_job,
     get_jobs,
     update_job,
@@ -21,6 +21,8 @@ from services.current_user_service import (
 )
 
 from database.repositories.job_source_repository import (
+    create_job_source,
+    get_job_sources,
     sync_primary_job_source,
 )
 
@@ -51,6 +53,8 @@ JOB_FIELD_LABELS = {
     "publication_end_date": "掲載終了日",
     "industry": "業種",
     "business_description": "事業内容",
+    "employee_count_min": "従業員数（下限）",
+    "employee_count_max": "従業員数（上限）",
     "employee_count": "従業員数",
     "established_date": "設立",
     "capital": "資本金",
@@ -119,6 +123,8 @@ JOB_FIELD_LABELS = {
     "interview": "面接",
     "aptitude_test_status": "適性検査の有無",
     "aptitude_test": "適性検査の補足",
+    "interview_count_min": "面接回数（下限）",
+    "interview_count_max": "面接回数（上限）",
     "interview_count": "面接回数",
     "expected_join_date": "入社予定・入社可能時期",
     "not_listed_fields": "求人票に記載がない項目",
@@ -180,9 +186,64 @@ def validate_job(
 def _normalize(
     value: str,
 ) -> str:
-    """重複判定用に文字列を整える。"""
+    """重複判定用に文字列と空白を整える。"""
 
-    return value.strip().casefold()
+    return "".join(
+        value.split()
+    ).casefold()
+
+
+def _is_same_job(
+    saved_job: Job,
+    new_job: Job,
+) -> bool:
+    """求人を識別する情報が一致するか確認する。"""
+
+    if (
+        saved_job.job_number.strip()
+        and new_job.job_number.strip()
+        and _normalize(saved_job.job_number)
+        == _normalize(new_job.job_number)
+    ):
+        return True
+
+    if (
+        saved_job.source_url.strip()
+        and new_job.source_url.strip()
+        and _normalize(saved_job.source_url)
+        == _normalize(new_job.source_url)
+    ):
+        return True
+
+    if (
+        saved_job.source_text.strip()
+        and new_job.source_text.strip()
+        and _normalize(saved_job.source_text)
+        == _normalize(new_job.source_text)
+    ):
+        return True
+
+    if (
+        saved_job.job_title.strip()
+        and new_job.job_title.strip()
+        and _normalize(saved_job.job_title)
+        == _normalize(new_job.job_title)
+    ):
+        return True
+
+    if (
+        saved_job.occupation.strip()
+        and new_job.occupation.strip()
+        and saved_job.job_summary.strip()
+        and new_job.job_summary.strip()
+        and _normalize(saved_job.occupation)
+        == _normalize(new_job.occupation)
+        and _normalize(saved_job.job_summary)
+        == _normalize(new_job.job_summary)
+    ):
+        return True
+
+    return False
 
 
 # ========================================
@@ -193,30 +254,52 @@ def check_duplicate_job(
     job: Job,
     exclude_job_id: int | None = None,
 ) -> tuple[str, int | None]:
-    """3パターンで求人の重複状態を判定する。"""
+    """複数の識別情報から求人の重複状態を判定する。"""
 
-    candidates = (
-        find_jobs_by_company_and_occupation(
-            user_id=get_current_user_id(),
-            company_name=job.company_name,
-            occupation=job.occupation,
-        )
+    user_id = get_current_user_id()
+
+    candidates = find_jobs_by_company(
+        user_id=user_id,
+        company_name=job.company_name,
     )
 
     different_source_job_id = None
 
     for job_id, saved_job in candidates:
-
         if (
             exclude_job_id is not None
             and job_id == exclude_job_id
         ):
             continue
 
-        same_source = (
-            _normalize(saved_job.source_name)
-            == _normalize(job.source_name)
+        if not _is_same_job(
+            saved_job,
+            job,
+        ):
+            continue
+
+        saved_sources = get_job_sources(
+            user_id=user_id,
+            job_id=job_id,
         )
+
+        same_source = any(
+            (
+                _normalize(source.source_type)
+                == _normalize(job.source_type)
+                and _normalize(source.source_name)
+                == _normalize(job.source_name)
+            )
+            for _, source in saved_sources
+        )
+
+        if not saved_sources:
+            same_source = (
+                _normalize(saved_job.source_type)
+                == _normalize(job.source_type)
+                and _normalize(saved_job.source_name)
+                == _normalize(job.source_name)
+            )
 
         if same_source:
             return (
@@ -385,6 +468,34 @@ def save_job_data(
         existing_job_id,
         [],
     )
+
+
+def add_job_source_data(
+    job_id: int,
+    job: Job,
+) -> list[str]:
+    """登録済み求人へ別の紹介経路を追加する。"""
+
+    errors = validate_job(job)
+
+    if errors:
+        return errors
+
+    job_source = _job_to_source(job)
+    job_source.is_primary = False
+
+    source_id = create_job_source(
+        user_id=get_current_user_id(),
+        job_id=job_id,
+        job_source=job_source,
+    )
+
+    if source_id is None:
+        return [
+            "紹介経路を追加できませんでした。"
+        ]
+
+    return []
 
 
 # ========================================

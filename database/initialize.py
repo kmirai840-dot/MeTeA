@@ -23,6 +23,18 @@ def initialize_database() -> None:
         }
 
         required_job_columns = {
+            "employee_count_min": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "employee_count_max": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "interview_count_min": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "interview_count_max": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
             "document_screening_status": (
                 "TEXT NOT NULL DEFAULT ''"
             ),

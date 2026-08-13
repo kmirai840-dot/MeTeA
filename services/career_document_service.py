@@ -5,7 +5,11 @@ import json
 from docx import Document
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+from dotenv import load_dotenv
 from openai import OpenAI
+
+
+load_dotenv()
 
 
 @dataclass

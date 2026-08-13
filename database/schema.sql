@@ -193,6 +193,8 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     publication_end_date TEXT NOT NULL DEFAULT '',
     industry TEXT NOT NULL DEFAULT '',
     business_description TEXT NOT NULL DEFAULT '',
+    employee_count_min TEXT NOT NULL DEFAULT '',
+    employee_count_max TEXT NOT NULL DEFAULT '',
     employee_count TEXT NOT NULL DEFAULT '',
     established_date TEXT NOT NULL DEFAULT '',
     capital TEXT NOT NULL DEFAULT '',
@@ -267,6 +269,8 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     interview TEXT NOT NULL DEFAULT '',
     aptitude_test_status TEXT NOT NULL DEFAULT '',
     aptitude_test TEXT NOT NULL DEFAULT '',
+    interview_count_min TEXT NOT NULL DEFAULT '',
+    interview_count_max TEXT NOT NULL DEFAULT '',
     interview_count TEXT NOT NULL DEFAULT '',
     expected_join_date TEXT NOT NULL DEFAULT '',
 

@@ -1,5 +1,6 @@
 """求人登録画面。"""
 
+from dataclasses import asdict
 from datetime import (
     date,
     datetime,
@@ -10,10 +11,14 @@ import streamlit as st
 
 from models import Job
 
+from services.job_extraction_service import (
+    extract_job_data,
+)
 from services.job_service import (
     DUPLICATE_DIFFERENT_SOURCE,
     DUPLICATE_EXACT,
     DUPLICATE_NONE,
+    add_job_source_data,
     compare_jobs,
     create_job_data,
     delete_job_data,
@@ -32,6 +37,10 @@ JOB_REGISTRATION_MODE_KEY = "job_registration_mode"
 JOB_FORM_STEP_KEY = "job_form_step"
 JOB_EDIT_ID_KEY = "job_edit_id"
 JOB_PENDING_DATA_KEY = "job_pending_data"
+JOB_CONFIRM_DATA_KEY = "job_confirm_data"
+JOB_COMPLETE_MESSAGE_KEY = "job_complete_message"
+JOB_COMPLETE_NOTE_KEY = "job_complete_note"
+JOB_COMPLETE_JOB_ID_KEY = "job_complete_job_id"
 JOB_DUPLICATE_ID_KEY = "job_duplicate_id"
 JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
 JOB_FORM_RETURN_PAGE_KEY = (
@@ -461,6 +470,411 @@ def render_url_registration() -> None:
                 st.rerun()
 
 
+
+def apply_extracted_job_data(
+    extracted_data: dict,
+) -> None:
+    """AI抽出結果を共通フォームへ反映する。"""
+
+    text_field_map = {
+        "company_name": "job_form_company_name",
+        "job_title": "job_form_job_title",
+        "job_number": "job_form_job_number",
+        "industry": "job_form_industry",
+        "business_description": (
+            "job_form_business_description"
+        ),
+        "established_date": (
+            "job_form_established_date"
+        ),
+        "capital": "job_form_capital",
+        "listing_status": (
+            "job_form_listing_status"
+        ),
+        "occupation": "job_form_occupation",
+        "department": "job_form_department",
+        "recruitment_reason": (
+            "job_form_recruitment_reason"
+        ),
+        "job_summary": "job_form_job_summary",
+        "responsibility_scope": (
+            "job_form_responsibility_scope"
+        ),
+        "customers": "job_form_customers",
+        "internal_stakeholders": (
+            "job_form_internal_stakeholders"
+        ),
+        "external_partners": (
+            "job_form_external_partners"
+        ),
+        "goals_kpi": "job_form_goals_kpi",
+        "expected_results": (
+            "job_form_expected_results"
+        ),
+        "employment_type": (
+            "job_form_employment_type"
+        ),
+        "probation_period_status": (
+            "job_form_probation_period_status"
+        ),
+        "probation_period": (
+            "job_form_probation_period"
+        ),
+        "prefecture": "job_form_prefecture",
+        "municipality": "job_form_municipality",
+        "nearest_station": (
+            "job_form_nearest_station"
+        ),
+        "transfer_required": (
+            "job_form_transfer_required"
+        ),
+        "work_style": "job_form_work_style",
+        "flextime": "job_form_flextime",
+        "holidays": "job_form_holidays",
+        "wage_type": "job_form_wage_type",
+        "fixed_overtime_system": (
+            "job_form_fixed_overtime_system"
+        ),
+        "overtime_extra_pay": (
+            "job_form_overtime_extra_pay"
+        ),
+        "bonus": "job_form_bonus",
+        "salary_increase": (
+            "job_form_salary_increase"
+        ),
+        "incentive": "job_form_incentive",
+        "social_insurance": (
+            "job_form_social_insurance"
+        ),
+        "commuting_allowance": (
+            "job_form_commuting_allowance"
+        ),
+        "housing_allowance": (
+            "job_form_housing_allowance"
+        ),
+        "retirement_plan": (
+            "job_form_retirement_plan"
+        ),
+        "qualification_support": (
+            "job_form_qualification_support"
+        ),
+        "training_program": (
+            "job_form_training_program"
+        ),
+        "document_screening_status": (
+            "job_form_document_screening_status"
+        ),
+        "document_screening": (
+            "job_form_document_screening"
+        ),
+        "interview": "job_form_interview",
+        "aptitude_test_status": (
+            "job_form_aptitude_test_status"
+        ),
+        "aptitude_test": (
+            "job_form_aptitude_test"
+        ),
+        "expected_join_date": (
+            "job_form_expected_join_date"
+        ),
+    }
+
+    for (
+        field_name,
+        form_key,
+    ) in text_field_map.items():
+        extracted_value = extracted_data.get(
+            field_name,
+            "",
+        )
+
+        st.session_state[form_key] = str(
+            extracted_value or ""
+        ).strip()
+
+    list_field_map = {
+        "job_details": "job_form_job_details",
+        "required_experience": (
+            "job_form_required_experience"
+        ),
+        "required_skills": (
+            "job_form_required_skills"
+        ),
+        "required_qualifications": (
+            "job_form_required_qualifications"
+        ),
+        "preferred_experience": (
+            "job_form_preferred_experience"
+        ),
+        "preferred_skills": (
+            "job_form_preferred_skills"
+        ),
+        "desired_personality": (
+            "job_form_desired_personality"
+        ),
+        "not_listed_fields": (
+            "job_form_not_listed_fields"
+        ),
+    }
+
+    for (
+        field_name,
+        form_key,
+    ) in list_field_map.items():
+        extracted_values = extracted_data.get(
+            field_name,
+            [],
+        )
+
+        if not isinstance(
+            extracted_values,
+            list,
+        ):
+            extracted_values = []
+
+        st.session_state[form_key] = "\n".join(
+            str(value).strip()
+            for value in extracted_values
+            if str(value).strip()
+        )
+
+    def extracted_integer(
+        field_name: str,
+    ) -> int | None:
+        return parse_integer_value(
+            str(
+                extracted_data.get(
+                    field_name,
+                    "",
+                )
+                or ""
+            )
+        )
+
+    def apply_optional_integer(
+        field_name: str,
+        state_key: str,
+        checkbox_key: str,
+        value_key: str,
+    ) -> None:
+        extracted_value = extracted_integer(
+            field_name
+        )
+
+        st.session_state[state_key] = (
+            extracted_value
+        )
+
+        st.session_state[checkbox_key] = (
+            extracted_value is not None
+        )
+
+        if extracted_value is not None:
+            st.session_state[value_key] = (
+                extracted_value
+            )
+        else:
+            st.session_state.pop(
+                value_key,
+                None,
+            )
+
+    employee_count_min = extracted_integer(
+        "employee_count_min"
+    )
+
+    employee_count_max = extracted_integer(
+        "employee_count_max"
+    )
+
+    has_employee_count = (
+        employee_count_min is not None
+        or employee_count_max is not None
+    )
+
+    st.session_state[
+        "job_form_has_employee_count"
+    ] = has_employee_count
+
+    st.session_state[
+        "job_form_employee_count_min"
+    ] = employee_count_min
+
+    st.session_state[
+        "job_form_employee_count_max"
+    ] = employee_count_max
+
+    apply_optional_integer(
+        "planned_hires",
+        "job_form_planned_hires",
+        "job_form_has_planned_hires",
+        "job_form_planned_hires_value",
+    )
+
+    apply_optional_integer(
+        "annual_holidays",
+        "job_form_annual_holidays",
+        "job_form_has_annual_holidays",
+        "job_form_annual_holidays_value",
+    )
+
+    interview_count_min = extracted_integer(
+        "interview_count_min"
+    )
+
+    interview_count_max = extracted_integer(
+        "interview_count_max"
+    )
+
+    has_interview_count = (
+        interview_count_min is not None
+        or interview_count_max is not None
+    )
+
+    st.session_state[
+        "job_form_has_interview_count"
+    ] = has_interview_count
+
+    st.session_state[
+        "job_form_interview_count_min"
+    ] = interview_count_min
+
+    st.session_state[
+        "job_form_interview_count_max"
+    ] = interview_count_max
+
+    st.session_state[
+        "job_form_probation_period_months"
+    ] = extracted_integer(
+        "probation_period_months"
+    )
+
+    start_time_value = parse_time_value(
+        str(
+            extracted_data.get(
+                "start_time",
+                "",
+            )
+            or ""
+        )
+    )
+
+    end_time_value = parse_time_value(
+        str(
+            extracted_data.get(
+                "end_time",
+                "",
+            )
+            or ""
+        )
+    )
+
+    st.session_state[
+        "job_form_start_time"
+    ] = start_time_value
+
+    st.session_state[
+        "job_form_end_time"
+    ] = end_time_value
+
+    break_minutes_value = extracted_integer(
+        "break_minutes"
+    )
+
+    st.session_state[
+        "job_form_has_break_minutes"
+    ] = break_minutes_value is not None
+
+    if break_minutes_value is not None:
+        st.session_state[
+            "job_form_break_minutes_value"
+        ] = break_minutes_value
+    else:
+        st.session_state.pop(
+            "job_form_break_minutes_value",
+            None,
+        )
+
+    scheduled_work_hours_value = parse_hour_value(
+        str(
+            extracted_data.get(
+                "scheduled_work_hours",
+                "",
+            )
+            or ""
+        )
+    )
+
+    st.session_state[
+        "job_form_has_scheduled_work_hours"
+    ] = scheduled_work_hours_value is not None
+
+    if scheduled_work_hours_value is not None:
+        st.session_state[
+            "job_form_scheduled_work_hours_value"
+        ] = scheduled_work_hours_value
+    else:
+        st.session_state.pop(
+            "job_form_scheduled_work_hours_value",
+            None,
+        )
+
+    overtime_value = extracted_integer(
+        "overtime"
+    )
+
+    st.session_state[
+        "job_form_has_overtime"
+    ] = overtime_value is not None
+
+    if overtime_value is not None:
+        st.session_state[
+            "job_form_overtime_value"
+        ] = overtime_value
+    else:
+        st.session_state.pop(
+            "job_form_overtime_value",
+            None,
+        )
+
+    numeric_form_fields = {
+        "monthly_salary_min": (
+            "job_form_monthly_salary_min"
+        ),
+        "monthly_salary_max": (
+            "job_form_monthly_salary_max"
+        ),
+        "base_salary_min": (
+            "job_form_base_salary_min"
+        ),
+        "base_salary_max": (
+            "job_form_base_salary_max"
+        ),
+        "expected_salary_min": (
+            "job_form_expected_salary_min"
+        ),
+        "expected_salary_max": (
+            "job_form_expected_salary_max"
+        ),
+        "fixed_overtime_hours": (
+            "job_form_fixed_overtime_hours"
+        ),
+        "fixed_overtime_pay_min": (
+            "job_form_fixed_overtime_pay_min"
+        ),
+        "fixed_overtime_pay_max": (
+            "job_form_fixed_overtime_pay_max"
+        ),
+    }
+
+    for (
+        field_name,
+        form_key,
+    ) in numeric_form_fields.items():
+        st.session_state[form_key] = (
+            extracted_integer(field_name)
+        )
+
 # ========================================
 # 貼り付け入力
 # ========================================
@@ -504,9 +918,44 @@ def render_text_registration() -> None:
                     "貼り付けてください。"
                 )
             else:
+                try:
+                    with st.spinner(
+                        "AIが求人票の情報を整理しています..."
+                    ):
+                        extracted_data = (
+                            extract_job_data(
+                                job_text
+                            )
+                        )
+
+                except Exception as error:
+                    st.error(
+                        "求人票のAI抽出に失敗しました。"
+                        "入力内容とAPI設定を確認して、"
+                        "もう一度お試しください。"
+                    )
+
+                    st.caption(
+                        f"エラー内容：{error}"
+                    )
+
+                    return
+
+                apply_extracted_job_data(
+                    extracted_data
+                )
+
+                st.session_state[
+                    "job_extracted_data"
+                ] = extracted_data
+
                 st.session_state[
                     JOB_FORM_STEP_KEY
                 ] = "form"
+
+                st.session_state[
+                    "job_extraction_completed"
+                ] = True
 
                 st.rerun()
 
@@ -884,28 +1333,43 @@ def load_job_for_edit(
         "job_form_business_description"
     ] = job.business_description
 
-    employee_count_value = (
-        parse_integer_value(
-            job.employee_count,
-            "名",
-        )
+    employee_count_min = parse_integer_value(
+        job.employee_count_min,
+        "名",
     )
 
-    st.session_state[
-        "job_form_employee_count"
-    ] = employee_count_value
+    employee_count_max = parse_integer_value(
+        job.employee_count_max,
+        "名",
+    )
+
+    legacy_employee_count = parse_integer_value(
+        job.employee_count,
+        "名",
+    )
+
+    if (
+        employee_count_min is None
+        and employee_count_max is None
+        and legacy_employee_count is not None
+    ):
+        employee_count_min = legacy_employee_count
+        employee_count_max = legacy_employee_count
 
     st.session_state[
         "job_form_has_employee_count"
     ] = (
-        employee_count_value
-        is not None
+        employee_count_min is not None
+        or employee_count_max is not None
     )
 
-    if employee_count_value is not None:
-        st.session_state[
-            "job_form_employee_count_value"
-        ] = employee_count_value
+    st.session_state[
+        "job_form_employee_count_min"
+    ] = employee_count_min
+
+    st.session_state[
+        "job_form_employee_count_max"
+    ] = employee_count_max
 
     st.session_state[
         "job_form_established_date"
@@ -1374,28 +1838,44 @@ def load_job_for_edit(
         "job_form_aptitude_test"
     ] = job.aptitude_test
 
-    interview_count_value = (
-        parse_integer_value(
-            job.interview_count,
-            "回",
-        )
+    interview_count_min = parse_integer_value(
+        job.interview_count_min,
+        "回",
     )
 
-    st.session_state[
-        "job_form_interview_count"
-    ] = interview_count_value
+    interview_count_max = parse_integer_value(
+        job.interview_count_max,
+        "回",
+    )
+
+    legacy_interview_count = parse_integer_value(
+        job.interview_count,
+        "回",
+    )
+
+    if (
+        interview_count_min is None
+        and interview_count_max is None
+        and legacy_interview_count is not None
+    ):
+        interview_count_min = legacy_interview_count
+        interview_count_max = legacy_interview_count
 
     st.session_state[
         "job_form_has_interview_count"
     ] = (
-        interview_count_value
-        is not None
+        interview_count_min is not None
+        or interview_count_max is not None
     )
 
-    if interview_count_value is not None:
-        st.session_state[
-            "job_form_interview_count_value"
-        ] = interview_count_value
+    st.session_state[
+        "job_form_interview_count_min"
+    ] = interview_count_min
+
+    st.session_state[
+        "job_form_interview_count_max"
+    ] = interview_count_max
+
     st.session_state[
         "job_form_expected_join_date"
     ] = job.expected_join_date
@@ -1460,15 +1940,25 @@ def render_job_form() -> None:
     st.markdown(
         """
         <div class="job-section-title">
-            ② 求人情報の確認・入力
+            ② AI抽出内容を確認してください
         </div>
         <div class="job-section-description">
-            求人情報を確認し、
-            必要に応じて修正してください。
+            AIが整理した求人情報を確認し、
+            誤りや不足があれば修正してください。
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    if st.session_state.get(
+        "job_extraction_completed",
+        False,
+    ):
+        st.info(
+            "求人票から取得できた情報を"
+            "入力フォームへ反映しました。"
+            "内容を確認し、不足項目を入力してください。"
+        )
 
     with st.container(border=True):
 
@@ -1537,33 +2027,42 @@ def render_job_form() -> None:
         with col3:
             has_employee_count = st.checkbox(
                 "従業員数の記載あり",
-                value=(
-                    st.session_state.get(
-                        "job_form_employee_count"
-                    )
-                    is not None
-                ),
                 key="job_form_has_employee_count",
             )
 
             if has_employee_count:
-                employee_count = st.number_input(
-                    "従業員数",
-                    min_value=1,
-                    step=1,
-                    value=(
-                        st.session_state.get(
-                            "job_form_employee_count"
-                        )
-                        or 1
-                    ),
-                    key="job_form_employee_count_value",
+                employee_count_col1, employee_count_col2 = (
+                    st.columns(2)
                 )
 
-                st.caption("単位：名")
+                with employee_count_col1:
+                    employee_count_min = st.number_input(
+                        "従業員数（下限）",
+                        min_value=1,
+                        step=1,
+                        value=None,
+                        placeholder="例：51",
+                        key="job_form_employee_count_min",
+                    )
+
+                with employee_count_col2:
+                    employee_count_max = st.number_input(
+                        "従業員数（上限）",
+                        min_value=1,
+                        step=1,
+                        value=None,
+                        placeholder="例：100",
+                        key="job_form_employee_count_max",
+                    )
+
+                st.caption(
+                    "単位：名。単一の人数が記載されている場合は、"
+                    "下限と上限へ同じ人数を入力します。"
+                )
 
             else:
-                employee_count = None
+                employee_count_min = None
+                employee_count_max = None
 
             established_date = st.text_input(
                 "設立",
@@ -2294,45 +2793,76 @@ def render_job_form() -> None:
 
             has_interview_count = st.checkbox(
                 "面接回数の記載あり",
-                value=(
-                    st.session_state.get(
-                        "job_form_interview_count"
-                    )
-                    is not None
-                ),
                 key="job_form_has_interview_count",
             )
 
             if has_interview_count:
-                interview_count = st.number_input(
-                    "面接回数",
-                    min_value=1,
-                    step=1,
-                    value=(
-                        st.session_state.get(
-                            "job_form_interview_count"
-                        )
-                        or 1
-                    ),
-                    key="job_form_interview_count_value",
+                interview_count_col1, interview_count_col2 = (
+                    st.columns(2)
                 )
 
-                st.caption("単位：回")
+                with interview_count_col1:
+                    interview_count_min = st.number_input(
+                        "面接回数（下限）",
+                        min_value=1,
+                        step=1,
+                        value=None,
+                        placeholder="例：1",
+                        key="job_form_interview_count_min",
+                    )
+
+                with interview_count_col2:
+                    interview_count_max = st.number_input(
+                        "面接回数（上限）",
+                        min_value=1,
+                        step=1,
+                        value=None,
+                        placeholder="例：2",
+                        key="job_form_interview_count_max",
+                    )
+
+                st.caption(
+                    "単位：回。面接が2回と確定している場合は、"
+                    "下限と上限へ同じ回数を入力します。"
+                )
 
             else:
-                interview_count = None
+                interview_count_min = None
+                interview_count_max = None
 
-        st.divider()
+    st.divider()
 
     edit_job_id = st.session_state.get(
         JOB_EDIT_ID_KEY
     )
 
     save_button_label = (
-        "変更を保存する"
+        "変更内容を確認する"
         if edit_job_id is not None
-        else "求人情報を保存する"
+        else "登録内容を確認する"
     )
+
+    interview_count_error = ""
+
+    if (
+        interview_count_min is not None
+        and interview_count_max is not None
+        and interview_count_min > interview_count_max
+    ):
+        interview_count_error = (
+            "面接回数の下限が上限を超えています。"
+        )
+
+    employee_count_error = ""
+
+    if (
+        employee_count_min is not None
+        and employee_count_max is not None
+        and employee_count_min > employee_count_max
+    ):
+        employee_count_error = (
+            "従業員数の下限が上限を超えています。"
+        )
 
     salary_range_errors: list[str] = []
 
@@ -2380,6 +2910,14 @@ def render_job_form() -> None:
         type="primary",
         use_container_width=True,
     ):
+        if interview_count_error:
+            st.error(interview_count_error)
+            return
+
+        if employee_count_error:
+            st.error(employee_count_error)
+            return
+
         if salary_range_errors:
             for error in salary_range_errors:
                 st.error(error)
@@ -2412,8 +2950,20 @@ def render_job_form() -> None:
             ),
             industry=industry,
             business_description=business_description,
-            employee_count=integer_to_text(
-                employee_count
+            employee_count_min=integer_to_text(
+                employee_count_min
+            ),
+            employee_count_max=integer_to_text(
+                employee_count_max
+            ),
+            employee_count=(
+                integer_to_text(employee_count_min)
+                if (
+                    employee_count_min is not None
+                    and employee_count_min
+                    == employee_count_max
+                )
+                else ""
             ),
             established_date=established_date,
             capital=capital,
@@ -2546,8 +3096,20 @@ def render_job_form() -> None:
                 aptitude_test_status
             ),
             aptitude_test=aptitude_test,
-            interview_count=integer_to_text(
-                interview_count
+            interview_count_min=integer_to_text(
+                interview_count_min
+            ),
+            interview_count_max=integer_to_text(
+                interview_count_max
+            ),
+            interview_count=(
+                integer_to_text(interview_count_min)
+                if (
+                    interview_count_min is not None
+                    and interview_count_min
+                    == interview_count_max
+                )
+                else ""
             ),
             expected_join_date=expected_join_date,
 
@@ -2577,26 +3139,316 @@ def render_job_form() -> None:
             ),
         )
 
-        if edit_job_id is not None:
-            errors = update_job_data(
-                edit_job_id,
-                job,
+        st.session_state[
+            JOB_CONFIRM_DATA_KEY
+        ] = job
+
+        st.session_state[
+            JOB_FORM_STEP_KEY
+        ] = "confirm"
+
+        st.rerun()
+
+
+# ========================================
+# 登録内容の最終確認
+# ========================================
+
+def render_job_confirmation() -> None:
+    """保存前の求人情報を確認する画面。"""
+
+    job = st.session_state.get(
+        JOB_CONFIRM_DATA_KEY
+    )
+
+    if job is None:
+        st.error(
+            "確認する求人情報を取得できませんでした。"
+        )
+
+        if st.button(
+            "入力画面へ戻る",
+            key="job_confirm_missing_back",
+        ):
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "form"
+
+            st.session_state[
+                "job_extraction_completed"
+            ] = False
+
+            st.rerun()
+
+        return
+
+    st.markdown(
+        """
+        <div class="job-section-title">
+            ③ 登録内容を確認してください
+        </div>
+        <div class="job-section-description">
+            以下の内容で求人情報を登録します。
+            誤りがある場合は入力画面へ戻って修正してください。
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    def show_value(
+        label: str,
+        value,
+    ) -> None:
+        """確認用にラベルと値を表示する。"""
+
+        if isinstance(value, list):
+            display_value = "\n".join(
+                f"・{item}"
+                for item in value
+                if str(item).strip()
+            )
+        else:
+            display_value = str(
+                value or ""
+            ).strip()
+
+        if not display_value:
+            display_value = "未入力"
+
+        st.markdown(f"**{label}**")
+        st.text(display_value)
+
+    with st.container(border=True):
+        st.markdown("### 求人基本情報")
+
+        confirm_col1, confirm_col2 = st.columns(2)
+
+        with confirm_col1:
+            show_value(
+                "会社名",
+                job.company_name,
+            )
+            show_value(
+                "求人名",
+                job.job_title,
+            )
+            show_value(
+                "募集ポジション（職種）",
+                job.occupation,
+            )
+            show_value(
+                "業種",
+                job.industry,
             )
 
-            if errors:
-                for error in errors:
-                    st.error(error)
+        with confirm_col2:
+            show_value(
+                "紹介経路の種別",
+                job.source_type,
+            )
+            show_value(
+                "紹介経路の具体名",
+                job.source_name,
+            )
+            show_value(
+                "求人番号",
+                job.job_number,
+            )
+            show_value(
+                "配属部署",
+                job.department,
+            )
 
-            else:
-                st.success(
-                    "求人情報を更新しました。"
+    with st.container(border=True):
+        st.markdown("### 仕事内容・応募条件")
+
+        show_value(
+            "仕事内容・業務概要",
+            job.job_summary,
+        )
+        show_value(
+            "具体的な業務内容",
+            job.job_details,
+        )
+        show_value(
+            "必須経験",
+            job.required_experience,
+        )
+        show_value(
+            "必須スキル",
+            job.required_skills,
+        )
+        show_value(
+            "必須資格",
+            job.required_qualifications,
+        )
+
+    with st.container(border=True):
+        st.markdown("### 勤務条件")
+
+        condition_col1, condition_col2 = (
+            st.columns(2)
+        )
+
+        with condition_col1:
+            show_value(
+                "雇用形態",
+                job.employment_type,
+            )
+            show_value(
+                "勤務地",
+                (
+                    f"{job.prefecture}"
+                    f"{job.municipality}"
+                ),
+            )
+            show_value(
+                "勤務形態・働き方",
+                job.work_style,
+            )
+            show_value(
+                "転勤",
+                job.transfer_required,
+            )
+
+        with condition_col2:
+            show_value(
+                "始業時間",
+                job.start_time,
+            )
+            show_value(
+                "終業時間",
+                job.end_time,
+            )
+            show_value(
+                "月平均残業時間",
+                job.overtime,
+            )
+            show_value(
+                "年間休日数",
+                job.annual_holidays,
+            )
+
+    with st.container(border=True):
+        st.markdown("### 給与・選考")
+
+        salary_col, selection_col = st.columns(2)
+
+        with salary_col:
+            show_value(
+                "賃金形態",
+                job.wage_type,
+            )
+            show_value(
+                "想定年収最低額（万円）",
+                job.expected_salary_min,
+            )
+            show_value(
+                "想定年収最高額（万円）",
+                job.expected_salary_max,
+            )
+            show_value(
+                "固定残業制",
+                job.fixed_overtime_system,
+            )
+
+        with selection_col:
+            show_value(
+                "書類選考",
+                job.document_screening_status,
+            )
+            show_value(
+                "適性検査",
+                job.aptitude_test_status,
+            )
+            show_value(
+                "面接回数（下限）",
+                job.interview_count_min,
+            )
+            show_value(
+                "面接回数（上限）",
+                job.interview_count_max,
+            )
+
+    if job.not_listed_fields:
+        with st.container(border=True):
+            st.markdown(
+                "### 未入力・確認が必要な項目"
+            )
+
+            show_value(
+                "求人票から確認できなかった内容",
+                job.not_listed_fields,
+            )
+
+    confirm_back_col, confirm_save_col = (
+        st.columns(2)
+    )
+
+    with confirm_back_col:
+        if st.button(
+            "入力画面へ戻って修正する",
+            key="job_confirm_back",
+            use_container_width=True,
+        ):
+            apply_extracted_job_data(
+                asdict(job)
+            )
+
+            st.session_state[
+                "job_form_source_type"
+            ] = job.source_type
+
+            st.session_state[
+                "job_form_source_name"
+            ] = job.source_name
+
+            st.session_state[
+                "job_form_publication_start"
+            ] = parse_date_value(
+                job.publication_start_date
+            )
+
+            st.session_state[
+                "job_form_publication_end"
+            ] = parse_date_value(
+                job.publication_end_date
+            )
+
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "form"
+
+            st.rerun()
+
+    with confirm_save_col:
+        if st.button(
+            "この内容で登録する",
+            key="job_confirm_save",
+            type="primary",
+            use_container_width=True,
+        ):
+            edit_job_id = st.session_state.get(
+                JOB_EDIT_ID_KEY
+            )
+
+            if edit_job_id is not None:
+                errors = update_job_data(
+                    edit_job_id,
+                    job,
                 )
 
-                st.caption(
-                    f"求人ID：{edit_job_id}"
+                if errors:
+                    for error in errors:
+                        st.error(error)
+
+                    return
+
+                move_to_job_completion(
+                    message="求人情報を更新しました。",
+                    job_id=edit_job_id,
                 )
 
-        else:
             duplicate_type, existing_job_id, errors = (
                 save_job_data(job)
             )
@@ -2605,7 +3457,9 @@ def render_job_form() -> None:
                 for error in errors:
                     st.error(error)
 
-            elif duplicate_type == DUPLICATE_NONE:
+                return
+
+            if duplicate_type == DUPLICATE_NONE:
                 job_id, create_errors = (
                     create_job_data(job)
                 )
@@ -2614,16 +3468,14 @@ def render_job_form() -> None:
                     for error in create_errors:
                         st.error(error)
 
-                else:
-                    st.success(
-                        "求人情報を保存しました。"
-                    )
+                    return
 
-                    st.caption(
-                        f"求人ID：{job_id}"
-                    )
+                move_to_job_completion(
+                    message="求人情報を保存しました。",
+                    job_id=job_id,
+                )
 
-            elif duplicate_type == DUPLICATE_EXACT:
+            if duplicate_type == DUPLICATE_EXACT:
                 st.session_state[
                     JOB_PENDING_DATA_KEY
                 ] = job
@@ -2636,41 +3488,150 @@ def render_job_form() -> None:
                     JOB_DUPLICATE_TYPE_KEY
                 ] = DUPLICATE_EXACT
 
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "duplicate"
+
                 st.rerun()
 
-            elif (
+            if (
                 duplicate_type
                 == DUPLICATE_DIFFERENT_SOURCE
             ):
-                job_id, create_errors = (
-                    create_job_data(job)
+                if existing_job_id is None:
+                    st.error(
+                        "登録済み求人を取得できませんでした。"
+                    )
+                    return
+
+                source_errors = add_job_source_data(
+                    existing_job_id,
+                    job,
                 )
 
-                if create_errors:
-                    for error in create_errors:
+                if source_errors:
+                    for error in source_errors:
                         st.error(error)
 
-                else:
-                    st.success(
-                        "同じ会社・職種の求人が"
-                        "別の紹介経路ですでに登録されています。"
-                        "別求人として新規登録しました。"
-                    )
+                    return
 
-                    st.caption(
-                        f"求人ID：{job_id}"
-                    )
+                move_to_job_completion(
+                    message=(
+                        "登録済みの求人へ、"
+                        "新しい紹介経路を追加しました。"
+                    ),
+                    job_id=existing_job_id,
+                    note=(
+                        "二重応募を避けるため、"
+                        "応募前に紹介元のエージェント等へ"
+                        "応募経路を確認してください。"
+                    ),
+                )
+
+
+def move_to_job_completion(
+    message: str,
+    job_id: int,
+    note: str = "",
+) -> None:
+    """保存完了画面へ移動する。"""
+
+    st.session_state[
+        JOB_CONFIRM_DATA_KEY
+    ] = None
+
+    st.session_state[
+        JOB_COMPLETE_MESSAGE_KEY
+    ] = message
+
+    st.session_state[
+        JOB_COMPLETE_NOTE_KEY
+    ] = note
+
+    st.session_state[
+        JOB_COMPLETE_JOB_ID_KEY
+    ] = job_id
+
+    st.session_state[
+        JOB_FORM_STEP_KEY
+    ] = "complete"
+
+    st.rerun()
+
+
+def render_job_completion() -> None:
+    """求人情報の保存完了画面を表示する。"""
+
+    message = st.session_state.get(
+        JOB_COMPLETE_MESSAGE_KEY
+    )
+
+    note = st.session_state.get(
+        JOB_COMPLETE_NOTE_KEY,
+        "",
+    )
+
+    job_id = st.session_state.get(
+        JOB_COMPLETE_JOB_ID_KEY
+    )
+
+    if not message or job_id is None:
+        st.error(
+            "保存した求人情報を取得できませんでした。"
+        )
+
+        if st.button(
+            "求人一覧へ戻る",
+            key="job_complete_error_back",
+        ):
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "select"
+
+            st.query_params["page"] = "job_list"
+            st.rerun()
+
+        return
+
+    st.success(message)
+
+    if note:
+        st.warning(note)
+
+    st.caption(
+        f"求人ID：{job_id}"
+    )
+
+    detail_col, list_col = st.columns(2)
+
+    with detail_col:
+        if st.button(
+            "登録した求人を確認する",
+            key="job_complete_to_detail",
+            type="primary",
+            use_container_width=True,
+        ):
+            st.query_params["page"] = "job_detail"
+            st.query_params["job_id"] = str(job_id)
+            st.rerun()
+
+    with list_col:
+        if st.button(
+            "求人一覧へ戻る",
+            key="job_complete_to_list",
+            use_container_width=True,
+        ):
+            st.query_params["page"] = "job_list"
+            st.query_params.pop("job_id", None)
+            st.rerun()
 
 
 def render_duplicate_confirmation() -> None:
-    """同一求人が見つかった場合に差分と更新確認を表示する。"""
+    """登録済みの同一求人を案内する画面。"""
 
     duplicate_type = st.session_state.get(
         JOB_DUPLICATE_TYPE_KEY
     )
-
-    if duplicate_type != DUPLICATE_EXACT:
-        return
 
     pending_job = st.session_state.get(
         JOB_PENDING_DATA_KEY
@@ -2681,9 +3642,36 @@ def render_duplicate_confirmation() -> None:
     )
 
     if (
-        pending_job is None
+        duplicate_type != DUPLICATE_EXACT
+        or pending_job is None
         or existing_job_id is None
     ):
+        st.error(
+            "重複確認に必要な情報を取得できませんでした。"
+        )
+
+        if st.button(
+            "求人登録へ戻る",
+            key="duplicate_missing_back",
+        ):
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "select"
+
+            st.session_state[
+                JOB_PENDING_DATA_KEY
+            ] = None
+
+            st.session_state[
+                JOB_DUPLICATE_ID_KEY
+            ] = None
+
+            st.session_state[
+                JOB_DUPLICATE_TYPE_KEY
+            ] = None
+
+            st.rerun()
+
         return
 
     existing_job = load_job(
@@ -2692,14 +3680,37 @@ def render_duplicate_confirmation() -> None:
 
     if existing_job is None:
         st.error(
-            "既存の求人情報を取得できませんでした。"
+            "登録済みの求人情報を取得できませんでした。"
         )
         return
 
     st.warning(
-        "同一求人がすでに登録されています。"
-        "既存情報を更新しますか？"
+        "この求人はすでに登録されています。"
+        "同じ求人を重複して登録することはできません。"
     )
+
+    st.markdown("### 登録済みの求人")
+
+    with st.container(border=True):
+        st.markdown(
+            f"**{existing_job.company_name}**"
+        )
+
+        st.write(
+            existing_job.job_title
+            or existing_job.occupation
+            or "求人名未入力"
+        )
+
+        st.caption(
+            f"紹介経路："
+            f"{existing_job.source_type}／"
+            f"{existing_job.source_name}"
+        )
+
+        st.caption(
+            f"求人ID：{existing_job_id}"
+        )
 
     differences = compare_jobs(
         existing_job,
@@ -2708,14 +3719,19 @@ def render_duplicate_confirmation() -> None:
 
     if differences:
         st.markdown(
-            "### 既存情報との比較"
+            "### 登録済み情報との違い"
+        )
+
+        st.caption(
+            "今回入力した内容には以下の違いがあります。"
+            "この画面から既存求人を上書きすることはありません。"
         )
 
         comparison_data = [
             {
                 "項目": label,
-                "既存情報": old_value,
-                "今回の情報": new_value,
+                "登録済み情報": old_value,
+                "今回の入力": new_value,
             }
             for (
                 label,
@@ -2732,51 +3748,74 @@ def render_duplicate_confirmation() -> None:
 
     else:
         st.info(
-            "既存情報と今回の入力内容に"
-            "変更はありません。"
+            "登録済み情報と今回の入力内容は同じです。"
         )
 
-    yes_col, no_col = st.columns(2)
+    detail_col, back_col = st.columns(2)
 
-    with yes_col:
+    with detail_col:
         if st.button(
-            "既存情報を更新する",
-            key="duplicate_job_update",
+            "登録済みの求人を確認する",
+            key="duplicate_open_existing",
             type="primary",
             use_container_width=True,
         ):
-            errors = update_job_data(
-                existing_job_id,
-                pending_job,
+            st.session_state[
+                JOB_PENDING_DATA_KEY
+            ] = None
+
+            st.session_state[
+                JOB_CONFIRM_DATA_KEY
+            ] = None
+
+            st.session_state[
+                JOB_DUPLICATE_ID_KEY
+            ] = None
+
+            st.session_state[
+                JOB_DUPLICATE_TYPE_KEY
+            ] = None
+
+            st.query_params["page"] = (
+                "job_detail"
             )
 
-            if errors:
-                for error in errors:
-                    st.error(error)
+            st.query_params["job_id"] = str(
+                existing_job_id
+            )
 
-            else:
-                st.session_state[
-                    JOB_PENDING_DATA_KEY
-                ] = None
+            st.rerun()
 
-                st.session_state[
-                    JOB_DUPLICATE_ID_KEY
-                ] = None
-
-                st.session_state[
-                    JOB_DUPLICATE_TYPE_KEY
-                ] = None
-
-                st.success(
-                    "既存の求人情報を更新しました。"
-                )
-
-    with no_col:
+    with back_col:
         if st.button(
-            "更新しない",
-            key="duplicate_job_cancel",
+            "入力画面へ戻る",
+            key="duplicate_back_to_form",
             use_container_width=True,
         ):
+            apply_extracted_job_data(
+                asdict(pending_job)
+            )
+
+            st.session_state[
+                "job_form_source_type"
+            ] = pending_job.source_type
+
+            st.session_state[
+                "job_form_source_name"
+            ] = pending_job.source_name
+
+            st.session_state[
+                "job_form_publication_start"
+            ] = parse_date_value(
+                pending_job.publication_start_date
+            )
+
+            st.session_state[
+                "job_form_publication_end"
+            ] = parse_date_value(
+                pending_job.publication_end_date
+            )
+
             st.session_state[
                 JOB_PENDING_DATA_KEY
             ] = None
@@ -2789,13 +3828,15 @@ def render_duplicate_confirmation() -> None:
                 JOB_DUPLICATE_TYPE_KEY
             ] = None
 
-            st.info(
-                "更新をキャンセルしました。"
-            )
+            st.session_state[
+                JOB_CONFIRM_DATA_KEY
+            ] = pending_job
+
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "form"
 
             st.rerun()
-
-
 # ========================================
 # 画面本体
 # ========================================
@@ -2826,9 +3867,18 @@ def show_page() -> None:
 
     if current_step == "form":
         render_job_form()
+        return
 
+    if current_step == "confirm":
+        render_job_confirmation()
+        return
+
+    if current_step == "complete":
+        render_job_completion()
+        return
+
+    if current_step == "duplicate":
         render_duplicate_confirmation()
-
         return
 
     if current_step == "source":
