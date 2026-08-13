@@ -14,7 +14,25 @@ def initialize_database() -> None:
 
     try:
         connection.executescript(schema)
+
+        job_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(user_jobs)"
+            ).fetchall()
+        }
+
+        if "source_type" not in job_columns:
+            connection.execute(
+                """
+                ALTER TABLE user_jobs
+                ADD COLUMN source_type TEXT
+                NOT NULL DEFAULT ''
+                """
+            )
+
         connection.commit()
+
     except Exception:
         connection.rollback()
         raise

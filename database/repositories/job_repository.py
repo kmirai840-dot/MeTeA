@@ -31,6 +31,7 @@ JOB_FIELDS = (
     "source_url",
     "source_text",
     "acquired_at",
+    "source_type",
     "source_name",
     "company_name",
     "job_title",

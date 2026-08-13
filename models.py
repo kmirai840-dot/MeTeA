@@ -145,6 +145,7 @@ class Job:
     source_url: str = ""
     source_text: str = ""
     acquired_at: str = ""
+    source_type: str = ""
     source_name: str = ""
 
     # ------------------------------------

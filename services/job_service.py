@@ -36,7 +36,8 @@ JOB_FIELD_LABELS = {
     "source_url": "求人URL",
     "source_text": "求人票本文",
     "acquired_at": "取得日時",
-    "source_name": "紹介経路・求人媒体",
+    "source_type": "紹介経路の種別",
+    "source_name": "紹介経路の具体名",
     "company_name": "会社名",
     "job_title": "求人名",
     "job_number": "求人番号",
@@ -112,16 +113,42 @@ JOB_FIELD_LABELS = {
 def validate_job(
     job: Job,
 ) -> list[str]:
-    """求人情報の入力内容をチェックする。"""
+    """求人情報の必須項目をチェックする。"""
 
     errors: list[str] = []
 
+    required_fields = (
+        (
+            job.company_name,
+            "会社名",
+        ),
+        (
+            job.occupation,
+            "募集ポジション（職種）",
+        ),
+        (
+            job.source_name,
+            "紹介経路の具体名",
+        ),
+        (
+            job.job_summary,
+            "仕事内容",
+        ),
+    )
+
+    for value, label in required_fields:
+        if not value.strip():
+            errors.append(
+                f"{label}を入力してください。"
+            )
+
     if (
-        not job.company_name.strip()
-        and not job.job_title.strip()
+        not job.source_type.strip()
+        or job.source_type
+        == "選択してください"
     ):
         errors.append(
-            "会社名または求人名を入力してください。"
+            "紹介経路の種別を選択してください。"
         )
 
     return errors

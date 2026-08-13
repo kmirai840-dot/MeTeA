@@ -29,6 +29,103 @@ JOB_PENDING_DATA_KEY = "job_pending_data"
 JOB_DUPLICATE_ID_KEY = "job_duplicate_id"
 JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
 
+SOURCE_TYPES = (
+    "選択してください",
+    "転職エージェント",
+    "求人サイト",
+    "企業採用ページ",
+    "ハローワーク",
+    "スカウト",
+    "知人・社員紹介",
+    "その他",
+)
+
+LISTING_STATUSES = (
+    "",
+    "上場",
+    "非上場",
+    "不明",
+)
+
+EMPLOYMENT_TYPES = (
+    "",
+    "正社員",
+    "契約社員",
+    "派遣社員",
+    "パート・アルバイト",
+    "業務委託",
+    "その他",
+)
+
+TRANSFER_OPTIONS = (
+    "",
+    "あり",
+    "なし",
+    "条件付き",
+    "不明",
+)
+
+WORK_STYLE_OPTIONS = (
+    "",
+    "出社のみ",
+    "一部在宅",
+    "完全在宅",
+    "相談可",
+    "不明",
+)
+
+
+def options_with_current(
+    options: tuple[str, ...],
+    current_value: str,
+) -> tuple[str, ...]:
+    """既存の自由記述値を失わず選択肢へ含める。"""
+
+    if (
+        current_value
+        and current_value not in options
+    ):
+        return (
+            *options,
+            current_value,
+        )
+
+    return options
+
+
+def infer_source_type(
+    source_name: str,
+) -> str:
+    """既存の紹介経路名から種別を推定する。"""
+
+    normalized = source_name.strip().casefold()
+
+    if not normalized:
+        return "選択してください"
+
+    if "エージェント" in source_name:
+        return "転職エージェント"
+
+    if normalized in {
+        "indeed",
+        "求人ボックス",
+        "スタンバイ",
+    }:
+        return "求人サイト"
+
+    if (
+        "採用" in source_name
+        or "企業" in source_name
+    ):
+        return "企業採用ページ"
+
+    if "ハローワーク" in source_name:
+        return "ハローワーク"
+
+    if "スカウト" in source_name:
+        return "スカウト"
+
+    return "その他"
 
 # ========================================
 # CSS
@@ -138,6 +235,10 @@ def render_method_selection() -> None:
                     JOB_REGISTRATION_MODE_KEY
                 ] = "url"
 
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "source"
+
                 st.rerun()
 
     # ------------------------
@@ -171,6 +272,11 @@ def render_method_selection() -> None:
                 st.session_state[
                     JOB_REGISTRATION_MODE_KEY
                 ] = "text"
+
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "source"
+
                 st.rerun()
 
     # ------------------------
@@ -248,10 +354,11 @@ def render_url_registration() -> None:
                     "求人URLを入力してください。"
                 )
             else:
-                st.info(
-                    "求人URLからの取得処理は"
-                    "次の工程で接続します。"
-                )
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "form"
+
+                st.rerun()
 
 
 # ========================================
@@ -297,37 +404,18 @@ def render_text_registration() -> None:
                     "貼り付けてください。"
                 )
             else:
-                st.info(
-                    "求人票のAI解析は"
-                    "次の工程で接続します。"
-                )
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "form"
+
+                st.rerun()
 
 
 # ========================================
 # 手動入力
 # ========================================
 
-def render_manual_registration() -> None:
-    """手動入力画面の仮表示。"""
 
-    with st.container(border=True):
-
-        st.markdown(
-            """
-            <div class="job-input-title">
-                手動入力
-            </div>
-            <div class="job-input-description">
-                求人情報を項目ごとに入力します。
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.info(
-            "ここに求人情報入力フォームを"
-            "次の工程で実装します。"
-        )
 
 
 def text_to_list(
@@ -530,6 +618,15 @@ def load_job_for_edit(
     st.session_state[
         "job_form_source_name"
     ] = job.source_name
+
+    st.session_state[
+        "job_form_source_type"
+    ] = (
+        job.source_type
+        or infer_source_type(
+            job.source_name
+        )
+    )
 
     st.session_state[
         "job_form_employment_type"
@@ -753,7 +850,7 @@ def render_job_form() -> None:
         st.markdown("### 求人基本情報")
 
         company_name = st.text_input(
-            "会社名",
+            "会社名 *",
             key="job_form_company_name",
         )
 
@@ -762,9 +859,18 @@ def render_job_form() -> None:
             key="job_form_job_title",
         )
 
+        source_type = st.selectbox(
+            "紹介経路の種別 *",
+            SOURCE_TYPES,
+            key="job_form_source_type",
+        )
+
         source_name = st.text_input(
-            "紹介経路・求人媒体",
-            placeholder="例：Indeed、企業採用ページ、リクルートエージェント",
+            "紹介経路の具体名 *",
+            placeholder=(
+                "例：リクルートエージェント、"
+                "Indeed、企業採用ページ"
+            ),
             key="job_form_source_name",
         )
 
@@ -818,8 +924,15 @@ def render_job_form() -> None:
                 key="job_form_capital",
             )
 
-            listing_status = st.text_input(
+            listing_status = st.selectbox(
                 "上場区分",
+                options_with_current(
+                    LISTING_STATUSES,
+                    st.session_state.get(
+                        "job_form_listing_status",
+                        "",
+                    ),
+                ),
                 key="job_form_listing_status",
             )
 
@@ -831,7 +944,7 @@ def render_job_form() -> None:
 
         with col5:
             occupation = st.text_input(
-                "職種",
+                "募集ポジション（職種） *",
                 key="job_form_occupation",
             )
 
@@ -856,7 +969,7 @@ def render_job_form() -> None:
         st.markdown("### 仕事内容")
 
         job_summary = st.text_area(
-            "仕事内容・業務概要",
+            "仕事内容・業務概要 *",
             height=140,
             key="job_form_job_summary",
         )
@@ -903,8 +1016,15 @@ def render_job_form() -> None:
         col9, col10 = st.columns(2)
 
         with col9:
-            employment_type = st.text_input(
+            employment_type = st.selectbox(
                 "雇用形態",
+                options_with_current(
+                    EMPLOYMENT_TYPES,
+                    st.session_state.get(
+                        "job_form_employment_type",
+                        "",
+                    ),
+                ),
                 key="job_form_employment_type",
             )
 
@@ -929,14 +1049,27 @@ def render_job_form() -> None:
             )
 
         with col10:
-            transfer_required = st.text_input(
+            transfer_required = st.selectbox(
                 "転勤",
+                options_with_current(
+                    TRANSFER_OPTIONS,
+                    st.session_state.get(
+                        "job_form_transfer_required",
+                        "",
+                    ),
+                ),
                 key="job_form_transfer_required",
             )
 
-            work_style = st.text_input(
+            work_style = st.selectbox(
                 "勤務形態・働き方",
-                placeholder="例：出社、在宅、ハイブリッド",
+                options_with_current(
+                    WORK_STYLE_OPTIONS,
+                    st.session_state.get(
+                        "job_form_work_style",
+                        "",
+                    ),
+                ),
                 key="job_form_work_style",
             )
 
@@ -1213,6 +1346,7 @@ def render_job_form() -> None:
                 "",
             ),
             acquired_at="",
+            source_type=source_type,
             source_name=source_name,
 
             company_name=company_name,
@@ -1548,12 +1682,49 @@ def show_page() -> None:
             JOB_EDIT_ID_KEY
         ] = None
 
-    if st.session_state[
+    current_step = st.session_state[
         JOB_FORM_STEP_KEY
-    ] == "form":
+    ]
+
+    if current_step == "form":
         render_job_form()
 
         render_duplicate_confirmation()
+
+        return
+
+    if current_step == "source":
+        if st.button(
+            "← 登録方法の選択に戻る",
+            key="job_source_back",
+        ):
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "select"
+
+            st.rerun()
+
+        st.markdown(
+            """
+            <div class="job-page-title">
+                求人を登録する
+            </div>
+            <div class="job-page-description">
+                登録元の情報を入力してください。
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        mode = st.session_state[
+            JOB_REGISTRATION_MODE_KEY
+        ]
+
+        if mode == "url":
+            render_url_registration()
+
+        elif mode == "text":
+            render_text_registration()
 
         return
 
@@ -1570,23 +1741,4 @@ def show_page() -> None:
         unsafe_allow_html=True,
     )
 
-    # 3枚を常に横並び表示
     render_method_selection()
-
-    render_registered_jobs()
-
-    st.write("")
-
-    # 選択された方法だけ下に表示
-    mode = st.session_state[
-        JOB_REGISTRATION_MODE_KEY
-    ]
-
-    if mode == "url":
-        render_url_registration()
-
-    elif mode == "text":
-        render_text_registration()
-
-    elif mode == "manual":
-        render_manual_registration()

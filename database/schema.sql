@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     source_url TEXT NOT NULL DEFAULT '',
     source_text TEXT NOT NULL DEFAULT '',
     acquired_at TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT '',
     source_name TEXT NOT NULL DEFAULT '',
 
     -- 求人基本情報
