@@ -66,6 +66,22 @@ EMPLOYMENT_TYPES = (
     "その他",
 )
 
+WAGE_TYPES = (
+    "",
+    "月給制",
+    "年俸制",
+    "時給制",
+    "日給制",
+    "その他",
+)
+
+FIXED_OVERTIME_OPTIONS = (
+    "",
+    "あり",
+    "なし",
+    "不明",
+)
+
 TRANSFER_OPTIONS = (
     "",
     "あり",
@@ -543,6 +559,42 @@ def integer_to_text(
     return str(value)
 
 
+def parse_yen_value(
+    value: str,
+) -> int | None:
+    """保存済みの金額を円単位へ変換する。"""
+
+    cleaned_value = (
+        value.strip()
+        .replace(",", "")
+        .replace(" ", "")
+    )
+
+    if not cleaned_value:
+        return None
+
+    if cleaned_value.endswith("万円"):
+        number_text = cleaned_value[:-2]
+
+        try:
+            return int(
+                float(number_text)
+                * 10000
+            )
+
+        except ValueError:
+            return None
+
+    if cleaned_value.endswith("円"):
+        cleaned_value = cleaned_value[:-1]
+
+    try:
+        return int(cleaned_value)
+
+    except ValueError:
+        return None
+
+
 def text_to_list(
     value: str,
 ) -> list[str]:
@@ -879,6 +931,45 @@ def load_job_for_edit(
         ] = annual_holidays_value
 
     st.session_state[
+        "job_form_wage_type"
+    ] = job.wage_type
+
+    monthly_salary_min_value = (
+        parse_yen_value(
+            job.monthly_salary_min
+        )
+    )
+
+    if monthly_salary_min_value is None:
+        monthly_salary_min_value = (
+            parse_yen_value(
+                job.monthly_salary
+            )
+        )
+
+    st.session_state[
+        "job_form_monthly_salary_min"
+    ] = monthly_salary_min_value
+
+    st.session_state[
+        "job_form_monthly_salary_max"
+    ] = parse_yen_value(
+        job.monthly_salary_max
+    )
+
+    st.session_state[
+        "job_form_base_salary_min"
+    ] = parse_yen_value(
+        job.base_salary_min
+    )
+
+    st.session_state[
+        "job_form_base_salary_max"
+    ] = parse_yen_value(
+        job.base_salary_max
+    )
+
+    st.session_state[
         "job_form_monthly_salary"
     ] = job.monthly_salary
 
@@ -888,15 +979,64 @@ def load_job_for_edit(
 
     st.session_state[
         "job_form_expected_salary_min"
-    ] = job.expected_salary_min
+    ] = parse_integer_value(
+        job.expected_salary_min,
+        "万円",
+    )
 
     st.session_state[
         "job_form_expected_salary_max"
-    ] = job.expected_salary_max
+    ] = parse_integer_value(
+        job.expected_salary_max,
+        "万円",
+    )
+
+    fixed_overtime_system = (
+        job.fixed_overtime_system
+    )
+
+    if (
+        not fixed_overtime_system
+        and (
+            job.fixed_overtime_hours
+            or job.fixed_overtime_pay
+            or job.fixed_overtime_pay_min
+            or job.fixed_overtime_pay_max
+        )
+    ):
+        fixed_overtime_system = "あり"
+
+    st.session_state[
+        "job_form_fixed_overtime_system"
+    ] = fixed_overtime_system
 
     st.session_state[
         "job_form_fixed_overtime_hours"
-    ] = job.fixed_overtime_hours
+    ] = parse_integer_value(
+        job.fixed_overtime_hours,
+        "時間",
+    )
+
+    fixed_overtime_pay_min = (
+        job.fixed_overtime_pay_min
+        or job.fixed_overtime_pay
+    )
+
+    st.session_state[
+        "job_form_fixed_overtime_pay_min"
+    ] = parse_yen_value(
+        fixed_overtime_pay_min
+    )
+
+    st.session_state[
+        "job_form_fixed_overtime_pay_max"
+    ] = parse_yen_value(
+        job.fixed_overtime_pay_max
+    )
+
+    st.session_state[
+        "job_form_overtime_extra_pay"
+    ] = job.overtime_extra_pay
 
     st.session_state[
         "job_form_fixed_overtime_pay"
@@ -1449,22 +1589,51 @@ def render_job_form() -> None:
 
         st.markdown("### 給与・待遇")
 
+        wage_type = st.selectbox(
+            "賃金形態",
+            options_with_current(
+                WAGE_TYPES,
+                st.session_state.get(
+                    "job_form_wage_type",
+                    "",
+                ),
+            ),
+            key="job_form_wage_type",
+        )
+
+        st.caption(
+            "月給・基本給は円単位、"
+            "想定年収は万円単位で入力します。"
+        )
+
         col13, col14 = st.columns(2)
 
         with col13:
-            monthly_salary = st.text_input(
-                "月給",
-                key="job_form_monthly_salary",
+            monthly_salary_min = st.number_input(
+                "月給最低額（円）",
+                min_value=0,
+                step=1000,
+                value=None,
+                placeholder="例：280000",
+                key="job_form_monthly_salary_min",
             )
 
-            expected_salary_min = st.text_input(
-                "想定年収（下限）",
+            base_salary_min = st.number_input(
+                "基本給最低額（円）",
+                min_value=0,
+                step=1000,
+                value=None,
+                placeholder="例：240000",
+                key="job_form_base_salary_min",
+            )
+
+            expected_salary_min = st.number_input(
+                "想定年収最低額（万円）",
+                min_value=0,
+                step=10,
+                value=None,
+                placeholder="例：400",
                 key="job_form_expected_salary_min",
-            )
-
-            fixed_overtime_hours = st.text_input(
-                "固定残業時間",
-                key="job_form_fixed_overtime_hours",
             )
 
             bonus = st.text_input(
@@ -1473,25 +1642,111 @@ def render_job_form() -> None:
             )
 
         with col14:
-            annual_salary = st.text_input(
-                "年収",
-                key="job_form_annual_salary",
+            monthly_salary_max = st.number_input(
+                "月給最高額（円）",
+                min_value=0,
+                step=1000,
+                value=None,
+                placeholder="例：350000",
+                key="job_form_monthly_salary_max",
             )
 
-            expected_salary_max = st.text_input(
-                "想定年収（上限）",
+            base_salary_max = st.number_input(
+                "基本給最高額（円）",
+                min_value=0,
+                step=1000,
+                value=None,
+                placeholder="例：300000",
+                key="job_form_base_salary_max",
+            )
+
+            expected_salary_max = st.number_input(
+                "想定年収最高額（万円）",
+                min_value=0,
+                step=10,
+                value=None,
+                placeholder="例：550",
                 key="job_form_expected_salary_max",
-            )
-
-            fixed_overtime_pay = st.text_input(
-                "固定残業代",
-                key="job_form_fixed_overtime_pay",
             )
 
             salary_increase = st.text_input(
                 "昇給",
                 key="job_form_salary_increase",
             )
+
+        st.divider()
+
+        fixed_overtime_system = st.selectbox(
+            "固定残業制",
+            options_with_current(
+                FIXED_OVERTIME_OPTIONS,
+                st.session_state.get(
+                    "job_form_fixed_overtime_system",
+                    "",
+                ),
+            ),
+            key="job_form_fixed_overtime_system",
+        )
+
+        if fixed_overtime_system == "あり":
+            st.caption(
+                "求人票に記載された固定残業時間と"
+                "固定残業代を入力してください。"
+            )
+
+            fixed_col1, fixed_col2 = st.columns(2)
+
+            with fixed_col1:
+                fixed_overtime_hours = st.number_input(
+                    "固定残業時間（時間／月）",
+                    min_value=0,
+                    step=1,
+                    value=None,
+                    placeholder="例：20",
+                    key="job_form_fixed_overtime_hours",
+                )
+
+                fixed_overtime_pay_min = st.number_input(
+                    "固定残業代最低額（円）",
+                    min_value=0,
+                    step=1000,
+                    value=None,
+                    placeholder="例：40000",
+                    key="job_form_fixed_overtime_pay_min",
+                )
+
+            with fixed_col2:
+                fixed_overtime_pay_max = st.number_input(
+                    "固定残業代最高額（円）",
+                    min_value=0,
+                    step=1000,
+                    value=None,
+                    placeholder="例：60000",
+                    key="job_form_fixed_overtime_pay_max",
+                )
+
+                overtime_extra_pay = st.selectbox(
+                    "固定残業時間の超過分を追加支給",
+                    options_with_current(
+                        FIXED_OVERTIME_OPTIONS,
+                        st.session_state.get(
+                            "job_form_overtime_extra_pay",
+                            "",
+                        ),
+                    ),
+                    key="job_form_overtime_extra_pay",
+                )
+
+            st.caption(
+                "固定残業代について求人票に記載がない項目は、"
+                "未入力のままで保存できます。"
+            )
+
+        else:
+            fixed_overtime_hours = None
+            fixed_overtime_pay_min = None
+            fixed_overtime_pay_max = None
+            overtime_extra_pay = ""
 
         incentive = st.text_input(
             "インセンティブ",
@@ -1676,12 +1931,57 @@ def render_job_form() -> None:
         else "求人情報を保存する"
     )
 
+    salary_range_errors: list[str] = []
+
+    salary_ranges = (
+        (
+            monthly_salary_min,
+            monthly_salary_max,
+            "月給",
+        ),
+        (
+            base_salary_min,
+            base_salary_max,
+            "基本給",
+        ),
+        (
+            expected_salary_min,
+            expected_salary_max,
+            "想定年収",
+        ),
+        (
+            fixed_overtime_pay_min,
+            fixed_overtime_pay_max,
+            "固定残業代",
+        ),
+    )
+
+    for (
+        minimum_value,
+        maximum_value,
+        salary_label,
+    ) in salary_ranges:
+        if (
+            minimum_value is not None
+            and maximum_value is not None
+            and minimum_value > maximum_value
+        ):
+            salary_range_errors.append(
+                f"{salary_label}の最低額が"
+                "最高額を超えています。"
+            )
+
     if st.button(
         save_button_label,
         key="job_form_save",
         type="primary",
         use_container_width=True,
     ):
+        if salary_range_errors:
+            for error in salary_range_errors:
+                st.error(error)
+
+            return
         job = Job(
             registration_method=st.session_state[
                 JOB_REGISTRATION_MODE_KEY
@@ -1753,12 +2053,49 @@ def render_job_form() -> None:
                 annual_holidays
             ),
 
-            monthly_salary=monthly_salary,
-            annual_salary=annual_salary,
-            expected_salary_min=expected_salary_min,
-            expected_salary_max=expected_salary_max,
-            fixed_overtime_hours=fixed_overtime_hours,
-            fixed_overtime_pay=fixed_overtime_pay,
+            wage_type=wage_type,
+            monthly_salary_min=integer_to_text(
+                monthly_salary_min
+            ),
+            monthly_salary_max=integer_to_text(
+                monthly_salary_max
+            ),
+            base_salary_min=integer_to_text(
+                base_salary_min
+            ),
+            base_salary_max=integer_to_text(
+                base_salary_max
+            ),
+
+            monthly_salary=st.session_state.get(
+                "job_form_monthly_salary",
+                "",
+            ),
+            annual_salary=st.session_state.get(
+                "job_form_annual_salary",
+                "",
+            ),
+            expected_salary_min=integer_to_text(
+                expected_salary_min
+            ),
+            expected_salary_max=integer_to_text(
+                expected_salary_max
+            ),
+            fixed_overtime_system=fixed_overtime_system,
+            fixed_overtime_pay_min=integer_to_text(
+                fixed_overtime_pay_min
+            ),
+            fixed_overtime_pay_max=integer_to_text(
+                fixed_overtime_pay_max
+            ),
+            overtime_extra_pay=overtime_extra_pay,
+
+            fixed_overtime_hours=integer_to_text(
+                fixed_overtime_hours
+            ),
+            fixed_overtime_pay=integer_to_text(
+                fixed_overtime_pay_min
+            ),
             bonus=bonus,
             salary_increase=salary_increase,
             incentive=incentive,

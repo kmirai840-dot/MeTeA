@@ -229,6 +229,16 @@ class Job:
     # ------------------------------------
     # 給与・待遇
     # ------------------------------------
+    wage_type: str = ""
+    monthly_salary_min: str = ""
+    monthly_salary_max: str = ""
+    base_salary_min: str = ""
+    base_salary_max: str = ""
+    fixed_overtime_system: str = ""
+    fixed_overtime_pay_min: str = ""
+    fixed_overtime_pay_max: str = ""
+    overtime_extra_pay: str = ""
+
     monthly_salary: str = ""
     annual_salary: str = ""
     expected_salary_min: str = ""

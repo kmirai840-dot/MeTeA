@@ -231,6 +231,16 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     annual_holidays TEXT NOT NULL DEFAULT '',
 
     -- 給与・待遇
+    wage_type TEXT NOT NULL DEFAULT '',
+    monthly_salary_min TEXT NOT NULL DEFAULT '',
+    monthly_salary_max TEXT NOT NULL DEFAULT '',
+    base_salary_min TEXT NOT NULL DEFAULT '',
+    base_salary_max TEXT NOT NULL DEFAULT '',
+    fixed_overtime_system TEXT NOT NULL DEFAULT '',
+    fixed_overtime_pay_min TEXT NOT NULL DEFAULT '',
+    fixed_overtime_pay_max TEXT NOT NULL DEFAULT '',
+    overtime_extra_pay TEXT NOT NULL DEFAULT '',
+
     monthly_salary TEXT NOT NULL DEFAULT '',
     annual_salary TEXT NOT NULL DEFAULT '',
     expected_salary_min TEXT NOT NULL DEFAULT '',
