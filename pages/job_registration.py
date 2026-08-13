@@ -1,5 +1,11 @@
 """求人登録画面。"""
 
+from datetime import (
+    date,
+    datetime,
+    time,
+)
+
 import streamlit as st
 
 from models import Job
@@ -419,6 +425,122 @@ def render_text_registration() -> None:
 # ========================================
 
 
+def parse_date_value(
+    value: str,
+) -> date | None:
+    """保存済みの日付文字列を日付へ変換する。"""
+
+    cleaned_value = value.strip()
+
+    if not cleaned_value:
+        return None
+
+    date_formats = (
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+    )
+
+    for date_format in date_formats:
+        try:
+            return datetime.strptime(
+                cleaned_value,
+                date_format,
+            ).date()
+
+        except ValueError:
+            continue
+
+    return None
+
+
+def date_to_text(
+    value: date | None,
+) -> str:
+    """選択された日付を保存用文字列へ変換する。"""
+
+    if value is None:
+        return ""
+
+    return value.isoformat()
+
+
+def parse_time_value(
+    value: str,
+) -> time | None:
+    """保存済みの時刻文字列を時刻へ変換する。"""
+
+    cleaned_value = value.strip()
+
+    if not cleaned_value:
+        return None
+
+    time_formats = (
+        "%H:%M",
+        "%H:%M:%S",
+    )
+
+    for time_format in time_formats:
+        try:
+            return datetime.strptime(
+                cleaned_value,
+                time_format,
+            ).time()
+
+        except ValueError:
+            continue
+
+    return None
+
+
+def time_to_text(
+    value: time | None,
+) -> str:
+    """選択された時刻を保存用文字列へ変換する。"""
+
+    if value is None:
+        return ""
+
+    return value.strftime("%H:%M")
+
+
+def parse_integer_value(
+    value: str,
+    unit: str = "",
+) -> int | None:
+    """保存済みの整数文字列を数値へ変換する。"""
+
+    cleaned_value = (
+        value.strip()
+        .replace(",", "")
+    )
+
+    if (
+        unit
+        and cleaned_value.endswith(unit)
+    ):
+        cleaned_value = cleaned_value[
+            :-len(unit)
+        ].strip()
+
+    if not cleaned_value:
+        return None
+
+    try:
+        return int(cleaned_value)
+
+    except ValueError:
+        return None
+
+
+def integer_to_text(
+    value: int | None,
+) -> str:
+    """入力された整数を保存用文字列へ変換する。"""
+
+    if value is None:
+        return ""
+
+    return str(value)
 
 
 def text_to_list(
@@ -540,11 +662,15 @@ def load_job_for_edit(
 
     st.session_state[
         "job_form_publication_start"
-    ] = job.publication_start_date
+    ] = parse_date_value(
+        job.publication_start_date
+    )
 
     st.session_state[
         "job_form_publication_end"
-    ] = job.publication_end_date
+    ] = parse_date_value(
+        job.publication_end_date
+    )
 
     st.session_state[
         "job_form_industry"
@@ -554,9 +680,28 @@ def load_job_for_edit(
         "job_form_business_description"
     ] = job.business_description
 
+    employee_count_value = (
+        parse_integer_value(
+            job.employee_count,
+            "名",
+        )
+    )
+
     st.session_state[
         "job_form_employee_count"
-    ] = job.employee_count
+    ] = employee_count_value
+
+    st.session_state[
+        "job_form_has_employee_count"
+    ] = (
+        employee_count_value
+        is not None
+    )
+
+    if employee_count_value is not None:
+        st.session_state[
+            "job_form_employee_count_value"
+        ] = employee_count_value
 
     st.session_state[
         "job_form_established_date"
@@ -610,9 +755,28 @@ def load_job_for_edit(
         "job_form_department"
     ] = job.department
 
+    planned_hires_value = (
+        parse_integer_value(
+            job.planned_hires,
+            "名",
+        )
+    )
+
     st.session_state[
         "job_form_planned_hires"
-    ] = job.planned_hires
+    ] = planned_hires_value
+
+    st.session_state[
+        "job_form_has_planned_hires"
+    ] = (
+        planned_hires_value
+        is not None
+    )
+
+    if planned_hires_value is not None:
+        st.session_state[
+            "job_form_planned_hires_value"
+        ] = planned_hires_value
 
     st.session_state[
         "job_form_recruitment_reason"
@@ -661,11 +825,15 @@ def load_job_for_edit(
 
     st.session_state[
         "job_form_start_time"
-    ] = job.start_time
+    ] = parse_time_value(
+        job.start_time
+    )
 
     st.session_state[
         "job_form_end_time"
-    ] = job.end_time
+    ] = parse_time_value(
+        job.end_time
+    )
 
     st.session_state[
         "job_form_break_minutes"
@@ -687,9 +855,28 @@ def load_job_for_edit(
         "job_form_holidays"
     ] = job.holidays
 
+    annual_holidays_value = (
+        parse_integer_value(
+            job.annual_holidays,
+            "日",
+        )
+    )
+
     st.session_state[
         "job_form_annual_holidays"
-    ] = job.annual_holidays
+    ] = annual_holidays_value
+
+    st.session_state[
+        "job_form_has_annual_holidays"
+    ] = (
+        annual_holidays_value
+        is not None
+    )
+
+    if annual_holidays_value is not None:
+        st.session_state[
+            "job_form_annual_holidays_value"
+        ] = annual_holidays_value
 
     st.session_state[
         "job_form_monthly_salary"
@@ -805,10 +992,28 @@ def load_job_for_edit(
         "job_form_aptitude_test"
     ] = job.aptitude_test
 
+    interview_count_value = (
+        parse_integer_value(
+            job.interview_count,
+            "回",
+        )
+    )
+
     st.session_state[
         "job_form_interview_count"
-    ] = job.interview_count
+    ] = interview_count_value
 
+    st.session_state[
+        "job_form_has_interview_count"
+    ] = (
+        interview_count_value
+        is not None
+    )
+
+    if interview_count_value is not None:
+        st.session_state[
+            "job_form_interview_count_value"
+        ] = interview_count_value
     st.session_state[
         "job_form_expected_join_date"
     ] = job.expected_join_date
@@ -920,16 +1125,18 @@ def render_job_form() -> None:
         col1, col2 = st.columns(2)
 
         with col1:
-            publication_start_date = st.text_input(
+            publication_start_date = st.date_input(
                 "掲載開始日",
-                placeholder="例：2026/08/01",
+                value=None,
+                format="YYYY/MM/DD",
                 key="job_form_publication_start",
             )
 
         with col2:
-            publication_end_date = st.text_input(
+            publication_end_date = st.date_input(
                 "掲載終了日",
-                placeholder="例：2026/08/31",
+                value=None,
+                format="YYYY/MM/DD",
                 key="job_form_publication_end",
             )
 
@@ -946,10 +1153,35 @@ def render_job_form() -> None:
         col3, col4 = st.columns(2)
 
         with col3:
-            employee_count = st.text_input(
-                "従業員数",
-                key="job_form_employee_count",
+            has_employee_count = st.checkbox(
+                "従業員数の記載あり",
+                value=(
+                    st.session_state.get(
+                        "job_form_employee_count"
+                    )
+                    is not None
+                ),
+                key="job_form_has_employee_count",
             )
+
+            if has_employee_count:
+                employee_count = st.number_input(
+                    "従業員数",
+                    min_value=1,
+                    step=1,
+                    value=(
+                        st.session_state.get(
+                            "job_form_employee_count"
+                        )
+                        or 1
+                    ),
+                    key="job_form_employee_count_value",
+                )
+
+                st.caption("単位：名")
+
+            else:
+                employee_count = None
 
             established_date = st.text_input(
                 "設立",
@@ -992,10 +1224,35 @@ def render_job_form() -> None:
             )
 
         with col6:
-            planned_hires = st.text_input(
-                "採用予定人数",
-                key="job_form_planned_hires",
+            has_planned_hires = st.checkbox(
+                "採用予定人数の記載あり",
+                value=(
+                    st.session_state.get(
+                        "job_form_planned_hires"
+                    )
+                    is not None
+                ),
+                key="job_form_has_planned_hires",
             )
+
+            if has_planned_hires:
+                planned_hires = st.number_input(
+                    "採用予定人数",
+                    min_value=1,
+                    step=1,
+                    value=(
+                        st.session_state.get(
+                            "job_form_planned_hires"
+                        )
+                        or 1
+                    ),
+                    key="job_form_planned_hires_value",
+                )
+
+                st.caption("単位：名")
+
+            else:
+                planned_hires = None
 
         recruitment_reason = st.text_area(
             "募集背景・採用理由",
@@ -1124,9 +1381,10 @@ def render_job_form() -> None:
         col11, col12 = st.columns(2)
 
         with col11:
-            start_time = st.text_input(
+            start_time = st.time_input(
                 "始業時間",
-                placeholder="例：09:00",
+                value=None,
+                step=900,
                 key="job_form_start_time",
             )
 
@@ -1137,9 +1395,10 @@ def render_job_form() -> None:
             )
 
         with col12:
-            end_time = st.text_input(
+            end_time = st.time_input(
                 "終業時間",
-                placeholder="例：18:00",
+                value=None,
+                step=900,
                 key="job_form_end_time",
             )
 
@@ -1153,12 +1412,39 @@ def render_job_form() -> None:
             key="job_form_holidays",
         )
 
-        annual_holidays = st.text_input(
-            "年間休日数",
-            placeholder="例：125日",
-            key="job_form_annual_holidays",
+        has_annual_holidays = st.checkbox(
+            "年間休日数の記載あり",
+            value=(
+                st.session_state.get(
+                    "job_form_annual_holidays"
+                )
+                is not None
+            ),
+            key="job_form_has_annual_holidays",
         )
 
+        if has_annual_holidays:
+            annual_holidays = st.number_input(
+                "年間休日数",
+                min_value=1,
+                max_value=366,
+                step=1,
+                value=(
+                    st.session_state.get(
+                        "job_form_annual_holidays"
+                    )
+                    or 120
+                ),
+                key="job_form_annual_holidays_value",
+            )
+
+            st.caption(
+                "1年間の休日数を"
+                "1～366日の範囲で入力してください。"
+            )
+
+        else:
+            annual_holidays = None
     with st.container(border=True):
 
         st.markdown("### 給与・待遇")
@@ -1348,10 +1634,35 @@ def render_job_form() -> None:
                 key="job_form_interview",
             )
 
-            interview_count = st.text_input(
-                "面接回数",
-                key="job_form_interview_count",
+            has_interview_count = st.checkbox(
+                "面接回数の記載あり",
+                value=(
+                    st.session_state.get(
+                        "job_form_interview_count"
+                    )
+                    is not None
+                ),
+                key="job_form_has_interview_count",
             )
+
+            if has_interview_count:
+                interview_count = st.number_input(
+                    "面接回数",
+                    min_value=1,
+                    step=1,
+                    value=(
+                        st.session_state.get(
+                            "job_form_interview_count"
+                        )
+                        or 1
+                    ),
+                    key="job_form_interview_count_value",
+                )
+
+                st.caption("単位：回")
+
+            else:
+                interview_count = None
 
         st.divider()
 
@@ -1390,18 +1701,26 @@ def render_job_form() -> None:
             company_name=company_name,
             job_title=job_title,
             job_number=job_number,
-            publication_start_date=publication_start_date,
-            publication_end_date=publication_end_date,
+            publication_start_date=date_to_text(
+                publication_start_date
+            ),
+            publication_end_date=date_to_text(
+                publication_end_date
+            ),
             industry=industry,
             business_description=business_description,
-            employee_count=employee_count,
+            employee_count=integer_to_text(
+                employee_count
+            ),
             established_date=established_date,
             capital=capital,
             listing_status=listing_status,
 
             occupation=occupation,
             department=department,
-            planned_hires=planned_hires,
+            planned_hires=integer_to_text(
+                planned_hires
+            ),
             recruitment_reason=recruitment_reason,
 
             job_summary=job_summary,
@@ -1419,14 +1738,20 @@ def render_job_form() -> None:
             nearest_station=nearest_station,
             transfer_required=transfer_required,
             work_style=work_style,
-            start_time=start_time,
-            end_time=end_time,
+            start_time=time_to_text(
+                start_time
+            ),
+            end_time=time_to_text(
+                end_time
+            ),
             break_minutes=break_minutes,
             scheduled_work_hours=scheduled_work_hours,
             flextime=flextime,
             overtime=overtime,
             holidays=holidays,
-            annual_holidays=annual_holidays,
+            annual_holidays=integer_to_text(
+                annual_holidays
+            ),
 
             monthly_salary=monthly_salary,
             annual_salary=annual_salary,
@@ -1448,7 +1773,9 @@ def render_job_form() -> None:
             document_screening=document_screening,
             interview=interview,
             aptitude_test=aptitude_test,
-            interview_count=interview_count,
+            interview_count=integer_to_text(
+                interview_count
+            ),
             expected_join_date=expected_join_date,
 
             job_details=text_to_list(
