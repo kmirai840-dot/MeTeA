@@ -28,6 +28,14 @@ from pages.job_registration import (
     show_page as render_job_registration_page,
 )
 
+from pages.job_list import (
+    show_page as render_job_list_page,
+)
+
+from pages.job_detail import (
+    show_page as render_job_detail_page,
+)
+
 # ========================================
 # 基本設定
 # ========================================
@@ -66,6 +74,7 @@ valid_pages = {
     "job_change_reason",
     "job_registration",
     "job_list",
+    "job_detail",
     "application_list",
     "milestones",
     "activity_history",
@@ -125,16 +134,11 @@ elif current_page == "job_change_reason":
     st.stop()
 
 elif current_page == "job_list":
-    st.title("求人一覧")
+    render_job_list_page()
+    st.stop()
 
-    st.write(
-        "求人一覧画面は、今後この場所に実装します。"
-    )
-
-    if st.button("トップ画面へ戻る"):
-        st.query_params.clear()
-        st.rerun()
-
+elif current_page == "job_detail":
+    render_job_detail_page()
     st.stop()
 
 elif current_page == "application_list":
