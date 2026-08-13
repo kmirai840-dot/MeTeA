@@ -264,8 +264,10 @@ class Job:
     # ------------------------------------
     # 選考情報
     # ------------------------------------
+    document_screening_status: str = ""
     document_screening: str = ""
     interview: str = ""
+    aptitude_test_status: str = ""
     aptitude_test: str = ""
     interview_count: str = ""
     expected_join_date: str = ""

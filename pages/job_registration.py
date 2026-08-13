@@ -75,6 +75,13 @@ WAGE_TYPES = (
     "その他",
 )
 
+SELECTION_STEP_OPTIONS = (
+    "",
+    "あり",
+    "なし",
+    "不明",
+)
+
 PROBATION_PERIOD_OPTIONS = (
     "",
     "あり",
@@ -1327,6 +1334,20 @@ def load_job_for_edit(
         job.not_listed_fields
     )
 
+    document_screening_status = (
+        job.document_screening_status
+    )
+
+    if (
+        not document_screening_status
+        and job.document_screening
+    ):
+        document_screening_status = "あり"
+
+    st.session_state[
+        "job_form_document_screening_status"
+    ] = document_screening_status
+
     st.session_state[
         "job_form_document_screening"
     ] = job.document_screening
@@ -1334,6 +1355,20 @@ def load_job_for_edit(
     st.session_state[
         "job_form_interview"
     ] = job.interview
+
+    aptitude_test_status = (
+        job.aptitude_test_status
+    )
+
+    if (
+        not aptitude_test_status
+        and job.aptitude_test
+    ):
+        aptitude_test_status = "あり"
+
+    st.session_state[
+        "job_form_aptitude_test_status"
+    ] = aptitude_test_status
 
     st.session_state[
         "job_form_aptitude_test"
@@ -2208,13 +2243,41 @@ def render_job_form() -> None:
         col19, col20 = st.columns(2)
 
         with col19:
-            document_screening = st.text_input(
+            document_screening_status = st.selectbox(
                 "書類選考",
+                options_with_current(
+                    SELECTION_STEP_OPTIONS,
+                    st.session_state.get(
+                        "job_form_document_screening_status",
+                        "",
+                    ),
+                ),
+                key="job_form_document_screening_status",
+            )
+
+            document_screening = st.text_input(
+                "書類選考の補足",
+                placeholder=(
+                    "例：履歴書・職務経歴書による選考"
+                ),
                 key="job_form_document_screening",
             )
 
-            aptitude_test = st.text_input(
+            aptitude_test_status = st.selectbox(
                 "適性検査",
+                options_with_current(
+                    SELECTION_STEP_OPTIONS,
+                    st.session_state.get(
+                        "job_form_aptitude_test_status",
+                        "",
+                    ),
+                ),
+                key="job_form_aptitude_test_status",
+            )
+
+            aptitude_test = st.text_input(
+                "適性検査の補足",
+                placeholder="例：Web適性検査、SPI",
                 key="job_form_aptitude_test",
             )
 
@@ -2474,8 +2537,14 @@ def render_job_form() -> None:
             qualification_support=qualification_support,
             training_program=training_program,
 
+            document_screening_status=(
+                document_screening_status
+            ),
             document_screening=document_screening,
             interview=interview,
+            aptitude_test_status=(
+                aptitude_test_status
+            ),
             aptitude_test=aptitude_test,
             interview_count=integer_to_text(
                 interview_count

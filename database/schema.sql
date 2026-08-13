@@ -262,8 +262,10 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     training_program TEXT NOT NULL DEFAULT '',
 
     -- 選考情報
+    document_screening_status TEXT NOT NULL DEFAULT '',
     document_screening TEXT NOT NULL DEFAULT '',
     interview TEXT NOT NULL DEFAULT '',
+    aptitude_test_status TEXT NOT NULL DEFAULT '',
     aptitude_test TEXT NOT NULL DEFAULT '',
     interview_count TEXT NOT NULL DEFAULT '',
     expected_join_date TEXT NOT NULL DEFAULT '',

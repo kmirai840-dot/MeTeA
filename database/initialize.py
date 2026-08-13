@@ -23,6 +23,12 @@ def initialize_database() -> None:
         }
 
         required_job_columns = {
+            "document_screening_status": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "aptitude_test_status": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
             "probation_period_status": (
                 "TEXT NOT NULL DEFAULT ''"
             ),
