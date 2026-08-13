@@ -82,6 +82,14 @@ FIXED_OVERTIME_OPTIONS = (
     "不明",
 )
 
+FLEXTIME_OPTIONS = (
+    "",
+    "あり",
+    "なし",
+    "条件付き",
+    "不明",
+)
+
 TRANSFER_OPTIONS = (
     "",
     "あり",
@@ -97,6 +105,59 @@ WORK_STYLE_OPTIONS = (
     "完全在宅",
     "相談可",
     "不明",
+)
+
+PREFECTURES = (
+    "",
+    "北海道",
+    "青森県",
+    "岩手県",
+    "宮城県",
+    "秋田県",
+    "山形県",
+    "福島県",
+    "茨城県",
+    "栃木県",
+    "群馬県",
+    "埼玉県",
+    "千葉県",
+    "東京都",
+    "神奈川県",
+    "新潟県",
+    "富山県",
+    "石川県",
+    "福井県",
+    "山梨県",
+    "長野県",
+    "岐阜県",
+    "静岡県",
+    "愛知県",
+    "三重県",
+    "滋賀県",
+    "京都府",
+    "大阪府",
+    "兵庫県",
+    "奈良県",
+    "和歌山県",
+    "鳥取県",
+    "島根県",
+    "岡山県",
+    "広島県",
+    "山口県",
+    "徳島県",
+    "香川県",
+    "愛媛県",
+    "高知県",
+    "福岡県",
+    "佐賀県",
+    "長崎県",
+    "熊本県",
+    "大分県",
+    "宮崎県",
+    "鹿児島県",
+    "沖縄県",
+    "海外",
+    "勤務地不明",
 )
 
 
@@ -559,6 +620,83 @@ def integer_to_text(
     return str(value)
 
 
+def parse_hour_value(
+    value: str,
+) -> float | None:
+    """保存済みの時間文字列を数値へ変換する。"""
+
+    cleaned_value = (
+        value.strip()
+        .replace(",", "")
+        .replace("　", "")
+        .replace(" ", "")
+        .replace("時間／日", "")
+        .replace("時間/日", "")
+        .replace("時間", "")
+    )
+
+    if not cleaned_value:
+        return None
+
+    try:
+        return float(cleaned_value)
+
+    except ValueError:
+        return None
+
+
+def hour_to_text(
+    value: float | None,
+) -> str:
+    """入力された時間を保存用文字列へ変換する。"""
+
+    if value is None:
+        return ""
+
+    return f"{value:g}"
+
+
+def parse_monthly_overtime_hours(
+    value: str,
+) -> int | None:
+    """残業時間の文字列を月平均の整数へ変換する。"""
+
+    cleaned_value = (
+        value.strip()
+        .replace(",", "")
+        .replace("　", "")
+        .replace(" ", "")
+    )
+
+    removable_texts = (
+        "1か月あたり",
+        "1ヶ月あたり",
+        "月平均",
+        "時間程度",
+        "時間／月",
+        "時間/月",
+        "約",
+        "平均",
+        "月",
+        "時間",
+    )
+
+    for removable_text in removable_texts:
+        cleaned_value = cleaned_value.replace(
+            removable_text,
+            "",
+        )
+
+    if not cleaned_value:
+        return None
+
+    try:
+        return int(cleaned_value)
+
+    except ValueError:
+        return None
+
+
 def parse_yen_value(
     value: str,
 ) -> int | None:
@@ -888,20 +1026,59 @@ def load_job_for_edit(
     )
 
     st.session_state[
-        "job_form_break_minutes"
+        "job_form_break_minutes_legacy"
     ] = job.break_minutes
 
+    break_minutes_value = parse_integer_value(
+        job.break_minutes,
+        "分",
+    )
+
     st.session_state[
-        "job_form_scheduled_work_hours"
+        "job_form_has_break_minutes"
+    ] = break_minutes_value is not None
+
+    if break_minutes_value is not None:
+        st.session_state[
+            "job_form_break_minutes_value"
+        ] = break_minutes_value
+
+    st.session_state[
+        "job_form_scheduled_work_hours_legacy"
     ] = job.scheduled_work_hours
 
+    scheduled_work_hours_value = parse_hour_value(
+        job.scheduled_work_hours
+    )
+
+    st.session_state[
+        "job_form_has_scheduled_work_hours"
+    ] = scheduled_work_hours_value is not None
+
+    if scheduled_work_hours_value is not None:
+        st.session_state[
+            "job_form_scheduled_work_hours_value"
+        ] = scheduled_work_hours_value
     st.session_state[
         "job_form_flextime"
     ] = job.flextime
 
     st.session_state[
-        "job_form_overtime"
+        "job_form_overtime_legacy"
     ] = job.overtime
+
+    overtime_value = parse_monthly_overtime_hours(
+        job.overtime
+    )
+
+    st.session_state[
+        "job_form_has_overtime"
+    ] = overtime_value is not None
+
+    if overtime_value is not None:
+        st.session_state[
+            "job_form_overtime_value"
+        ] = overtime_value
 
     st.session_state[
         "job_form_holidays"
@@ -1468,8 +1645,15 @@ def render_job_form() -> None:
                 key="job_form_probation_period",
             )
 
-            prefecture = st.text_input(
+            prefecture = st.selectbox(
                 "都道府県",
+                options_with_current(
+                    PREFECTURES,
+                    st.session_state.get(
+                        "job_form_prefecture",
+                        "",
+                    ),
+                ),
                 key="job_form_prefecture",
             )
 
@@ -1508,15 +1692,50 @@ def render_job_form() -> None:
                 key="job_form_work_style",
             )
 
-            flextime = st.text_input(
+            flextime = st.selectbox(
                 "フレックスタイム",
+                options_with_current(
+                    FLEXTIME_OPTIONS,
+                    st.session_state.get(
+                        "job_form_flextime",
+                        "",
+                    ),
+                ),
                 key="job_form_flextime",
             )
 
-            overtime = st.text_input(
-                "残業",
-                key="job_form_overtime",
+            has_overtime = st.checkbox(
+                "月平均残業時間の記載あり",
+                key="job_form_has_overtime",
             )
+
+            if has_overtime:
+                overtime = st.number_input(
+                    "月平均残業時間",
+                    min_value=0,
+                    max_value=744,
+                    step=1,
+                    value=(
+                        st.session_state.get(
+                            "job_form_overtime_value"
+                        )
+                        if st.session_state.get(
+                            "job_form_overtime_value"
+                        )
+                        is not None
+                        else 20
+                    ),
+                    key="job_form_overtime_value",
+                )
+
+                st.caption(
+                    "単位：時間／月。"
+                    "求人票に記載された月平均時間を"
+                    "0～744時間で入力してください。"
+                )
+
+            else:
+                overtime = None
 
         col11, col12 = st.columns(2)
 
@@ -1528,11 +1747,37 @@ def render_job_form() -> None:
                 key="job_form_start_time",
             )
 
-            break_minutes = st.text_input(
-                "休憩時間",
-                placeholder="例：60分",
-                key="job_form_break_minutes",
+            has_break_minutes = st.checkbox(
+                "休憩時間の記載あり",
+                key="job_form_has_break_minutes",
             )
+
+            if has_break_minutes:
+                break_minutes = st.number_input(
+                    "休憩時間",
+                    min_value=0,
+                    max_value=1440,
+                    step=1,
+                    value=(
+                        st.session_state.get(
+                            "job_form_break_minutes_value"
+                        )
+                        if st.session_state.get(
+                            "job_form_break_minutes_value"
+                        )
+                        is not None
+                        else 60
+                    ),
+                    key="job_form_break_minutes_value",
+                )
+
+                st.caption(
+                    "単位：分。0～1440分の範囲で"
+                    "入力してください。"
+                )
+
+            else:
+                break_minutes = None
 
         with col12:
             end_time = st.time_input(
@@ -1542,10 +1787,40 @@ def render_job_form() -> None:
                 key="job_form_end_time",
             )
 
-            scheduled_work_hours = st.text_input(
-                "所定労働時間",
-                key="job_form_scheduled_work_hours",
+            has_scheduled_work_hours = st.checkbox(
+                "所定労働時間の記載あり",
+                key="job_form_has_scheduled_work_hours",
             )
+
+            if has_scheduled_work_hours:
+                scheduled_work_hours = st.number_input(
+                    "所定労働時間",
+                    min_value=0.0,
+                    max_value=24.0,
+                    step=0.25,
+                    value=(
+                        st.session_state.get(
+                            "job_form_scheduled_work_hours_value"
+                        )
+                        if st.session_state.get(
+                            "job_form_scheduled_work_hours_value"
+                        )
+                        is not None
+                        else 8.0
+                    ),
+                    key=(
+                        "job_form_"
+                        "scheduled_work_hours_value"
+                    ),
+                )
+
+                st.caption(
+                    "単位：時間／日。"
+                    "例：7時間30分の場合は7.5と入力します。"
+                )
+
+            else:
+                scheduled_work_hours = None
 
         holidays = st.text_input(
             "休日・休暇",
@@ -2044,10 +2319,31 @@ def render_job_form() -> None:
             end_time=time_to_text(
                 end_time
             ),
-            break_minutes=break_minutes,
-            scheduled_work_hours=scheduled_work_hours,
+            break_minutes=(
+                integer_to_text(break_minutes)
+                if break_minutes is not None
+                else st.session_state.get(
+                    "job_form_break_minutes_legacy",
+                    "",
+                )
+            ),
+            scheduled_work_hours=(
+                hour_to_text(scheduled_work_hours)
+                if scheduled_work_hours is not None
+                else st.session_state.get(
+                    "job_form_scheduled_work_hours_legacy",
+                    "",
+                )
+            ),
             flextime=flextime,
-            overtime=overtime,
+            overtime=(
+                integer_to_text(overtime)
+                if overtime is not None
+                else st.session_state.get(
+                    "job_form_overtime_legacy",
+                    "",
+                )
+            ),
             holidays=holidays,
             annual_holidays=integer_to_text(
                 annual_holidays
