@@ -9,7 +9,6 @@ from pages.job_registration import (
 from services.job_service import (
     delete_job_data,
     load_jobs,
-    load_job_sources,
 )
 
 
@@ -47,133 +46,6 @@ def render_empty_state() -> None:
             width="stretch",
         ):
             move_to_page("job_registration")
-
-
-def format_empty(
-    value: str,
-) -> str:
-    """空の値を画面表示用に整える。"""
-
-    cleaned_value = str(value or "").strip()
-
-    return cleaned_value or "未入力"
-
-
-def format_location(
-    job,
-) -> str:
-    """勤務地を表示用に整える。"""
-
-    location = "".join(
-        value
-        for value in (
-            job.prefecture,
-            job.municipality,
-        )
-        if value
-    )
-
-    return location or "未入力"
-
-
-def format_salary(
-    job,
-) -> str:
-    """想定年収を表示用に整える。"""
-
-    if job.annual_salary:
-        return job.annual_salary
-
-    if (
-        job.expected_salary_min
-        and job.expected_salary_max
-    ):
-        return (
-            f"{job.expected_salary_min}〜"
-            f"{job.expected_salary_max}"
-        )
-
-    if job.expected_salary_min:
-        return f"{job.expected_salary_min}〜"
-
-    if job.expected_salary_max:
-        return f"〜{job.expected_salary_max}"
-
-    return "未入力"
-
-
-def format_date_text(
-    value: object,
-) -> str:
-    """日付を一覧表示用の文字列に整える。"""
-
-    if value is None:
-        return "未入力"
-
-    text = str(value).strip()
-
-    if text == "":
-        return "未入力"
-
-    return text[:10]
-
-
-def format_sources(
-    job_id: int,
-    job,
-) -> str:
-    """紹介経路を / 区切りで表示する。"""
-
-    sources = load_job_sources(job_id)
-
-    source_names = []
-
-    for _, source in sources:
-        source_label = (
-            source.source_name
-            or source.source_type
-        ).strip()
-
-        if source_label:
-            source_names.append(source_label)
-
-    if not source_names:
-        fallback_source = (
-            job.source_name
-            or job.source_type
-        ).strip()
-
-        if fallback_source:
-            source_names.append(fallback_source)
-
-    if not source_names:
-        return "未入力"
-
-    return " / ".join(source_names)
-
-
-def matches_search_word(
-    job_id: int,
-    job,
-    search_word: str,
-) -> bool:
-    """検索語に求人が一致するか判定する。"""
-
-    cleaned_word = search_word.strip().casefold()
-
-    if not cleaned_word:
-        return True
-
-    target_text = "\n".join(
-        [
-            job.company_name,
-            job.job_title,
-            job.occupation,
-            format_sources(job_id, job),
-        ]
-    ).casefold()
-
-    return cleaned_word in target_text
 
 
 def render_delete_confirmation(
@@ -242,126 +114,190 @@ def render_delete_confirmation(
             st.rerun()
 
 
-def render_job_row(
+def render_job_card(
     job_id: int,
-    job: Job,
+    job,
 ) -> None:
-    """求人一覧の1行を表示する。"""
+    """求人1件分の概要と操作を表示する。"""
 
-    cols = st.columns(
-        [1.8, 2.0, 1.2, 1.2, 1.2, 1.7, 0.8, 0.8, 0.8]
-    )
+    with st.container(border=True):
+        title_col, id_col = st.columns(
+            [4, 1]
+        )
 
-    with cols[0]:
-        st.write(format_empty(job.company_name))
+        with title_col:
+            st.markdown(
+                f"### {job.company_name}"
+            )
 
-    with cols[1]:
-        st.write(format_empty(job.job_title))
+            job_name = (
+                job.job_title
+                or job.occupation
+                or "求人名未入力"
+            )
 
-    with cols[2]:
-        st.write(format_empty(job.occupation))
+            st.markdown(job_name)
 
-    with cols[3]:
-        st.write(format_location(job))
+        with id_col:
+            st.caption(
+                f"求人ID：{job_id}"
+            )
 
-    with cols[4]:
-        st.write(format_salary(job))
+        detail_col1, detail_col2 = st.columns(2)
 
-    with cols[5]:
-        st.write(format_sources(job_id, job))
+        with detail_col1:
+            st.caption("募集ポジション")
 
-    with cols[6]:
-        if st.button(
-            "詳細",
-            key=f"detail_job_{job_id}",
-            width="stretch",
-        ):
-            st.query_params["page"] = "job_detail"
-            st.query_params["job_id"] = str(job_id)
-            st.rerun()
+            st.write(
+                job.occupation
+                or "未入力"
+            )
 
-    with cols[7]:
-        if st.button(
-            "編集",
-            key=f"edit_job_{job_id}",
-            width="stretch",
-        ):
-            st.session_state[
-                JOB_FORM_RETURN_PAGE_KEY
-            ] = "job_list"
+        with detail_col2:
+            st.caption("紹介経路")
 
-            load_job_for_edit(job_id)
+            source_text = job.source_name
 
-            move_to_page("job_registration")
+            if (
+                job.source_type
+                and job.source_name
+            ):
+                source_text = (
+                    f"{job.source_type}／"
+                    f"{job.source_name}"
+                )
 
-    with cols[8]:
-        if st.button(
-            "削除",
-            key=f"delete_job_{job_id}",
-            width="stretch",
-        ):
-            st.session_state[
-                JOB_DELETE_CONFIRM_KEY
-            ] = job_id
+            st.write(
+                source_text
+                or "未入力"
+            )
 
-            st.rerun()
+        if job.job_summary:
+            st.caption("仕事内容")
+
+            summary = job.job_summary
+
+            if len(summary) > 120:
+                summary = (
+                    summary[:120]
+                    + "…"
+                )
+
+            st.write(summary)
+
+        detail_col, edit_col, delete_col = (
+            st.columns(3)
+        )
+
+        with detail_col:
+            if st.button(
+                "詳細",
+                key=f"detail_job_{job_id}",
+                width="stretch",
+            ):
+                st.query_params["page"] = (
+                    "job_detail"
+                )
+
+                st.query_params["job_id"] = (
+                    str(job_id)
+                )
+
+                st.rerun()
+
+        with edit_col:
+            if st.button(
+                "編集",
+                key=f"edit_job_{job_id}",
+                width="stretch",
+            ):
+                st.session_state[
+                    JOB_FORM_RETURN_PAGE_KEY
+                ] = "job_list"
+
+                load_job_for_edit(
+                    job_id
+                )
+
+                move_to_page(
+                    "job_registration"
+                )
+
+        with delete_col:
+            if st.button(
+                "削除",
+                key=f"delete_job_{job_id}",
+                width="stretch",
+            ):
+                st.session_state[
+                    JOB_DELETE_CONFIRM_KEY
+                ] = job_id
+
+                st.rerun()
+
+        render_delete_confirmation(
+            job_id=job_id,
+            company_name=(
+                job.company_name
+                or "会社名未入力"
+            ),
+            job_name=job_name,
+        )
 
 
 def show_page() -> None:
     """求人一覧画面を表示する。"""
 
-    st.title("求人一覧")
+    if (
+        JOB_DELETE_CONFIRM_KEY
+        not in st.session_state
+    ):
+        st.session_state[
+            JOB_DELETE_CONFIRM_KEY
+        ] = None
 
-    render_delete_confirmation()
+    header_col, register_col = st.columns(
+        [4, 1]
+    )
+
+    with header_col:
+        st.title("求人一覧")
+
+        st.caption(
+            "登録した求人を確認・管理します。"
+        )
+
+    with register_col:
+        if st.button(
+            "＋ 求人を登録する",
+            key="job_list_registration",
+            type="primary",
+            width="stretch",
+        ):
+            move_to_page(
+                "job_registration"
+            )
 
     jobs = load_jobs()
 
     if not jobs:
-        st.info("登録されている求人はありません。")
-        return
+        render_empty_state()
 
-    if JOB_LIST_SEARCH_KEY not in st.session_state:
-        st.session_state[JOB_LIST_SEARCH_KEY] = ""
-
-    search_word = st.session_state[JOB_LIST_SEARCH_KEY]
-
-    if st.session_state.get(JOB_SEARCH_RESET_KEY):
-        st.session_state[JOB_LIST_SEARCH_KEY] = ""
-        st.session_state[JOB_SEARCH_RESET_KEY] = False
-        search_word = ""
     else:
-        search_word = st.text_input(
-            "検索",
-            placeholder="会社名・求人名・職種・紹介経路で検索",
-            key=JOB_LIST_SEARCH_KEY,
+        st.caption(
+            f"{len(jobs)}件の求人を登録しています。"
         )
 
-    filtered_jobs = [
-        (job_id, job)
-        for job_id, job in jobs
-        if matches_search_word(job_id, job, search_word)
-    ]
+        for job_id, job in jobs:
+            render_job_card(
+                job_id,
+                job,
+            )
 
-    st.caption(
-        f"{len(filtered_jobs)}件 / 全{len(jobs)}件"
-    )
+    st.divider()
 
-    header_cols = st.columns(
-        [1.8, 2.0, 1.2, 1.2, 1.2, 1.7, 0.8, 0.8, 0.8]
-    )
-
-    headers = (
-        "会社名",
-        "求人名",
-        "職種",
-        "勤務地",
-        "想定年収",
-        "紹介経路",
-        "詳細",
-        "編集",
-        "削除",
-    )
-
-    for col, header in zip(header_cols, headers):
-        with col:
-            st.markdown(f"**{header
+    if st.button(
+        "トップへ戻る",
+        key="job_list_back_home",
+    ):
+        move_to_page(None)

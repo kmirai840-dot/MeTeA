@@ -9,7 +9,7 @@ from database.connection import get_connection
 # ========================================
 # 複数値項目
 # ========================================
-    
+
 MULTI_VALUE_FIELDS = (
     "job_details",
     "required_experience",
@@ -318,45 +318,6 @@ def get_jobs(
 
     finally:
         connection.close()
-
-
-def get_job_list_rows(
-    user_id: int,
-) -> list[tuple[int, Job, str | None, str | None]]:
-    """求人一覧表示用に、求人情報と登録日・更新日を取得する。"""
-
-    jobs = get_jobs(user_id)
-
-    with get_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT
-                id,
-                created_at,
-                updated_at
-            FROM user_jobs
-            WHERE user_id = ?
-            """,
-            (user_id,),
-        ).fetchall()
-
-    date_by_job_id = {
-        row["id"]: (
-            row["created_at"],
-            row["updated_at"],
-        )
-        for row in rows
-    }
-
-    return [
-        (
-            job_id,
-            job,
-            date_by_job_id.get(job_id, (None, None))[0],
-            date_by_job_id.get(job_id, (None, None))[1],
-        )
-        for job_id, job in jobs
-    ]
 
 
 def get_job(
