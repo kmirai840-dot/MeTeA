@@ -18,6 +18,7 @@ from services.job_service import (
     DUPLICATE_DIFFERENT_SOURCE,
     DUPLICATE_EXACT,
     DUPLICATE_NONE,
+    DUPLICATE_POSSIBLE,
     add_job_source_data,
     compare_jobs,
     create_job_data,
@@ -46,6 +47,51 @@ JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
 JOB_FORM_RETURN_PAGE_KEY = (
     "job_form_return_page"
 )
+
+
+def start_new_job_registration() -> None:
+    """新規求人登録を初期状態から開始する。"""
+
+    st.session_state[
+        JOB_REGISTRATION_MODE_KEY
+    ] = "url"
+
+    st.session_state[
+        JOB_FORM_STEP_KEY
+    ] = "select"
+
+    st.session_state[
+        JOB_EDIT_ID_KEY
+    ] = None
+
+    st.session_state[
+        JOB_PENDING_DATA_KEY
+    ] = None
+
+    st.session_state[
+        JOB_CONFIRM_DATA_KEY
+    ] = None
+
+    st.session_state[
+        JOB_COMPLETE_MESSAGE_KEY
+    ] = None
+
+    st.session_state[
+        JOB_COMPLETE_NOTE_KEY
+    ] = None
+
+    st.session_state[
+        JOB_COMPLETE_JOB_ID_KEY
+    ] = None
+
+    st.session_state[
+        JOB_DUPLICATE_ID_KEY
+    ] = None
+
+    st.session_state[
+        JOB_DUPLICATE_TYPE_KEY
+    ] = None
+
 
 SOURCE_TYPES = (
     "選択してください",
@@ -3475,6 +3521,31 @@ def render_job_confirmation() -> None:
                     job_id=job_id,
                 )
 
+            if duplicate_type == DUPLICATE_POSSIBLE:
+                if existing_job_id is None:
+                    st.error(
+                        "類似する求人情報を取得できませんでした。"
+                    )
+                    return
+
+                st.session_state[
+                    JOB_PENDING_DATA_KEY
+                ] = job
+
+                st.session_state[
+                    JOB_DUPLICATE_ID_KEY
+                ] = existing_job_id
+
+                st.session_state[
+                    JOB_DUPLICATE_TYPE_KEY
+                ] = DUPLICATE_POSSIBLE
+
+                st.session_state[
+                    JOB_FORM_STEP_KEY
+                ] = "duplicate"
+
+                st.rerun()
+
             if duplicate_type == DUPLICATE_EXACT:
                 st.session_state[
                     JOB_PENDING_DATA_KEY
@@ -3642,7 +3713,11 @@ def render_duplicate_confirmation() -> None:
     )
 
     if (
-        duplicate_type != DUPLICATE_EXACT
+        duplicate_type
+        not in (
+            DUPLICATE_EXACT,
+            DUPLICATE_POSSIBLE,
+        )
         or pending_job is None
         or existing_job_id is None
     ):
@@ -3684,12 +3759,21 @@ def render_duplicate_confirmation() -> None:
         )
         return
 
-    st.warning(
-        "この求人はすでに登録されています。"
-        "同じ求人を重複して登録することはできません。"
-    )
+    if duplicate_type == DUPLICATE_POSSIBLE:
+        st.warning(
+            "同じ求人の可能性がある求人が見つかりました。"
+            "内容を確認して、同じ求人かどうか判断してください。"
+        )
 
-    st.markdown("### 登録済みの求人")
+        st.markdown("### 類似する登録済み求人")
+
+    else:
+        st.warning(
+            "この求人はすでに登録されています。"
+            "同じ求人を重複して登録することはできません。"
+        )
+
+        st.markdown("### 登録済みの求人")
 
     with st.container(border=True):
         st.markdown(
@@ -3750,6 +3834,100 @@ def render_duplicate_confirmation() -> None:
         st.info(
             "登録済み情報と今回の入力内容は同じです。"
         )
+
+    if duplicate_type == DUPLICATE_POSSIBLE:
+        st.markdown("### この求人をどう登録しますか？")
+
+        st.caption(
+            "同じ求人で紹介経路だけが異なる場合は、"
+            "既存求人へ紹介経路を追加してください。"
+        )
+
+        same_job_col, new_job_col = st.columns(2)
+
+        with same_job_col:
+            if st.button(
+                "同じ求人として紹介経路を追加する",
+                key="possible_add_source",
+                type="primary",
+                use_container_width=True,
+            ):
+                source_errors = add_job_source_data(
+                    existing_job_id,
+                    pending_job,
+                )
+
+                if source_errors:
+                    for error in source_errors:
+                        st.error(error)
+
+                    return
+
+                st.session_state[
+                    JOB_PENDING_DATA_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_CONFIRM_DATA_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_DUPLICATE_ID_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_DUPLICATE_TYPE_KEY
+                ] = None
+
+                move_to_job_completion(
+                    message=(
+                        "登録済みの求人へ、"
+                        "新しい紹介経路を追加しました。"
+                    ),
+                    job_id=existing_job_id,
+                    note=(
+                        "二重応募を避けるため、"
+                        "応募前に紹介元のエージェント等へ"
+                        "応募経路を確認してください。"
+                    ),
+                )
+
+        with new_job_col:
+            if st.button(
+                "別の求人として登録する",
+                key="possible_register_as_new",
+                use_container_width=True,
+            ):
+                job_id, create_errors = create_job_data(
+                    pending_job
+                )
+
+                if create_errors:
+                    for error in create_errors:
+                        st.error(error)
+
+                    return
+
+                st.session_state[
+                    JOB_PENDING_DATA_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_CONFIRM_DATA_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_DUPLICATE_ID_KEY
+                ] = None
+
+                st.session_state[
+                    JOB_DUPLICATE_TYPE_KEY
+                ] = None
+
+                move_to_job_completion(
+                    message="別の求人として保存しました。",
+                    job_id=job_id,
+                )
 
     detail_col, back_col = st.columns(2)
 

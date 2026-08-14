@@ -20,6 +20,10 @@ def _row_to_job_source(
             row["source_name"]
             or ""
         ),
+        source_job_number=(
+            row["source_job_number"]
+            or ""
+        ),
         source_url=(
             row["source_url"]
             or ""
@@ -133,18 +137,20 @@ def create_job_source(
                 job_id,
                 source_type,
                 source_name,
+                source_job_number,
                 source_url,
                 source_text,
                 acquired_at,
                 notes,
                 is_primary
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 job_source.source_type.strip(),
                 job_source.source_name.strip(),
+                job_source.source_job_number.strip(),
                 job_source.source_url.strip(),
                 job_source.source_text.strip(),
                 job_source.acquired_at.strip(),
@@ -324,18 +330,20 @@ def sync_primary_job_source(
                     job_id,
                     source_type,
                     source_name,
+                    source_job_number,
                     source_url,
                     source_text,
                     acquired_at,
                     notes,
                     is_primary
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
                 (
                     job_id,
                     job_source.source_type.strip(),
                     job_source.source_name.strip(),
+                    job_source.source_job_number.strip(),
                     job_source.source_url.strip(),
                     job_source.source_text.strip(),
                     job_source.acquired_at.strip(),
@@ -356,6 +364,7 @@ def sync_primary_job_source(
                 SET
                     source_type = ?,
                     source_name = ?,
+                    source_job_number = ?,
                     source_url = ?,
                     source_text = ?,
                     acquired_at = ?,
@@ -369,6 +378,7 @@ def sync_primary_job_source(
                 (
                     job_source.source_type.strip(),
                     job_source.source_name.strip(),
+                    job_source.source_job_number.strip(),
                     job_source.source_url.strip(),
                     job_source.source_text.strip(),
                     job_source.acquired_at.strip(),

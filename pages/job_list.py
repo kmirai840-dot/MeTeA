@@ -5,15 +5,21 @@ import streamlit as st
 from pages.job_registration import (
     JOB_FORM_RETURN_PAGE_KEY,
     load_job_for_edit,
+    start_new_job_registration,
 )
 from services.job_service import (
     delete_job_data,
+    load_job_sources,
     load_jobs,
 )
 
 
 JOB_DELETE_CONFIRM_KEY = (
     "job_list_delete_confirm_id"
+)
+
+JOB_COMPARE_SELECTED_KEY = (
+    "job_compare_selected_ids"
 )
 
 
@@ -45,6 +51,7 @@ def render_empty_state() -> None:
             type="primary",
             width="stretch",
         ):
+            start_new_job_registration()
             move_to_page("job_registration")
 
 
@@ -118,122 +125,204 @@ def render_job_card(
     job_id: int,
     job,
 ) -> None:
-    """求人1件分の概要と操作を表示する。"""
+    """求人1件分をリスト形式で表示する。"""
 
+    sources = load_job_sources(job_id)
+
+    job_name = (
+        job.job_title
+        or job.occupation
+        or "求人名未入力"
+    )
+
+    # 紹介経路を一覧表示用に整形
+    if sources:
+        source_names = []
+
+        for _, source in sources:
+            source_name = source.source_name or "名称未入力"
+
+            if (
+                source.source_type
+                and source.source_name
+            ):
+                source_name = (
+                    f"{source.source_type}／"
+                    f"{source.source_name}"
+                )
+
+            source_names.append(source_name)
+
+        source_text = "、".join(source_names)
+
+    else:
+        source_text = "未入力"
+
+    # 1求人＝1行
     with st.container(border=True):
-        title_col, id_col = st.columns(
-            [4, 1]
+        
+        selected = st.checkbox(
+            "比較対象に選択",
+            key=f"compare_job_{job_id}",
         )
 
-        with title_col:
-            st.markdown(
-                f"### {job.company_name}"
+        (
+            company_col,
+            position_col,
+            location_col,
+            salary_col,
+            source_col,
+            action_col,
+        ) = st.columns(
+            [2.1, 1.8, 1.4, 1.5, 2.4, 2.0]
+        )
+
+        with company_col:
+            st.caption("会社名")
+            st.write(
+                job.company_name
+                or "会社名未入力"
             )
 
-            job_name = (
-                job.job_title
-                or job.occupation
-                or "求人名未入力"
-            )
-
-            st.markdown(job_name)
-
-        with id_col:
             st.caption(
                 f"求人ID：{job_id}"
             )
 
-        detail_col1, detail_col2 = st.columns(2)
-
-        with detail_col1:
+        with position_col:
             st.caption("募集ポジション")
-
             st.write(
                 job.occupation
                 or "未入力"
             )
 
-        with detail_col2:
-            st.caption("紹介経路")
+            st.caption("求人名")
+            st.write(job_name)
 
-            source_text = job.source_name
+        with location_col:
+            st.caption("勤務地")
 
-            if (
-                job.source_type
-                and job.source_name
-            ):
-                source_text = (
-                    f"{job.source_type}／"
-                    f"{job.source_name}"
+            location_parts = [
+                value
+                for value in (
+                    job.prefecture,
+                    job.municipality,
                 )
+                if value
+            ]
 
             st.write(
-                source_text
+                "".join(location_parts)
                 or "未入力"
             )
 
-        if job.job_summary:
-            st.caption("仕事内容")
+        with salary_col:
+            st.caption("想定年収")
 
-            summary = job.job_summary
-
-            if len(summary) > 120:
-                summary = (
-                    summary[:120]
-                    + "…"
-                )
-
-            st.write(summary)
-
-        detail_col, edit_col, delete_col = (
-            st.columns(3)
-        )
-
-        with detail_col:
-            if st.button(
-                "詳細",
-                key=f"detail_job_{job_id}",
-                width="stretch",
+            if (
+                job.expected_salary_min
+                or job.expected_salary_max
             ):
-                st.query_params["page"] = (
-                    "job_detail"
+                salary_min = (
+                    job.expected_salary_min
+                    or "―"
+                )
+                salary_max = (
+                    job.expected_salary_max
+                    or "―"
                 )
 
-                st.query_params["job_id"] = (
-                    str(job_id)
+                st.write(
+                    f"{salary_min} ～ {salary_max}"
                 )
 
-                st.rerun()
+            elif job.annual_salary:
+                st.write(job.annual_salary)
 
-        with edit_col:
-            if st.button(
-                "編集",
-                key=f"edit_job_{job_id}",
-                width="stretch",
-            ):
-                st.session_state[
-                    JOB_FORM_RETURN_PAGE_KEY
-                ] = "job_list"
+            else:
+                st.write("未入力")
 
-                load_job_for_edit(
-                    job_id
-                )
+        with source_col:
+            st.caption("紹介経路")
 
-                move_to_page(
-                    "job_registration"
-                )
+            if sources:
+                for _, source in sources:
+                    source_text = (
+                        source.source_name
+                        or "名称未入力"
+                    )
 
-        with delete_col:
-            if st.button(
-                "削除",
-                key=f"delete_job_{job_id}",
-                width="stretch",
-            ):
-                st.session_state[
-                    JOB_DELETE_CONFIRM_KEY
-                ] = job_id
+                    if (
+                        source.source_type
+                        and source.source_name
+                    ):
+                        source_text = (
+                            f"{source.source_type}／"
+                            f"{source.source_name}"
+                        )
 
-                st.rerun()
+                    st.write(
+                        f"・{source_text}"
+                    )
+
+                if len(sources) > 1:
+                    st.caption(
+                        f"計 {len(sources)}件"
+                    )
+            else:
+                st.write("未入力")
+
+        with action_col:
+            st.caption("操作")
+
+            detail_col, edit_col, delete_col = (
+                st.columns(3)
+            )
+
+            with detail_col:
+                if st.button(
+                    "詳細",
+                    key=f"detail_job_{job_id}",
+                    width="stretch",
+                ):
+                    st.query_params["page"] = (
+                        "job_detail"
+                    )
+
+                    st.query_params["job_id"] = (
+                        str(job_id)
+                    )
+
+                    st.rerun()
+
+            with edit_col:
+                if st.button(
+                    "編集",
+                    key=f"edit_job_{job_id}",
+                    width="stretch",
+                ):
+                    st.session_state[
+                        JOB_FORM_RETURN_PAGE_KEY
+                    ] = "job_list"
+
+                    load_job_for_edit(
+                        job_id
+                    )
+
+                    move_to_page(
+                        "job_registration"
+                    )
+
+            with delete_col:
+                if st.button(
+                    "削除",
+                    key=f"delete_job_{job_id}",
+                    width="stretch",
+                ):
+                    st.session_state[
+                        JOB_DELETE_CONFIRM_KEY
+                    ] = job_id
+
+                    st.rerun()
 
         render_delete_confirmation(
             job_id=job_id,
@@ -256,6 +345,16 @@ def show_page() -> None:
             JOB_DELETE_CONFIRM_KEY
         ] = None
 
+    if (
+        JOB_COMPARE_SELECTED_KEY
+        not in st.session_state
+    ):
+        st.session_state[
+            JOB_COMPARE_SELECTED_KEY
+        ] = []
+
+    jobs = load_jobs()
+
     header_col, register_col = st.columns(
         [4, 1]
     )
@@ -274,21 +373,152 @@ def show_page() -> None:
             type="primary",
             width="stretch",
         ):
+            start_new_job_registration()
+
             move_to_page(
                 "job_registration"
             )
 
-    jobs = load_jobs()
+    summary_col1, summary_col2, summary_col3, summary_col4 = (
+        st.columns(4)
+    )
+
+    with summary_col1:
+        st.metric(
+            "登録求人",
+            f"{len(jobs)}件",
+        )
+
+    with summary_col2:
+        st.metric(
+            "未判断",
+            "―",
+        )
+
+    with summary_col3:
+        st.metric(
+            "期限超過",
+            "―",
+        )
+
+    with summary_col4:
+        st.metric(
+            "次のアクション未設定",
+            "―",
+        )
+
+    search_keyword = st.text_input(
+        "求人を検索",
+        placeholder="会社名・求人名・職種・キーワードで検索",
+        key="job_list_search_keyword",
+    )
+
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
+
+    prefectures = sorted(
+        {
+            job.prefecture
+            for _, job in jobs
+            if job.prefecture
+        }
+    )
+
+    industries = sorted(
+        {
+            job.industry
+            for _, job in jobs
+            if job.industry
+        }
+    )
+
+    source_names = sorted(
+        {
+            source.source_name
+            for job_id, _ in jobs
+            for _, source in load_job_sources(job_id)
+            if source.source_name
+        }
+    )
+
+    with filter_col1:
+        selected_prefecture = st.selectbox(
+            "勤務地",
+            ["すべて"] + prefectures,
+            key="job_list_filter_prefecture",
+        )
+
+    with filter_col2:
+        selected_industry = st.selectbox(
+            "業種",
+            ["すべて"] + industries,
+            key="job_list_filter_industry",
+        )
+
+    with filter_col3:
+        selected_source_name = st.selectbox(
+            "紹介元",
+            ["すべて"] + source_names,
+            key="job_list_filter_source_name",
+        )
+
+    filtered_jobs = jobs
+
+    if search_keyword.strip():
+        keyword = search_keyword.strip().lower()
+
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if keyword in (
+                f"{job.company_name} "
+                f"{job.job_title} "
+                f"{job.occupation} "
+                f"{job.industry} "
+                f"{job.prefecture} "
+                f"{job.municipality}"
+            ).lower()
+        ]
+
+    if selected_prefecture != "すべて":
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if job.prefecture == selected_prefecture
+        ]
+
+    if selected_industry != "すべて":
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if job.industry == selected_industry
+        ]
+
+    if selected_source_name != "すべて":
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if any(
+                source.source_name
+                == selected_source_name
+                for _, source
+                in load_job_sources(job_id)
+            )
+        ]
 
     if not jobs:
         render_empty_state()
 
-    else:
-        st.caption(
-            f"{len(jobs)}件の求人を登録しています。"
+    elif not filtered_jobs:
+        st.info(
+            "検索条件に一致する求人はありません。"
         )
 
-        for job_id, job in jobs:
+    else:
+        st.caption(
+            f"{len(filtered_jobs)}件の求人を表示しています。"
+        )
+
+        for job_id, job in filtered_jobs:
             render_job_card(
                 job_id,
                 job,

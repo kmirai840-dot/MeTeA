@@ -294,6 +294,7 @@ class JobSource:
 
     source_type: str = ""
     source_name: str = ""
+    source_job_number: str = ""
     source_url: str = ""
     source_text: str = ""
     acquired_at: str = ""

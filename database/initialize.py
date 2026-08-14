@@ -94,6 +94,34 @@ def initialize_database() -> None:
                 """
             )
 
+        job_source_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(user_job_sources)"
+            ).fetchall()
+        }
+
+        required_job_source_columns = {
+            "source_job_number": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+        }
+
+        for (
+            column_name,
+            column_definition,
+        ) in required_job_source_columns.items():
+            if column_name in job_source_columns:
+                continue
+
+            connection.execute(
+                f"""
+                ALTER TABLE user_job_sources
+                ADD COLUMN {column_name}
+                {column_definition}
+                """
+            )
+
         connection.execute(
             """
             INSERT OR IGNORE INTO user_job_sources (

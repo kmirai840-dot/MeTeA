@@ -312,6 +312,7 @@ CREATE TABLE IF NOT EXISTS user_job_sources (
 
     source_type TEXT NOT NULL DEFAULT '',
     source_name TEXT NOT NULL DEFAULT '',
+        source_job_number TEXT NOT NULL DEFAULT '',
     source_url TEXT NOT NULL DEFAULT '',
     source_text TEXT NOT NULL DEFAULT '',
     acquired_at TEXT NOT NULL DEFAULT '',

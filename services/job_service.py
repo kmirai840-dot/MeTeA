@@ -33,7 +33,16 @@ from database.repositories.job_source_repository import (
 DUPLICATE_NONE = "none"
 DUPLICATE_EXACT = "exact"
 DUPLICATE_DIFFERENT_SOURCE = "different_source"
+DUPLICATE_POSSIBLE = "possible"
 
+
+# ========================================
+# 求人同一性の判定結果
+# ========================================
+
+JOB_MATCH_SAME = "same"
+JOB_MATCH_POSSIBLE = "possible"
+JOB_MATCH_NO_MATCH = "no_match"
 
 # ========================================
 # 比較表示用ラベル
@@ -193,19 +202,53 @@ def _normalize(
     ).casefold()
 
 
-def _is_same_job(
-    saved_job: Job,
+def _is_same_source(
+    saved_source: JobSource,
     new_job: Job,
 ) -> bool:
-    """求人を識別する情報が一致するか確認する。"""
+    """既存の紹介経路と今回の紹介経路が同じか確認する。"""
 
-    if (
-        saved_job.job_number.strip()
-        and new_job.job_number.strip()
-        and _normalize(saved_job.job_number)
+    return (
+        _normalize(saved_source.source_type)
+        == _normalize(new_job.source_type)
+        and _normalize(saved_source.source_name)
+        == _normalize(new_job.source_name)
+    )
+
+
+def _has_same_source_job_number(
+    saved_sources: list[tuple[int, JobSource]],
+    new_job: Job,
+) -> bool:
+    """同じ紹介経路に同じ求人番号があるか確認する。"""
+
+    if not new_job.job_number.strip():
+        return False
+
+    return any(
+        _is_same_source(
+            source,
+            new_job,
+        )
+        and source.source_job_number.strip()
+        and _normalize(source.source_job_number)
         == _normalize(new_job.job_number)
+        for _, source in saved_sources
+    )
+
+
+def _get_job_match_type(
+    saved_job: Job,
+    saved_sources: list[tuple[int, JobSource]],
+    new_job: Job,
+) -> str:
+    """既存求人と今回求人の同一性を3段階で判定する。"""
+
+    if _has_same_source_job_number(
+        saved_sources,
+        new_job,
     ):
-        return True
+        return JOB_MATCH_SAME
 
     if (
         saved_job.source_url.strip()
@@ -213,7 +256,7 @@ def _is_same_job(
         and _normalize(saved_job.source_url)
         == _normalize(new_job.source_url)
     ):
-        return True
+        return JOB_MATCH_SAME
 
     if (
         saved_job.source_text.strip()
@@ -221,7 +264,7 @@ def _is_same_job(
         and _normalize(saved_job.source_text)
         == _normalize(new_job.source_text)
     ):
-        return True
+        return JOB_MATCH_SAME
 
     if (
         saved_job.job_title.strip()
@@ -229,7 +272,7 @@ def _is_same_job(
         and _normalize(saved_job.job_title)
         == _normalize(new_job.job_title)
     ):
-        return True
+        return JOB_MATCH_POSSIBLE
 
     if (
         saved_job.occupation.strip()
@@ -241,9 +284,9 @@ def _is_same_job(
         and _normalize(saved_job.job_summary)
         == _normalize(new_job.job_summary)
     ):
-        return True
+        return JOB_MATCH_POSSIBLE
 
-    return False
+    return JOB_MATCH_NO_MATCH
 
 
 # ========================================
@@ -264,6 +307,7 @@ def check_duplicate_job(
     )
 
     different_source_job_id = None
+    possible_job_id = None
 
     for job_id, saved_job in candidates:
         if (
@@ -272,23 +316,30 @@ def check_duplicate_job(
         ):
             continue
 
-        if not _is_same_job(
-            saved_job,
-            job,
-        ):
-            continue
-
         saved_sources = get_job_sources(
             user_id=user_id,
             job_id=job_id,
         )
 
+        match_type = _get_job_match_type(
+            saved_job,
+            saved_sources,
+            job,
+        )
+
+        if match_type == JOB_MATCH_NO_MATCH:
+            continue
+
+        if match_type == JOB_MATCH_POSSIBLE:
+            if possible_job_id is None:
+                possible_job_id = job_id
+
+            continue
+
         same_source = any(
-            (
-                _normalize(source.source_type)
-                == _normalize(job.source_type)
-                and _normalize(source.source_name)
-                == _normalize(job.source_name)
+            _is_same_source(
+                source,
+                job,
             )
             for _, source in saved_sources
         )
@@ -314,6 +365,12 @@ def check_duplicate_job(
         return (
             DUPLICATE_DIFFERENT_SOURCE,
             different_source_job_id,
+        )
+
+    if possible_job_id is not None:
+        return (
+            DUPLICATE_POSSIBLE,
+            possible_job_id,
         )
 
     return (
@@ -394,6 +451,7 @@ def _job_to_source(
     return JobSource(
         source_type=job.source_type,
         source_name=job.source_name,
+        source_job_number=job.job_number,
         source_url=job.source_url,
         source_text=job.source_text,
         acquired_at=job.acquired_at,
@@ -523,6 +581,16 @@ def load_job(
     return get_job(
         user_id=get_current_user_id(),
         job_id=job_id,
+    )
+
+def load_job_sources(
+    job_id: int,
+) -> list[tuple[int, JobSource]]:
+    """指定求人に登録された紹介経路を取得する。"""
+
+    return get_job_sources(
+        get_current_user_id(),
+        job_id,
     )
 
 
