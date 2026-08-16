@@ -10,6 +10,9 @@ from database.repositories.job_hunting_axis_repository import (
 )
 from models import JobHuntingAxis
 from services.current_user_service import get_current_user_id
+from services.job_matching_cache_service import (
+    invalidate_current_user_job_evaluations,
+)
 
 
 JOB_HUNTING_AXIS_FORM_NAME = "job_hunting_axis"
@@ -129,11 +132,22 @@ def save_job_hunting_axis_data(
             "就活の軸の保存データを作成できませんでした。"
         ]
 
+    user_id = get_current_user_id()
+
+    saved_axes = get_job_hunting_axes(
+        user_id
+    )
+
     save_job_hunting_axes(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         axes=validated_axes,
         draft_form_name=JOB_HUNTING_AXIS_FORM_NAME,
     )
+
+    if saved_axes != validated_axes:
+        invalidate_current_user_job_evaluations(
+            reason="就活の軸が変更されました。",
+        )
 
     return []
 

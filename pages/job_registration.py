@@ -14,6 +14,10 @@ from models import Job
 from services.job_extraction_service import (
     extract_job_data,
 )
+from services.job_matching_auto_evaluation_service import (
+    automatically_evaluate_and_save_job,
+)
+
 from services.job_service import (
     DUPLICATE_DIFFERENT_SOURCE,
     DUPLICATE_EXACT,
@@ -3490,7 +3494,7 @@ def render_job_confirmation() -> None:
 
                     return
 
-                move_to_job_completion(
+                move_to_job_completion_after_ai_evaluation(
                     message="求人情報を更新しました。",
                     job_id=edit_job_id,
                 )
@@ -3516,7 +3520,7 @@ def render_job_confirmation() -> None:
 
                     return
 
-                move_to_job_completion(
+                move_to_job_completion_after_ai_evaluation(
                     message="求人情報を保存しました。",
                     job_id=job_id,
                 )
@@ -3628,6 +3632,52 @@ def move_to_job_completion(
     ] = "complete"
 
     st.rerun()
+
+
+def move_to_job_completion_after_ai_evaluation(
+    message: str,
+    job_id: int,
+) -> None:
+    """求人保存後にAI評価を行い、完了画面へ移動する。"""
+
+    with st.spinner(
+        "求人情報を保存しました。"
+        "AIマッチング評価を行っています。"
+    ):
+        (
+            evaluation,
+            evaluation_error,
+        ) = automatically_evaluate_and_save_job(
+            job_id=job_id
+        )
+
+    if evaluation_error:
+        move_to_job_completion(
+            message=message,
+            job_id=job_id,
+            note=evaluation_error,
+        )
+        return
+
+    completion_message = (
+        f"{message.rstrip('。')}。"
+        "AIマッチング評価も完了しました。"
+    )
+
+    if (
+        evaluation is not None
+        and evaluation.is_provisional
+    ):
+        completion_message = (
+            f"{completion_message}"
+            "現在評価できた情報："
+            f"{evaluation.evaluation_coverage}%"
+        )
+
+    move_to_job_completion(
+        message=completion_message,
+        job_id=job_id,
+    )
 
 
 def render_job_completion() -> None:
@@ -3924,7 +3974,7 @@ def render_duplicate_confirmation() -> None:
                     JOB_DUPLICATE_TYPE_KEY
                 ] = None
 
-                move_to_job_completion(
+                move_to_job_completion_after_ai_evaluation(
                     message="別の求人として保存しました。",
                     job_id=job_id,
                 )

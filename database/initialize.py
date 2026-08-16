@@ -15,6 +15,37 @@ def initialize_database() -> None:
     try:
         connection.executescript(schema)
 
+        user_profile_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(user_profiles)"
+            ).fetchall()
+        }
+
+        required_user_profile_columns = {
+            "nearest_station": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "nearest_station_place_id": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+        }
+
+        for (
+            column_name,
+            column_definition,
+        ) in required_user_profile_columns.items():
+            if column_name in user_profile_columns:
+                continue
+
+            connection.execute(
+                f"""
+                ALTER TABLE user_profiles
+                ADD COLUMN {column_name}
+                {column_definition}
+                """
+            )
+
         job_columns = {
             row["name"]
             for row in connection.execute(
@@ -117,6 +148,53 @@ def initialize_database() -> None:
             connection.execute(
                 f"""
                 ALTER TABLE user_job_sources
+                ADD COLUMN {column_name}
+                {column_definition}
+                """
+            )
+
+        job_evaluation_columns = {
+            row["name"]
+            for row in connection.execute(
+                """
+                PRAGMA table_info(
+                    user_job_match_evaluations
+                )
+                """
+            ).fetchall()
+        }
+
+        required_job_evaluation_columns = {
+            "evaluation_coverage": (
+                "INTEGER NOT NULL DEFAULT 0"
+            ),
+            "is_provisional": (
+                "INTEGER NOT NULL DEFAULT 1"
+            ),
+            "is_stale": (
+                "INTEGER NOT NULL DEFAULT 0"
+            ),
+            "stale_reason": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+        }
+
+        for (
+            column_name,
+            column_definition,
+        ) in (
+            required_job_evaluation_columns.items()
+        ):
+            if (
+                column_name
+                in job_evaluation_columns
+            ):
+                continue
+
+            connection.execute(
+                f"""
+                ALTER TABLE
+                    user_job_match_evaluations
                 ADD COLUMN {column_name}
                 {column_definition}
                 """

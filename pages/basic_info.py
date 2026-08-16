@@ -13,6 +13,11 @@ from services.basic_info_service import (
     validate_basic_info,
 )
 
+from services.station_search_service import (
+    StationSearchError,
+    search_station_candidates,
+)
+
 SAVED_DATA_KEY = "basic_info"
 ERRORS_KEY = "basic_info_errors"
 SAVE_MESSAGE_KEY = "basic_info_save_message"
@@ -26,6 +31,12 @@ BIRTH_MONTH_KEY = "basic_birth_month"
 BIRTH_DAY_KEY = "basic_birth_day"
 PREFECTURE_KEY = "basic_prefecture"
 MUNICIPALITY_KEY = "basic_municipality"
+NEAREST_STATION_KEY = "basic_nearest_station"
+NEAREST_STATION_PLACE_ID_KEY = (
+    "basic_nearest_station_place_id"
+)
+STATION_SEARCH_QUERY_KEY = "basic_station_search_query"
+STATION_CANDIDATES_KEY = "basic_station_candidates"
 
 # 入力チェックで作成されたエラーを取得するための識別名
 FAMILY_NAME_ERROR_KEY = "family_name"
@@ -37,6 +48,7 @@ BIRTH_DAY_ERROR_KEY = "birth_day"
 BIRTH_DATE_ERROR_KEY = "birth_date"
 PREFECTURE_ERROR_KEY = "prefecture"
 MUNICIPALITY_ERROR_KEY = "municipality"
+NEAREST_STATION_ERROR_KEY = "nearest_station"
 
 # 入力欄の識別名とエラーの識別名を対応付ける
 ERROR_KEY_BY_FIELD_KEY = {
@@ -48,6 +60,7 @@ ERROR_KEY_BY_FIELD_KEY = {
     BIRTH_DAY_KEY: BIRTH_DAY_ERROR_KEY,
     PREFECTURE_KEY: PREFECTURE_ERROR_KEY,
     MUNICIPALITY_KEY: MUNICIPALITY_ERROR_KEY,
+    NEAREST_STATION_KEY: NEAREST_STATION_ERROR_KEY,
 }
 
 
@@ -121,6 +134,9 @@ def build_empty_form_values() -> dict[str, str | int | None]:
         BIRTH_DAY_KEY: None,
         PREFECTURE_KEY: None,
         MUNICIPALITY_KEY: "",
+        NEAREST_STATION_KEY: "",
+        NEAREST_STATION_PLACE_ID_KEY: "",
+        STATION_SEARCH_QUERY_KEY: "",
     }
 
 
@@ -136,6 +152,18 @@ def build_current_form_values() -> dict[str, object]:
         BIRTH_DAY_KEY: st.session_state.get(BIRTH_DAY_KEY),
         PREFECTURE_KEY: st.session_state.get(PREFECTURE_KEY),
         MUNICIPALITY_KEY: st.session_state.get(MUNICIPALITY_KEY, ""),
+        NEAREST_STATION_KEY: st.session_state.get(
+            NEAREST_STATION_KEY,
+            "",
+        ),
+        NEAREST_STATION_PLACE_ID_KEY: st.session_state.get(
+            NEAREST_STATION_PLACE_ID_KEY,
+            "",
+        ),
+        STATION_SEARCH_QUERY_KEY: st.session_state.get(
+            STATION_SEARCH_QUERY_KEY,
+            "",
+        ),
     }
 
 
@@ -167,6 +195,11 @@ def build_saved_form_values(
         BIRTH_DAY_KEY: saved_data.birth_date.day,
         PREFECTURE_KEY: saved_data.prefecture,
         MUNICIPALITY_KEY: saved_data.municipality,
+        NEAREST_STATION_KEY: saved_data.nearest_station,
+        NEAREST_STATION_PLACE_ID_KEY: (
+            saved_data.nearest_station_place_id
+        ),
+        STATION_SEARCH_QUERY_KEY: saved_data.nearest_station,
     }
 
 
@@ -197,6 +230,28 @@ def initialize_basic_info_state() -> None:
 
     if ERRORS_KEY not in st.session_state:
         st.session_state[ERRORS_KEY] = {}
+
+    if STATION_CANDIDATES_KEY not in st.session_state:
+        saved_station_name = st.session_state.get(
+            NEAREST_STATION_KEY,
+            "",
+        )
+        saved_place_id = st.session_state.get(
+            NEAREST_STATION_PLACE_ID_KEY,
+            "",
+        )
+
+        if saved_station_name and saved_place_id:
+            st.session_state[STATION_CANDIDATES_KEY] = [
+                {
+                    "place_id": saved_place_id,
+                    "station_name": saved_station_name,
+                    "address_text": "",
+                    "display_name": saved_station_name,
+                },
+            ]
+        else:
+            st.session_state[STATION_CANDIDATES_KEY] = []
 
 
 def render_error_summary(
@@ -234,6 +289,46 @@ def render_field_error(
     if message:
         st.markdown(f":red[{message}]")
 
+
+def format_station_candidate(
+    place_id: str,
+) -> str:
+    """place_idを駅候補の表示名へ変換する。"""
+
+    candidates = st.session_state.get(
+        STATION_CANDIDATES_KEY,
+        [],
+    )
+
+    for candidate in candidates:
+        if candidate["place_id"] == place_id:
+            return candidate["display_name"]
+
+    return place_id
+
+
+def get_selected_station_values() -> tuple[str, str]:
+    """選択された駅名とplace_idを取得する。"""
+
+    selected_place_id = st.session_state.get(
+        NEAREST_STATION_PLACE_ID_KEY,
+        "",
+    )
+    candidates = st.session_state.get(
+        STATION_CANDIDATES_KEY,
+        [],
+    )
+
+    for candidate in candidates:
+        if candidate["place_id"] == selected_place_id:
+            return (
+                candidate["station_name"],
+                candidate["place_id"],
+            )
+
+    return "", ""
+
+
 def render_basic_info_page() -> None:
     """基本情報の入力画面を表示する。"""
 
@@ -255,6 +350,13 @@ def render_basic_info_page() -> None:
     )
 
     render_error_summary(errors)
+
+    selected_station_place_id_in_form = (
+        st.session_state.get(
+            NEAREST_STATION_PLACE_ID_KEY,
+            "",
+        )
+    )
 
     with st.form("basic_info_form"):
         name_columns = st.columns(2)
@@ -385,14 +487,179 @@ def render_basic_info_page() -> None:
                 errors,
                 MUNICIPALITY_KEY,
             )
+
+        st.markdown("**現在の最寄駅 :red[*]**")
+
+        station_search_columns = st.columns(
+            [4, 1],
+            vertical_alignment="bottom",
+        )
+
+        with station_search_columns[0]:
+            st.text_input(
+                "駅名",
+                key=STATION_SEARCH_QUERY_KEY,
+                placeholder="例）博多駅",
+                label_visibility="collapsed",
+                help=(
+                    "駅名を入力して「駅を検索」を押し、"
+                    "表示された候補から現在の最寄駅を選択してください。"
+                ),
+            )
+
+        with station_search_columns[1]:
+            station_search_submitted = (
+                st.form_submit_button(
+                    "駅を検索",
+                    use_container_width=True,
+                )
+            )
+
+        station_candidates = st.session_state.get(
+            STATION_CANDIDATES_KEY,
+            [],
+        )
+
+        if station_candidates:
+            station_place_id_options = [
+                candidate["place_id"]
+                for candidate in station_candidates
+            ]
+
+            current_place_id = st.session_state.get(
+                NEAREST_STATION_PLACE_ID_KEY,
+                "",
+            )
+
+            if current_place_id in station_place_id_options:
+                station_select_index = (
+                    station_place_id_options.index(
+                        current_place_id,
+                    )
+                )
+            else:
+                station_select_index = 0
+
+            selected_station_place_id_in_form = (
+                st.selectbox(
+                    "検索結果から最寄駅を選択してください *",
+                    options=station_place_id_options,
+                    index=station_select_index,
+                    format_func=format_station_candidate,
+                )
+            )
+
+            st.caption(
+                "選択した駅から勤務地の最寄駅までの"
+                "電車所要時間をAIマッチングに使用します。"
+                "徒歩時間は含みません。"
+            )
+            st.caption("Powered by Google")
+        else:
+            st.caption(
+                "駅名を入力して「駅を検索」を押してください。"
+                "候補が表示されたら、現在の最寄駅を選択します。"
+            )
+
+        render_field_error(
+            errors,
+            NEAREST_STATION_KEY,
+        )
+
         submitted = st.form_submit_button(
             "次へ →",
             use_container_width=True,
         )
 
 
+
+    if station_search_submitted:
+        search_query = st.session_state.get(
+            STATION_SEARCH_QUERY_KEY,
+            "",
+        ).strip()
+
+        if not search_query:
+            st.session_state[STATION_CANDIDATES_KEY] = []
+            st.session_state[NEAREST_STATION_KEY] = ""
+            st.session_state[
+                NEAREST_STATION_PLACE_ID_KEY
+            ] = ""
+            st.session_state[ERRORS_KEY][
+                NEAREST_STATION_ERROR_KEY
+            ] = "検索する駅名を入力してください"
+            st.rerun()
+
+        try:
+            station_candidates = search_station_candidates(
+                search_query,
+            )
+        except StationSearchError as error:
+            st.session_state[STATION_CANDIDATES_KEY] = []
+            st.session_state[NEAREST_STATION_KEY] = ""
+            st.session_state[
+                NEAREST_STATION_PLACE_ID_KEY
+            ] = ""
+            st.session_state[ERRORS_KEY][
+                NEAREST_STATION_ERROR_KEY
+            ] = str(error)
+            st.rerun()
+
+        if not station_candidates:
+            st.session_state[STATION_CANDIDATES_KEY] = []
+            st.session_state[NEAREST_STATION_KEY] = ""
+            st.session_state[
+                NEAREST_STATION_PLACE_ID_KEY
+            ] = ""
+            st.session_state[ERRORS_KEY][
+                NEAREST_STATION_ERROR_KEY
+            ] = (
+                "該当する駅が見つかりませんでした。"
+                "駅名を確認して、もう一度検索してください"
+            )
+            st.rerun()
+
+        st.session_state[STATION_CANDIDATES_KEY] = [
+            {
+                "place_id": candidate.place_id,
+                "station_name": candidate.station_name,
+                "address_text": candidate.address_text,
+                "display_name": candidate.display_name,
+            }
+            for candidate in station_candidates
+        ]
+
+        first_candidate = station_candidates[0]
+
+        st.session_state[NEAREST_STATION_KEY] = (
+            first_candidate.station_name
+        )
+        st.session_state[
+            NEAREST_STATION_PLACE_ID_KEY
+        ] = first_candidate.place_id
+
+        st.session_state[ERRORS_KEY].pop(
+            NEAREST_STATION_ERROR_KEY,
+            None,
+        )
+
+        st.rerun()
+
     if not submitted:
         return
+
+    st.session_state[
+        NEAREST_STATION_PLACE_ID_KEY
+    ] = selected_station_place_id_in_form
+
+    (
+        selected_station_name,
+        selected_station_place_id,
+    ) = get_selected_station_values()
+
+    st.session_state[NEAREST_STATION_KEY] = (
+        selected_station_name
+    )
 
     save_basic_info_draft(
         build_current_form_values(),
@@ -408,6 +675,10 @@ def render_basic_info_page() -> None:
         st.session_state[BIRTH_DAY_KEY],
         st.session_state[PREFECTURE_KEY],
         st.session_state[MUNICIPALITY_KEY],
+        st.session_state[NEAREST_STATION_KEY],
+        st.session_state[
+            NEAREST_STATION_PLACE_ID_KEY
+        ],
     )
 
     st.session_state[ERRORS_KEY] = validation_errors

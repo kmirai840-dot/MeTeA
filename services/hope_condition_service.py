@@ -11,6 +11,9 @@ from database.repositories.hope_condition_repository import (
 )
 from models import HopeCondition, HopeConditionItem
 from services.current_user_service import get_current_user_id
+from services.job_matching_cache_service import (
+    invalidate_current_user_job_evaluations,
+)
 
 
 HOPE_CONDITIONS_FORM_NAME = "hope_conditions"
@@ -43,12 +46,29 @@ def save_hope_conditions_data(
 ) -> None:
     """希望条件を正式保存する。"""
 
+    user_id = get_current_user_id()
+
+    saved_hope_condition = get_hope_condition(
+        user_id,
+    )
+    saved_items = get_hope_condition_items(
+        user_id,
+    )
+
     save_hope_conditions(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         hope_condition=hope_condition,
         items=items,
         draft_form_name=HOPE_CONDITIONS_FORM_NAME,
     )
+
+    if (
+        saved_hope_condition != hope_condition
+        or saved_items != items
+    ):
+        invalidate_current_user_job_evaluations(
+            reason="希望条件が変更されました。",
+        )
 
 
 def load_hope_conditions_data(

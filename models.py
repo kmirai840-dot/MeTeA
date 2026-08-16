@@ -12,6 +12,8 @@ class BasicInfo:
     birth_date: date
     prefecture: str
     municipality: str
+    nearest_station: str
+    nearest_station_place_id: str = ""
 
 
 # ========================================
@@ -300,3 +302,87 @@ class JobSource:
     acquired_at: str = ""
     notes: str = ""
     is_primary: bool = False
+
+
+
+
+# ========================================
+# 求人ごとの電車移動時間
+# ========================================
+@dataclass(frozen=True)
+class JobCommuteCheck:
+    """利用者と求人の組み合わせごとの電車移動時間を保持する。"""
+
+    job_id: int
+    origin_station_name: str
+    origin_station_place_id: str
+    destination_station_name: str
+    duration_minutes: int
+    source_type: str
+    checked_at: str
+
+
+# ========================================
+# AIによる意味判定結果
+# ========================================
+@dataclass(frozen=True)
+class AISemanticMatchItem:
+    """AIが意味を比較した項目1件分の結果。"""
+
+    category: str
+    item_name: str
+    judgment: str
+    reason: str
+    weight: int = 1
+    hope_group: str = ""
+    evidence: str = ""
+    is_major_required_mismatch: bool = False
+
+
+@dataclass(frozen=True)
+class JobAISemanticEvaluation:
+    """求人1件に対するAI意味判定の構造化結果。"""
+
+    job_id: int
+    items: list[AISemanticMatchItem] = field(
+        default_factory=list
+    )
+    model_name: str = ""
+    prompt_version: str = ""
+    evaluated_at: str | None = None
+
+
+# ========================================
+# 求人のAIマッチング評価
+# ========================================
+@dataclass
+class JobMatchEvaluation:
+    job_id: int
+    overall_score: int | None = None
+    hope_condition_score: int | None = None
+    work_value_score: int | None = None
+    career_skill_score: int | None = None
+    required_condition_score: int | None = None
+    matching_points: str = ""
+    concern_points: str = ""
+    confirmation_points: str = ""
+    ai_comment: str = ""
+    evaluated_at: str | None = None
+    evaluation_coverage: int = 0
+    is_provisional: bool = True
+    is_stale: bool = False
+    stale_reason: str = ""
+
+
+# ========================================
+# 求人の応募判断
+# ========================================
+@dataclass
+class JobApplicationDecision:
+    """求人1件分の応募判断と管理情報を保持するクラス。"""
+
+    job_id: int
+    decision_status: str = ""
+    next_action: str = ""
+    action_deadline: str | None = None
+    memo: str = ""

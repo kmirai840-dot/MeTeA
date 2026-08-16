@@ -10,10 +10,14 @@ from database.repositories.user_repository import (
 )
 from models import BasicInfo
 from services.current_user_service import get_current_user_id
+from services.job_matching_cache_service import (
+    invalidate_current_user_job_evaluations,
+)
 
 
 MAX_NAME_LENGTH = 30
 MAX_MUNICIPALITY_LENGTH = 50
+MAX_STATION_NAME_LENGTH = 100
 BASIC_INFO_FORM_NAME = "basic_info"
 
 
@@ -26,6 +30,8 @@ def validate_basic_info(
     birth_day: int | None,
     prefecture: str | None,
     municipality: str,
+    nearest_station: str,
+    nearest_station_place_id: str = "",
 ) -> tuple[BasicInfo | None, dict[str, str]]:
     """基本情報を確認し、正常なデータまたはエラー一覧を返す。"""
 
@@ -34,6 +40,10 @@ def validate_basic_info(
     normalized_family_name = family_name.strip()
     normalized_given_name = given_name.strip()
     normalized_municipality = municipality.strip()
+    normalized_nearest_station = nearest_station.strip()
+    normalized_nearest_station_place_id = (
+        nearest_station_place_id.strip()
+    )
 
     # 姓
     if not normalized_family_name:
@@ -105,6 +115,19 @@ def validate_basic_info(
             f"市区町村は{MAX_MUNICIPALITY_LENGTH}文字以内で入力してください"
         )
 
+    # 現在の最寄駅
+    if (
+        not normalized_nearest_station
+        or not normalized_nearest_station_place_id
+    ):
+        errors["nearest_station"] = (
+            "駅を検索し、候補から現在の最寄駅を選択してください"
+        )
+    elif len(normalized_nearest_station) > MAX_STATION_NAME_LENGTH:
+        errors["nearest_station"] = (
+            f"現在の最寄駅は{MAX_STATION_NAME_LENGTH}文字以内で入力してください"
+        )
+
     # エラーが1件でもあれば、保存用データは作成しない
     if errors:
         return None, errors
@@ -121,6 +144,10 @@ def validate_basic_info(
         birth_date=birth_date_value,
         prefecture=prefecture,
         municipality=normalized_municipality,
+        nearest_station=normalized_nearest_station,
+        nearest_station_place_id=(
+            normalized_nearest_station_place_id
+        ),
     )
 
     return basic_info, {}
@@ -152,11 +179,21 @@ def save_basic_info(
 ) -> None:
     """基本情報を正式保存する。"""
 
+    user_id = get_current_user_id()
+    saved_basic_info = get_user_profile(
+        user_id=user_id,
+    )
+
     save_user_profile(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         basic_info=basic_info,
         draft_form_name=BASIC_INFO_FORM_NAME,
     )
+
+    if saved_basic_info != basic_info:
+        invalidate_current_user_job_evaluations(
+            reason="基本情報が変更されました。",
+        )
 
 
 def load_basic_info() -> BasicInfo | None:

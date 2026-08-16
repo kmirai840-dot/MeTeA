@@ -34,6 +34,9 @@ from models import (
     WorkValueRanking,
 )
 from services.current_user_service import get_current_user_id
+from services.job_matching_cache_service import (
+    invalidate_current_user_job_evaluations,
+)
 
 
 RANKING_OPTION_MAP = {
@@ -334,13 +337,32 @@ def save_work_values_data(
             "価値観の保存データを作成できませんでした。"
         ]
 
+    user_id = get_current_user_id()
+
+    (
+        saved_rankings,
+        saved_details,
+        saved_work_style_answers,
+    ) = get_work_values(
+        user_id
+    )
+
     save_work_values(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         rankings=validated_rankings,
         details=validated_details,
         work_style_answers=validated_answers,
         draft_form_name=WORK_VALUES_FORM_NAME,
     )
+
+    if (
+        saved_rankings != validated_rankings
+        or saved_details != validated_details
+        or saved_work_style_answers != validated_answers
+    ):
+        invalidate_current_user_job_evaluations(
+            reason="価値観が変更されました。",
+        )
 
     return []
 

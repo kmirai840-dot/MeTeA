@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     birth_date TEXT NOT NULL,
     prefecture TEXT NOT NULL,
     municipality TEXT NOT NULL,
+    nearest_station TEXT NOT NULL DEFAULT '',
+    nearest_station_place_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TEXT,
@@ -332,6 +334,110 @@ CREATE TABLE IF NOT EXISTS user_job_sources (
         source_type,
         source_name,
         source_url
+    )
+);
+
+-- ========================================
+-- 求人ごとの電車移動時間
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_commute_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+
+    origin_station_name TEXT NOT NULL,
+    origin_station_place_id TEXT NOT NULL,
+    destination_station_name TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    checked_at TEXT NOT NULL,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users (id),
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id),
+
+    UNIQUE (
+        user_id,
+        job_id
+    )
+);
+
+
+
+
+-- ========================================
+-- 求人：AIマッチング評価
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_match_evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+
+    overall_score INTEGER,
+    hope_condition_score INTEGER,
+    work_value_score INTEGER,
+    career_skill_score INTEGER,
+    required_condition_score INTEGER,
+
+    evaluation_coverage INTEGER NOT NULL DEFAULT 0,
+    is_provisional INTEGER NOT NULL DEFAULT 1,
+    is_stale INTEGER NOT NULL DEFAULT 0,
+    stale_reason TEXT NOT NULL DEFAULT '',
+
+    matching_points TEXT NOT NULL DEFAULT '',
+    concern_points TEXT NOT NULL DEFAULT '',
+    confirmation_points TEXT NOT NULL DEFAULT '',
+    ai_comment TEXT NOT NULL DEFAULT '',
+
+    evaluated_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users (id),
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id),
+
+    UNIQUE (
+        user_id,
+        job_id
+    )
+);
+
+
+-- ========================================
+-- 求人：応募判断
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_application_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+
+    decision_status TEXT NOT NULL DEFAULT '',
+    next_action TEXT NOT NULL DEFAULT '',
+    action_deadline TEXT,
+    memo TEXT NOT NULL DEFAULT '',
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users (id),
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id),
+
+    UNIQUE (
+        user_id,
+        job_id
     )
 );
 

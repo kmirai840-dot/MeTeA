@@ -10,6 +10,9 @@ from database.repositories.career_repository import (
 )
 
 from services.current_user_service import get_current_user_id
+from services.job_matching_cache_service import (
+    invalidate_current_user_job_evaluations,
+)
 
 
 def validate_careers(
@@ -73,10 +76,21 @@ def save_career_data(
     if errors:
         return errors
 
+    user_id = get_current_user_id()
+
+    saved_career_items = get_careers(
+        user_id
+    )
+
     save_careers(
-        user_id=get_current_user_id(),
+        user_id=user_id,
         career_items=career_items,
     )
+
+    if saved_career_items != career_items:
+        invalidate_current_user_job_evaluations(
+            reason="職務経歴・スキルが変更されました。",
+        )
 
     return []
 

@@ -36,6 +36,10 @@ from pages.job_detail import (
     show_page as render_job_detail_page,
 )
 
+from pages.job_comparison import (
+    show_page as render_job_comparison_page,
+)
+
 # ========================================
 # 基本設定
 # ========================================
@@ -75,6 +79,7 @@ valid_pages = {
     "job_registration",
     "job_list",
     "job_detail",
+    "job_comparison",
     "application_list",
     "milestones",
     "activity_history",
@@ -139,6 +144,10 @@ elif current_page == "job_list":
 
 elif current_page == "job_detail":
     render_job_detail_page()
+    st.stop()
+
+elif current_page == "job_comparison":
+    render_job_comparison_page()
     st.stop()
 
 elif current_page == "application_list":

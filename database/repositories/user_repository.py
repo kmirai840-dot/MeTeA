@@ -23,9 +23,11 @@ def save_user_profile(
                 gender,
                 birth_date,
                 prefecture,
-                municipality
+                municipality,
+                nearest_station,
+                nearest_station_place_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (user_id)
             DO UPDATE SET
                 last_name = excluded.last_name,
@@ -34,6 +36,10 @@ def save_user_profile(
                 birth_date = excluded.birth_date,
                 prefecture = excluded.prefecture,
                 municipality = excluded.municipality,
+                nearest_station = excluded.nearest_station,
+                nearest_station_place_id = (
+                    excluded.nearest_station_place_id
+                ),
                 updated_at = CURRENT_TIMESTAMP,
                 deleted_at = NULL
             """,
@@ -45,6 +51,8 @@ def save_user_profile(
                 basic_info.birth_date.isoformat(),
                 basic_info.prefecture,
                 basic_info.municipality,
+                basic_info.nearest_station,
+                basic_info.nearest_station_place_id,
             ),
         )
 
@@ -84,7 +92,9 @@ def get_user_profile(
                 gender,
                 birth_date,
                 prefecture,
-                municipality
+                municipality,
+                nearest_station,
+                nearest_station_place_id
             FROM user_profiles
             WHERE user_id = ?
               AND deleted_at IS NULL
@@ -104,4 +114,8 @@ def get_user_profile(
         birth_date=date.fromisoformat(row["birth_date"]),
         prefecture=row["prefecture"],
         municipality=row["municipality"],
+        nearest_station=row["nearest_station"],
+        nearest_station_place_id=(
+            row["nearest_station_place_id"]
+        ),
     )
