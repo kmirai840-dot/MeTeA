@@ -502,6 +502,15 @@ def render_url_registration() -> None:
             key="job_registration_url",
         )
 
+        st.info(
+            "URLから読み込めるのは、企業の採用ページなど、"
+            "ログインせずに閲覧できる公開求人ページです。\n\n"
+            "会員登録・ログインが必要な求人サイトや、"
+            "アクセスが制限されているページは読み込めない場合があります。\n\n"
+            "その場合は、求人票の本文をコピーして"
+            "「求人票を貼り付け」をご利用ください。"
+        )
+
         if st.button(
             "🔍 求人情報を取得する",
             key="job_registration_url_button",

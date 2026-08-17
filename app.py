@@ -6,10 +6,7 @@ import base64
 import streamlit as st
 
 from database.initialize import initialize_database
-from pages.basic_info import (
-    SAVE_MESSAGE_KEY,
-    render_basic_info_page,
-)
+from pages.basic_info import render_basic_info_page
 from pages.hope_conditions import render_hope_conditions_page
 
 from pages.job_hunting_axis import (
@@ -30,6 +27,13 @@ from pages.job_registration import (
 
 from pages.job_list import (
     show_page as render_job_list_page,
+)
+
+from pages.application_management import (
+    render_application_dashboard_page,
+    render_application_detail_page,
+    render_application_list_page,
+    render_selection_preparation_page,
 )
 
 from pages.job_detail import (
@@ -70,6 +74,9 @@ current_page = st.query_params.get(
 
 valid_pages = {
     "home",
+    "application_dashboard",
+    "application_detail",
+    "selection_preparation",
     "basic_info",
     "hope_conditions",
     "job_hunting_axis",
@@ -118,25 +125,9 @@ elif current_page == "job_registration":
     st.stop()
 
 elif current_page == "job_change_reason":
-    st.title("転職理由")
-
-    save_message = st.session_state.pop(
-        SAVE_MESSAGE_KEY,
-        None,
-    )
-
-    if save_message:
-        st.success(save_message)
-
-    st.write(
-        "転職理由画面は、今後この場所に実装します。"
-    )
-
-    if st.button("基本情報画面へ戻る"):
-        st.query_params["page"] = "basic_info"
-        st.rerun()
-
-    st.stop()
+    # 旧URLとの互換性を保ち、現在の入力フローへ案内する。
+    st.query_params["page"] = "hope_conditions"
+    st.rerun()
 
 elif current_page == "job_list":
     render_job_list_page()
@@ -151,42 +142,27 @@ elif current_page == "job_comparison":
     st.stop()
 
 elif current_page == "application_list":
-    st.title("応募企業一覧")
-
-    st.write(
-        "応募企業一覧画面は、今後この場所に実装します。"
-    )
-
-    if st.button("トップ画面へ戻る"):
-        st.query_params.clear()
-        st.rerun()
-
+    render_application_list_page()
     st.stop()
 
 elif current_page == "milestones":
-    st.title("マイルストーン")
-
-    st.write(
-        "期限が近いタスクの一覧画面は、今後この場所に実装します。"
-    )
-
-    if st.button("トップ画面へ戻る"):
-        st.query_params.clear()
-        st.rerun()
-
+    render_application_list_page(focus="milestones")
     st.stop()
 
 elif current_page == "activity_history":
-    st.title("活動履歴")
+    render_application_list_page(focus="activity_history")
+    st.stop()
 
-    st.write(
-        "最近の活動の一覧画面は、今後この場所に実装します。"
-    )
+elif current_page == "application_dashboard":
+    render_application_dashboard_page()
+    st.stop()
 
-    if st.button("トップ画面へ戻る"):
-        st.query_params.clear()
-        st.rerun()
+elif current_page == "application_detail":
+    render_application_detail_page()
+    st.stop()
 
+elif current_page == "selection_preparation":
+    render_selection_preparation_page()
     st.stop()
 
 elif current_page == "settings":

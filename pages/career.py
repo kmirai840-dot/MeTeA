@@ -4,6 +4,8 @@ from dataclasses import replace
 
 import streamlit as st
 
+from pages.self_discovery_theme import apply_self_discovery_theme
+
 from models import (
     Career,
     CareerHistory,
@@ -55,6 +57,7 @@ CAREER_SCROLL_TO_FORM_KEY = (
 )
 
 CAREER_COMPLETE_KEY = "career_complete"
+CAREER_REVIEW_CONFIRMED_KEY = "career_review_confirmed"
 
 # ==========================================
 # 初期化
@@ -1145,6 +1148,10 @@ def move_to_next_ai_career(
     ] = True
 
     st.session_state[
+        CAREER_REVIEW_CONFIRMED_KEY
+    ] = False
+
+    st.session_state[
         CAREER_SCROLL_TO_FORM_KEY
     ] = True
 
@@ -1294,6 +1301,10 @@ def save_current_company() -> None:
     st.session_state[
         CAREER_COMPLETE_KEY
     ] = True
+
+    st.session_state[
+        CAREER_REVIEW_CONFIRMED_KEY
+    ] = False
 
     st.session_state[
         CAREER_SCROLL_TO_FORM_KEY
@@ -1501,7 +1512,7 @@ def render_history_list() -> None:
 
             with button_left:
                 st.button(
-                    "✏ 編集",
+                    "編集",
                     key=(
                         "career_history_edit_"
                         f"{index}"
@@ -1515,7 +1526,7 @@ def render_history_list() -> None:
 
             with button_right:
                 st.button(
-                    "🗑 削除",
+                    "削除",
                     key=(
                         "career_history_delete_"
                         f"{index}"
@@ -1768,7 +1779,7 @@ def render_company_list() -> None:
 
             with button_left:
                 st.button(
-                    "✏ 編集",
+                    "編集",
                     key=(
                         "career_edit_"
                         f"{index}"
@@ -1782,7 +1793,7 @@ def render_company_list() -> None:
 
             with button_right:
                 st.button(
-                    "🗑 削除",
+                    "削除",
                     key=(
                         "career_delete_"
                         f"{index}"
@@ -1792,12 +1803,60 @@ def render_company_list() -> None:
                     args=(index - 1,),
                 )
 
+def render_career_review_summary() -> None:
+    """保存済みの職務経歴を確定前の確認用に表示する。"""
+
+    career_items = st.session_state.get(CAREER_ITEMS_KEY, [])
+    history_count = sum(len(histories) for _, histories in career_items)
+
+    summary_columns = st.columns(2)
+    summary_columns[0].metric("登録企業", f"{len(career_items)}社")
+    summary_columns[1].metric("部署・役割", f"{history_count}件")
+
+    for career, histories in career_items:
+        with st.container(border=True):
+            st.markdown(f"### {career.company_name}")
+            period_end = (
+                "現在"
+                if career.is_current
+                else f"{career.end_year}/{career.end_month}"
+            )
+            st.caption(
+                f"{career.start_year}/{career.start_month} ～ {period_end}"
+            )
+            details = [
+                value
+                for value in (career.employment_type, career.industry)
+                if value
+            ]
+            if details:
+                st.write(" / ".join(details))
+
+            for history in histories:
+                heading = " / ".join(
+                    value
+                    for value in (
+                        history.department,
+                        history.position,
+                        history.occupation,
+                    )
+                    if value
+                )
+                if heading:
+                    st.markdown(f"**{heading}**")
+                if history.job_description:
+                    st.write(history.job_description)
+                if history.achievements:
+                    st.caption(f"実績・成果：{history.achievements}")
+
 # ==========================================
 # 職務経歴画面
 # ==========================================
 
 def show_page() -> None:
     """職務経歴入力画面を表示する。"""
+
+    apply_self_discovery_theme(current_step=5)
 
     initialize_career_state()
 
@@ -1807,7 +1866,19 @@ def show_page() -> None:
     ):
         reset_current_career_form_state()
 
-    st.title("💼 職務経歴")
+    if st.button(
+        "← 就活の軸へ戻る",
+        key="career_back_top",
+    ):
+        st.query_params["page"] = "job_hunting_axis"
+        st.rerun()
+
+    st.title("職務経歴・スキル")
+
+    st.progress(
+        1.0,
+        text="自分を知る 5 / 5　職務経歴・スキル",
+    )
 
     st.caption(
         "これまでの職務経歴を"
@@ -1851,7 +1922,11 @@ def show_page() -> None:
                 border=True
             ):
 
-                st.markdown("## 📄")
+                st.markdown(
+                    "<div class='metea-method-illustration metea-method-illustration--upload' "
+                    "aria-hidden='true'>▤</div>",
+                    unsafe_allow_html=True,
+                )
 
                 st.markdown(
                     "### 職務経歴書から取り込む"
@@ -1901,7 +1976,7 @@ def show_page() -> None:
                             )
                         )
 
-                        st.success(
+                        st.info(
                             "Wordファイルを"
                             "読み取りました。"
                         )
@@ -1936,7 +2011,7 @@ def show_page() -> None:
 
                         if parsed_careers:
 
-                            st.success(
+                            st.info(
                                 "AIによる整理が"
                                 "完了しました。"
                             )
@@ -1993,7 +2068,11 @@ def show_page() -> None:
                 border=True
             ):
 
-                st.markdown("## ✍")
+                st.markdown(
+                    "<div class='metea-method-illustration metea-method-illustration--manual' "
+                    "aria-hidden='true'>✎</div>",
+                    unsafe_allow_html=True,
+                )
 
                 st.markdown(
                     "### 手入力する"
@@ -2023,57 +2102,99 @@ def show_page() -> None:
 
                     st.rerun()
 
+        guidance_columns = st.columns(2)
+
+        with guidance_columns[0]:
+            st.markdown(
+                """
+                <div class="metea-career-guide">
+                  <div class="metea-career-guide__icon">✓</div>
+                  <div>
+                    <strong>登録のポイント</strong>
+                    <ul>
+                      <li>会社ごとに登録できます</li>
+                      <li>複数の部署・役割も整理できます</li>
+                      <li>保存後も編集・追加・削除できます</li>
+                    </ul>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with guidance_columns[1]:
+            st.markdown(
+                """
+                <div class="metea-career-guide metea-career-guide--ai">
+                  <div class="metea-career-guide__icon">✦</div>
+                  <div>
+                    <strong>AI取り込みについて</strong>
+                    <p>AIが会社名・部署・役割・実績などを整理します。抽出後に内容を確認し、必要に応じて修正してから保存してください。</p>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
         st.stop()
-
-    # ======================================
-    # 登録済み会社
-    # ======================================
-
-    render_company_list()
 
     if st.session_state.get(
         CAREER_COMPLETE_KEY,
         False,
     ):
-        st.success(
-            "🌟 プロフィールが完成しました！"
+        st.subheader("入力内容の確認")
+        st.caption(
+            "登録内容を確認してください。修正が必要な場合は入力画面へ戻れます。"
         )
+        render_career_review_summary()
 
-        st.write(
-            "ここまで入力ありがとうございます。"
-            "あなたのプロフィールをもとに、"
-            "求人との相性を比較する準備が整いました。"
-        )
-
-        job_column, top_column = st.columns(2)
-
-        with job_column:
+        review_columns = st.columns([1, 2])
+        with review_columns[0]:
             if st.button(
-                "求人票を登録する",
-                key="career_complete_job",
+                "入力を修正する",
+                key="career_review_back",
+                use_container_width=True,
+            ):
+                st.session_state[CAREER_COMPLETE_KEY] = False
+                st.rerun()
+
+        with review_columns[1]:
+            if st.button(
+                "この内容で完了する",
+                key="career_review_confirm",
                 type="primary",
                 use_container_width=True,
             ):
-                st.session_state[
-                    CAREER_COMPLETE_KEY
-                ] = False
-                st.query_params["page"] = "job_list"
-                st.rerun()
+                st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = True
 
-        with top_column:
-            if st.button(
-                "トップへ戻る",
-                key="career_complete_top",
-                use_container_width=True,
-            ):
-                st.session_state[
-                    CAREER_COMPLETE_KEY
-                ] = False
-                st.query_params.clear()
-                st.rerun()
-
+        if st.session_state.get(CAREER_REVIEW_CONFIRMED_KEY, False):
+            st.success("プロフィールの登録が完了しました。")
+            job_column, top_column = st.columns(2)
+            with job_column:
+                if st.button(
+                    "求人票を登録する",
+                    key="career_complete_job",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    st.session_state[CAREER_COMPLETE_KEY] = False
+                    st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
+                    st.query_params["page"] = "job_list"
+                    st.rerun()
+            with top_column:
+                if st.button(
+                    "トップへ戻る",
+                    key="career_complete_top",
+                    use_container_width=True,
+                ):
+                    st.session_state[CAREER_COMPLETE_KEY] = False
+                    st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
+                    st.query_params.clear()
+                    st.rerun()
         st.stop()
-        
+
+    render_company_list()
+
     # ======================================
     # フォーム先頭へ移動
     # ======================================

@@ -441,5 +441,117 @@ CREATE TABLE IF NOT EXISTS user_job_application_decisions (
     )
 );
 
+-- ========================================
+-- 求人：確認項目に対する利用者判断
+-- ========================================
+CREATE TABLE IF NOT EXISTS user_job_confirmation_resolutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+    item_key TEXT NOT NULL,
+    item_name TEXT NOT NULL DEFAULT '',
+    item_reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'not_required',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users (id),
+
+    FOREIGN KEY (job_id)
+        REFERENCES user_jobs (id),
+
+    UNIQUE (
+        user_id,
+        job_id,
+        item_key
+    )
+);
+
+CREATE TABLE IF NOT EXISTS user_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+    actual_route TEXT NOT NULL DEFAULT '',
+    current_phase TEXT NOT NULL DEFAULT '応募準備',
+    phase_category TEXT NOT NULL DEFAULT '応募準備',
+    selection_result TEXT NOT NULL DEFAULT '',
+    application_date TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (job_id) REFERENCES user_jobs (id),
+    UNIQUE (user_id, job_id, actual_route)
+);
+
+CREATE TABLE IF NOT EXISTS application_phase_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    selection_result TEXT NOT NULL DEFAULT '',
+    application_id INTEGER NOT NULL,
+    phase_name TEXT NOT NULL,
+    phase_category TEXT NOT NULL,
+    changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES user_applications (id)
+);
+
+CREATE TABLE IF NOT EXISTS application_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    milestone_type TEXT NOT NULL,
+    detail_name TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    schedule_kind TEXT NOT NULL DEFAULT 'event',
+    scheduled_date TEXT,
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    rescheduled_from_id INTEGER,
+    deleted_at TEXT,
+    memo TEXT NOT NULL DEFAULT '',
+    completed_at TEXT,
+    cancelled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES user_applications (id),
+    FOREIGN KEY (rescheduled_from_id) REFERENCES application_milestones (id)
+);
+
+CREATE TABLE IF NOT EXISTS application_activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    activity_type TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    is_automatic INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES user_applications (id)
+);
+
+CREATE TABLE IF NOT EXISTS application_preparations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'selection',
+    selection_type TEXT NOT NULL DEFAULT '',
+    theme_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    is_completed INTEGER NOT NULL DEFAULT 0,
+    is_custom INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES user_applications (id),
+    UNIQUE (application_id, scope, selection_type, theme_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_applications_user_status ON user_applications (user_id, status);
+CREATE INDEX IF NOT EXISTS idx_milestones_date ON application_milestones (scheduled_date, status);
+CREATE INDEX IF NOT EXISTS idx_activities_application_date ON application_activities (application_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_preparations_application ON application_preparations (application_id, scope, selection_type);
 INSERT OR IGNORE INTO users (id)
 VALUES (1);

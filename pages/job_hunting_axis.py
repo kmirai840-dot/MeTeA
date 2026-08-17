@@ -2,7 +2,12 @@
 
 import streamlit as st
 
+from pages.self_discovery_theme import apply_self_discovery_theme
+
 from models import JobHuntingAxis
+from services.job_hunting_axis_suggestion_service import (
+    suggest_job_hunting_axes,
+)
 from services.job_hunting_axis_service import (
     MAX_AXIS_COUNT,
     delete_axis,
@@ -21,6 +26,7 @@ ADD_FORM_VISIBLE_KEY = "job_hunting_axis_add_form_visible"
 MESSAGE_KEY = "job_hunting_axis_message"
 EDITING_INDEX_KEY = "job_hunting_axis_editing_index"
 DELETE_CONFIRM_INDEX_KEY = "job_hunting_axis_delete_confirm_index"
+REGENERATE_CONFIRM_KEY = "job_hunting_axis_regenerate_confirm"
 
 
 def axis_to_dict(
@@ -83,15 +89,23 @@ def initialize_job_hunting_axis_state() -> None:
             [],
         )
 
-        st.session_state[AXES_STATE_KEY] = [
+        restored_axes = [
             dict_to_axis(axis_data)
             for axis_data in draft_axes
             if isinstance(axis_data, dict)
         ]
+        st.session_state[AXES_STATE_KEY] = (
+            restored_axes
+            if restored_axes
+            else suggest_job_hunting_axes()
+        )
 
     else:
+        saved_axes = load_job_hunting_axis_data()
         st.session_state[AXES_STATE_KEY] = (
-            load_job_hunting_axis_data()
+            saved_axes
+            if saved_axes
+            else suggest_job_hunting_axes()
         )
 
     st.session_state[AXES_LOADED_KEY] = True
@@ -104,6 +118,9 @@ def initialize_job_hunting_axis_state() -> None:
 
     if DELETE_CONFIRM_INDEX_KEY not in st.session_state:
         st.session_state[DELETE_CONFIRM_INDEX_KEY] = None
+
+    if REGENERATE_CONFIRM_KEY not in st.session_state:
+        st.session_state[REGENERATE_CONFIRM_KEY] = False
 
 
 def collect_job_hunting_axis_draft(
@@ -149,9 +166,14 @@ def add_axis(
             "軸の名称は50文字以内で入力してください。"
         )
 
+    if not description:
+        errors.append(
+            "具体的な判断基準を入力してください。"
+        )
+
     if len(description) > 200:
         errors.append(
-            "補足説明は200文字以内で入力してください。"
+            "具体的な判断基準は200文字以内で入力してください。"
         )
 
     if len(axes) >= MAX_AXIS_COUNT:
@@ -228,9 +250,14 @@ def update_axis(
             "軸の名称は50文字以内で入力してください。"
         )
 
+    if not description:
+        errors.append(
+            "具体的な判断基準を入力してください。"
+        )
+
     if len(description) > 200:
         errors.append(
-            "補足説明は200文字以内で入力してください。"
+            "具体的な判断基準は200文字以内で入力してください。"
         )
 
     normalized_title = title.casefold()
@@ -276,13 +303,15 @@ def update_axis(
 def render_job_hunting_axis_page() -> None:
     """就活の軸画面を表示する。"""
 
+    apply_self_discovery_theme(current_step=4)
+
     initialize_job_hunting_axis_state()
 
     if st.button(
-        "← トップ画面へ戻る",
+        "← 価値観へ戻る",
         key="job_hunting_axis_back_top",
     ):
-        st.query_params.clear()
+        st.query_params["page"] = "work_values"
         st.rerun()
 
     st.title("就活の軸")
@@ -293,16 +322,71 @@ def render_job_hunting_axis_page() -> None:
     )
 
     st.progress(
-        3 / 6,
-        text="入力のステップ 3 / 6",
+        4 / 5,
+        text="自分を知る 4 / 5　就活の軸",
     )
 
     st.info(
-        "就活の軸は最大3件まで登録できます。\n\n"
-        "初期版では自由入力で登録し、"
-        "AIによる提案機能は後から追加します。"
+        "希望条件と価値観から、就活の軸を最大3件提案しています。\n\n"
+        "提案はまだ確定していません。名称と具体的な判断基準を確認し、"
+        "必要に応じて編集・削除・並び替えをしてください。"
     )
 
+    if not st.session_state.get(
+        REGENERATE_CONFIRM_KEY,
+        False,
+    ):
+        if st.button(
+            "入力内容から軸候補を作り直す",
+            key="job_hunting_axis_regenerate",
+            use_container_width=True,
+        ):
+            st.session_state[REGENERATE_CONFIRM_KEY] = True
+            st.rerun()
+
+    else:
+        st.warning(
+            "現在画面に表示している就活の軸を、最新の希望条件と価値観から作る候補へ置き換えます。"
+            "置き換え後も、『この内容で確定して次へ』を押すまでは正式保存されません。"
+        )
+
+        regenerate_columns = st.columns(2)
+
+        with regenerate_columns[0]:
+            if st.button(
+                "候補を作り直す",
+                key="job_hunting_axis_regenerate_execute",
+                use_container_width=True,
+                type="primary",
+            ):
+                suggested_axes = suggest_job_hunting_axes()
+
+                if suggested_axes:
+                    st.session_state[AXES_STATE_KEY] = suggested_axes
+                    st.session_state[EDITING_INDEX_KEY] = None
+                    st.session_state[DELETE_CONFIRM_INDEX_KEY] = None
+                    st.session_state[ADD_FORM_VISIBLE_KEY] = False
+                    st.session_state[REGENERATE_CONFIRM_KEY] = False
+                    st.session_state[MESSAGE_KEY] = (
+                        "入力内容から軸候補を作り直しました。"
+                        "内容を確認し、最後に確定してください。"
+                    )
+                    st.rerun()
+
+                else:
+                    st.error(
+                        "軸候補を作成できませんでした。"
+                        "希望条件または価値観を入力してから、もう一度お試しください。"
+                    )
+
+        with regenerate_columns[1]:
+            if st.button(
+                "キャンセル",
+                key="job_hunting_axis_regenerate_cancel",
+                use_container_width=True,
+            ):
+                st.session_state[REGENERATE_CONFIRM_KEY] = False
+                st.rerun()
     axes = st.session_state.get(
         AXES_STATE_KEY,
         [],
@@ -338,7 +422,7 @@ def render_job_hunting_axis_page() -> None:
                 )
 
                 edit_description = st.text_area(
-                    "補足説明（任意）",
+                    "具体的な判断基準",
                     value=axis.axis_description,
                     max_chars=200,
                     key=(
@@ -392,19 +476,19 @@ def render_job_hunting_axis_page() -> None:
                     )
 
                 st.caption(
-                    "本人入力"
+                    "本人が追加"
                     if axis.source_type == "manual"
-                    else "AI提案"
+                    else "入力内容からの提案"
                 )
 
                 control_columns = st.columns(
-                    [1, 1, 1.4, 1.4]
+                    [1.3, 1.3, 1.4, 1.4]
                 )
 
                 with control_columns[0]:
                     if index > 0:
                         if st.button(
-                            "↑",
+                            "▲",
                             key=f"job_hunting_axis_up_{index}",
                             use_container_width=True,
                         ):
@@ -435,7 +519,7 @@ def render_job_hunting_axis_page() -> None:
                 with control_columns[1]:
                     if index < len(axes) - 1:
                         if st.button(
-                            "↓",
+                            "▼",
                             key=f"job_hunting_axis_down_{index}",
                             use_container_width=True,
                         ):
@@ -548,7 +632,7 @@ def render_job_hunting_axis_page() -> None:
                             st.rerun()
 
     if len(axes) >= MAX_AXIS_COUNT:
-        st.warning(
+        st.info(
             "登録できる就活の軸は最大3件です。"
             "追加する場合は既存の軸を削除してください。"
         )
@@ -577,7 +661,7 @@ def render_job_hunting_axis_page() -> None:
             )
 
             axis_description = st.text_area(
-                "補足説明（任意）",
+                "具体的な判断基準",
                 max_chars=200,
                 placeholder=(
                     "例）福岡県内で長期的に"
@@ -626,11 +710,11 @@ def render_job_hunting_axis_page() -> None:
 
     with action_columns[0]:
         if st.button(
-            "← トップ画面へ戻る",
+            "← 価値観へ戻る",
             key="job_hunting_axis_back_bottom",
             use_container_width=True,
         ):
-            st.query_params.clear()
+            st.query_params["page"] = "work_values"
             st.rerun()
 
     with action_columns[1]:
@@ -660,7 +744,7 @@ def render_job_hunting_axis_page() -> None:
 
     with action_columns[2]:
         if st.button(
-            "保存する",
+            "この内容で確定して次へ →",
             key="job_hunting_axis_save",
             use_container_width=True,
             type="primary",
@@ -680,7 +764,7 @@ def render_job_hunting_axis_page() -> None:
                         st.error(error)
 
                 else:
-                    st.query_params["page"] = "work_values"
+                    st.query_params["page"] = "career"
                     st.rerun()
 
             except Exception as error:
@@ -694,7 +778,7 @@ def render_job_hunting_axis_page() -> None:
     )
 
     if message:
-        st.success(message)
+        st.info(message)
 
     st.caption(
         "正式保存が完了すると、"

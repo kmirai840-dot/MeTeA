@@ -151,33 +151,59 @@ def render_job_table_header() -> None:
     """求人一覧の列見出しを表示する。"""
 
     (
-        company_col,
-        position_col,
-        location_col,
-        salary_col,
-        source_col,
+        compare_col,
+        job_col,
+        work_col,
+        evaluation_col,
+        status_col,
         action_col,
     ) = st.columns(
-        [2.2, 2.0, 1.4, 1.5, 2.4, 1.5]
+        [
+            0.35,
+            3.4,
+            2.0,
+            1.55,
+            2.35,
+            1.7,
+        ],
+        gap="medium",
     )
 
-    with company_col:
-        st.caption("会社名 / 求人ID")
+    headings = (
+        (
+            compare_col,
+            "比較",
+        ),
+        (
+            job_col,
+            "会社名 / 求人名",
+        ),
+        (
+            work_col,
+            "職種 / 勤務地",
+        ),
+        (
+            evaluation_col,
+            "AI評価",
+        ),
+        (
+            status_col,
+            "応募状況 / 紹介元",
+        ),
+        (
+            action_col,
+            "求人票の編集・削除",
+        ),
+    )
 
-    with position_col:
-        st.caption("募集ポジション / 求人名")
-
-    with location_col:
-        st.caption("勤務地")
-
-    with salary_col:
-        st.caption("想定年収 / AIマッチ度")
-
-    with source_col:
-        st.caption("紹介経路 / 応募判断")
-
-    with action_col:
-        st.caption("操作")
+    for column, heading in headings:
+        with column:
+            st.markdown(
+                '<div class="job-row-table-heading">'
+                f'{escape(heading)}'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def render_job_card(
@@ -188,7 +214,14 @@ def render_job_card(
 ) -> bool:
     """求人1件分をコンパクトな一覧行として表示する。"""
 
-    sources = load_job_sources(job_id)
+    sources = load_job_sources(
+        job_id
+    )
+
+    company_name = (
+        job.company_name
+        or "会社名未入力"
+    )
 
     job_name = (
         job.job_title
@@ -196,9 +229,9 @@ def render_job_card(
         or "求人名未入力"
     )
 
-    company_name = (
-        job.company_name
-        or "会社名未入力"
+    occupation_text = (
+        job.occupation
+        or "職種未入力"
     )
 
     location_parts = [
@@ -212,50 +245,47 @@ def render_job_card(
 
     location_text = (
         "".join(location_parts)
-        or "未入力"
+        or "勤務地未入力"
     )
 
-    if (
-        job.expected_salary_min
-        or job.expected_salary_max
-    ):
-        salary_min = (
-            job.expected_salary_min
-            or "―"
-        )
-
-        salary_max = (
-            job.expected_salary_max
-            or "―"
-        )
-
-        salary_text = (
-            f"{salary_min} ～ {salary_max}"
-        )
-
-    elif job.annual_salary:
-        salary_text = job.annual_salary
-
-    else:
-        salary_text = "未入力"
+    evaluation_coverage_text = ""
 
     if (
         evaluation is not None
         and evaluation.is_stale
     ):
         evaluation_text = "再評価待ち"
+        evaluation_class = "is-pending"
 
     elif (
         evaluation is not None
         and evaluation.overall_score
         is not None
     ):
-        evaluation_text = (
-            f"{evaluation.overall_score}点"
-        )
+        if evaluation.is_provisional:
+            evaluation_text = (
+                f"暫定 {evaluation.overall_score}点"
+            )
+
+        else:
+            evaluation_text = (
+                f"{evaluation.overall_score}点"
+            )
+
+        evaluation_class = "is-scored"
+
+        if (
+            evaluation.evaluation_coverage
+            is not None
+        ):
+            evaluation_coverage_text = (
+                "評価情報 "
+                f"{evaluation.evaluation_coverage}%"
+            )
 
     else:
         evaluation_text = "未評価"
+        evaluation_class = "is-unrated"
 
     if (
         decision is not None
@@ -268,107 +298,161 @@ def render_job_card(
     else:
         decision_text = "未対応"
 
-    with st.container(border=True):
-        selected = st.checkbox(
-            "比較対象に選択",
-            key=f"compare_job_{job_id}",
+    if decision_text == "未対応":
+        decision_class = "is-unhandled"
+
+    elif decision_text == "応募する":
+        decision_class = "is-positive"
+
+    elif "応募しない" in decision_text:
+        decision_class = "is-negative"
+
+    elif "保留" in decision_text:
+        decision_class = "is-hold"
+
+    else:
+        decision_class = "is-other"
+
+    if sources:
+        first_source = sources[0][1]
+
+        source_text = (
+            first_source.source_name
+            or "名称未入力"
+        )
+
+        if (
+            first_source.source_type
+            and first_source.source_name
+        ):
+            source_text = (
+                f"{first_source.source_type}／"
+                f"{first_source.source_name}"
+            )
+
+        if len(sources) > 1:
+            source_text = (
+                f"{source_text} "
+                f"ほか{len(sources) - 1}件"
+            )
+
+    else:
+        source_text = "紹介元未入力"
+
+    coverage_html = ""
+
+    if evaluation_coverage_text:
+        coverage_html = (
+            '<p class="job-row-ai-coverage">'
+            f'{escape(evaluation_coverage_text)}'
+            '</p>'
+        )
+
+    with st.container(
+        border=True,
+        key=f"job_row_card_{job_id}",
+    ):
+        st.markdown(
+            '<span class="job-row-marker">'
+            '</span>',
+            unsafe_allow_html=True,
         )
 
         (
-            company_col,
-            position_col,
-            location_col,
-            salary_col,
-            source_col,
+            compare_col,
+            job_col,
+            work_col,
+            evaluation_col,
+            status_col,
             action_col,
         ) = st.columns(
-            [2.2, 2.0, 1.4, 1.5, 2.4, 1.5]
+            [
+                0.35,
+                3.4,
+                2.0,
+                1.55,
+                2.35,
+                1.7,
+            ],
+            gap="medium",
+            vertical_alignment="center",
         )
 
-        with company_col:
-            company_link_html = (
-                '<a class="job-detail-link" '
+        with compare_col:
+            selected = st.checkbox(
+                "比較対象に選択",
+                key=f"compare_job_{job_id}",
+                label_visibility="collapsed",
+            )
+
+        with job_col:
+            job_html = (
+                '<a class="job-row-company-link" '
                 f'href="?page=job_detail&job_id={job_id}" '
                 'target="_self">'
-                f'{escape(company_name)}'
+                f'{escape(str(company_name))}'
                 '</a>'
+                '<p class="job-row-job-name">'
+                f'{escape(str(job_name))}'
+                '</p>'
             )
 
             st.markdown(
-                company_link_html,
+                job_html,
                 unsafe_allow_html=True,
             )
 
-            st.caption(
-                f"求人ID：{job_id}"
+        with work_col:
+            work_html = (
+                '<p class="job-row-primary">'
+                f'{escape(str(occupation_text))}'
+                '</p>'
+                '<p class="job-row-secondary">'
+                f'{escape(str(location_text))}'
+                '</p>'
             )
 
-        with position_col:
-            st.write(
-                job.occupation
-                or "未入力"
+            st.markdown(
+                work_html,
+                unsafe_allow_html=True,
             )
 
-            st.caption(job_name)
+        with evaluation_col:
+            evaluation_html = (
+                '<span class="job-row-ai '
+                f'{evaluation_class}">'
+                f'{escape(str(evaluation_text))}'
+                '</span>'
+                f'{coverage_html}'
+            )
 
-        with location_col:
-            st.write(location_text)
+            st.markdown(
+                evaluation_html,
+                unsafe_allow_html=True,
+            )
 
-        with salary_col:
-            st.write(salary_text)
+        with status_col:
+            status_html = (
+                '<span class="job-row-decision '
+                f'{decision_class}">'
+                f'{escape(str(decision_text))}'
+                '</span>'
+                '<p class="job-row-source">'
+                f'{escape(str(source_text))}'
+                '</p>'
+            )
 
-            if evaluation_text == "未評価":
-                st.caption(
-                    "AI：未評価"
-                )
-
-            else:
-                st.markdown(
-                    f"**AI：{evaluation_text}**"
-                )
-
-        with source_col:
-            if sources:
-                for _, source in sources:
-                    source_text = (
-                        source.source_name
-                        or "名称未入力"
-                    )
-
-                    if (
-                        source.source_type
-                        and source.source_name
-                    ):
-                        source_text = (
-                            f"{source.source_type}／"
-                            f"{source.source_name}"
-                        )
-
-                    st.write(
-                        f"・{source_text}"
-                    )
-
-                if len(sources) > 1:
-                    st.caption(
-                        f"紹介経路：計{len(sources)}件"
-                    )
-
-            else:
-                st.write("未入力")
-
-            if decision_text == "未対応":
-                st.caption(
-                    "応募判断：未対応"
-                )
-
-            else:
-                st.markdown(
-                    f"**応募判断：{decision_text}**"
-                )
+            st.markdown(
+                status_html,
+                unsafe_allow_html=True,
+            )
 
         with action_col:
-            edit_col, delete_col = st.columns(
-                2
+            edit_col, delete_col = (
+                st.columns(
+                    2,
+                    gap="small",
+                )
             )
 
             with edit_col:
@@ -442,93 +526,184 @@ def render_recommendation_candidate(
     job_id: int,
     job,
     evaluation,
-) -> None:
+) -> str:
     """AIおすすめ求人のカードを表示する。"""
 
-    job_name = (
-        job.job_title
-        or job.occupation
-        or "求人名未入力"
+    company_name = escape(
+        str(
+            job.company_name
+            or "会社名未入力"
+        )
     )
 
-    with st.container(border=True):
-        st.caption(
-            f"おすすめ {rank}位"
+    job_name = escape(
+        str(
+            job.job_title
+            or job.occupation
+            or "求人名未入力"
+        )
+    )
+
+    overall_score = (
+        evaluation.overall_score
+        if evaluation.overall_score
+        is not None
+        else 0
+    )
+
+    star_fill_percentage = max(
+        0,
+        min(
+            100,
+            int(overall_score),
+        ),
+    )
+
+    def build_category_html(
+        category_name: str,
+        category_score,
+    ) -> str:
+        """カテゴリごとの点数行を作成する。"""
+
+        if category_score is None:
+            score_text = "未評価"
+            score_class = (
+                "job-recommendation-category-score "
+                "is-unrated"
+            )
+
+        else:
+            score_text = (
+                f"{category_score}点"
+            )
+            score_class = (
+                "job-recommendation-category-score"
+            )
+
+        return (
+            '<div class="job-recommendation-category">'
+            '<span class="'
+            'job-recommendation-category-name'
+            '">'
+            f'{escape(category_name)}'
+            '</span>'
+            f'<span class="{score_class}">'
+            f'{escape(score_text)}'
+            '</span>'
+            '</div>'
         )
 
-        st.markdown(
-            f"**{job.company_name or '会社名未入力'}**"
+    category_html = "".join(
+        [
+            build_category_html(
+                "希望条件",
+                evaluation.hope_condition_score,
+            ),
+            build_category_html(
+                "就活の軸",
+                evaluation.work_value_score,
+            ),
+            build_category_html(
+                "職務経歴・スキル",
+                evaluation.career_skill_score,
+            ),
+            build_category_html(
+                "必須条件",
+                evaluation.required_condition_score,
+            ),
+        ]
+    )
+
+    provisional_html = ""
+
+    if evaluation.is_provisional:
+        provisional_html = (
+            '<span class="'
+            'job-recommendation-provisional'
+            '">'
+            '暫定評価'
+            '</span>'
         )
 
-        st.caption(job_name)
+    coverage = (
+        evaluation.evaluation_coverage
+        if evaluation.evaluation_coverage
+        is not None
+        else 0
+    )
 
-        st.metric(
-            "AI総合マッチ度",
-            f"{evaluation.overall_score}点",
+    if coverage < 100:
+        coverage_description = (
+            "プロフィール・希望条件の入力で"
+            "評価範囲が広がります。"
         )
 
-        score_col1, score_col2 = st.columns(2)
+    else:
+        coverage_description = (
+            "登録済みの評価情報を"
+            "すべて使用しています。"
+        )
 
-        with score_col1:
-            st.caption("希望条件")
+    detail_url = (
+        f"?page=job_detail&job_id={job_id}"
+    )
 
-            st.write(
-                (
-                    f"{evaluation.hope_condition_score}点"
-                    if evaluation.hope_condition_score
-                    is not None
-                    else "未評価"
-                )
-            )
+    card_html = (
+        '<div class="job-recommendation-card">'
+        '<div class="job-recommendation-header">'
+        '<span class="job-recommendation-rank">'
+        f'{rank}位'
+        '</span>'
+        f'{provisional_html}'
+        '</div>'
+        '<p class="job-recommendation-company">'
+        f'{company_name}'
+        '</p>'
+        '<p class="job-recommendation-name">'
+        f'{job_name}'
+        '</p>'
+        '<div class="job-recommendation-score-area">'
+        '<div class="job-recommendation-score-label">'
+        'AI総合マッチ度'
+        '</div>'
+        '<div class="job-recommendation-score">'
+        f'{overall_score}点'
+        '<span class="job-recommendation-score-max">'
+        '/ 100'
+        '</span>'
+        '</div>'
+        '<div class="job-recommendation-stars" '
+        'aria-label="AIマッチ度">'
+        '<span>★★★★★</span>'
+        '<span class="job-recommendation-stars-fill" '
+        f'style="width:{star_fill_percentage}%;">'
+        '★★★★★'
+        '</span>'
+        '</div>'
+        '</div>'
+        '<div class="job-recommendation-categories">'
+        f'{category_html}'
+        '</div>'
+        '<div class="job-recommendation-coverage">'
+        '<p class="job-recommendation-coverage-title">'
+        'ⓘ 評価できた情報 '
+        f'{coverage}%'
+        '</p>'
+        '<p class="'
+        'job-recommendation-coverage-description'
+        '">'
+        f'{escape(coverage_description)}'
+        '</p>'
+        '</div>'
+        '<a class="job-recommendation-detail" '
+        f'href="{detail_url}" '
+        'target="_self">'
+        '詳細を見る'
+        '</a>'
+        '</div>'
+    )
 
-            st.caption("価値観")
-
-            st.write(
-                (
-                    f"{evaluation.work_value_score}点"
-                    if evaluation.work_value_score
-                    is not None
-                    else "未評価"
-                )
-            )
-
-        with score_col2:
-            st.caption("職務経歴・スキル")
-
-            st.write(
-                (
-                    f"{evaluation.career_skill_score}点"
-                    if evaluation.career_skill_score
-                    is not None
-                    else "未評価"
-                )
-            )
-
-            st.caption("必須条件")
-
-            st.write(
-                (
-                    f"{evaluation.required_condition_score}点"
-                    if evaluation.required_condition_score
-                    is not None
-                    else "未評価"
-                )
-            )
-
-        if st.button(
-            "詳細を見る",
-            key=f"recommendation_detail_{job_id}",
-            width="stretch",
-        ):
-            st.query_params["page"] = (
-                "job_detail"
-            )
-
-            st.query_params["job_id"] = (
-                str(job_id)
-            )
-
-            st.rerun()
+    return card_html
 
 
 def show_page() -> None:
@@ -662,7 +837,7 @@ def show_page() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 24px;
-            margin: 12px 0 28px;
+            margin: 12px 0 14px;
             padding: 20px 24px;
             background: #fffaf0;
             border: 1px solid #f6c85f;
@@ -676,8 +851,12 @@ def show_page() -> None:
         }
 
         .job-pending-notice-icon {
+            display: flex;
+            flex: 0 0 30px;
+            align-items: center;
+            justify-content: center;
             color: #f59e0b;
-            font-size: 26px;
+            font-size: 21px;
             line-height: 1;
         }
 
@@ -723,6 +902,1478 @@ def show_page() -> None:
             color: #0759d9 !important;
             text-decoration: underline !important;
         }
+
+        /* 求人一覧画面全体 */
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"] {
+            background: #f7f9fc;
+        }
+
+        .stApp {
+            font-family:
+                "Noto Sans JP",
+                "Yu Gothic UI",
+                "Yu Gothic",
+                "Meiryo",
+                sans-serif;
+            color: #10213d;
+        }
+
+        [data-testid="stHeader"] {
+            background: rgba(247, 249, 252, 0.92);
+        }
+
+        /* AIおすすめ求人カード */
+        .job-recommendation-card {
+            height: 100%;
+            min-height: 470px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow: hidden;
+            background: #ffffff;
+            border: 1px solid #dfe6f0;
+            border-radius: 14px;
+            box-shadow:
+                0 6px 18px rgba(16, 33, 61, 0.06);
+        }
+
+        .job-recommendation-card:hover {
+            border-color: #b8cdf2;
+            box-shadow:
+                0 10px 24px rgba(18, 104, 243, 0.10);
+            transform: translateY(-2px);
+            transition:
+                border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                transform 0.2s ease;
+        }
+
+        .job-recommendation-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .job-recommendation-rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            padding: 0 8px;
+            background: #ffb21c;
+            border-radius: 7px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .job-recommendation-provisional {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 2px 9px;
+            background: #fff7e6;
+            border: 1px solid #ffd991;
+            border-radius: 999px;
+            color: #a95b00;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .job-recommendation-company {
+            margin: 0 0 5px;
+            color: #10213d;
+            font-size: 17px;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .job-recommendation-name {
+            min-height: 42px;
+            margin: 0 0 14px;
+            color: #7b8798;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .job-recommendation-score-area {
+            padding: 12px 14px 11px;
+            margin-bottom: 14px;
+            background: #f8fbff;
+            border: 1px solid #dce8fa;
+            border-radius: 11px;
+            text-align: center;
+        }
+
+        .job-recommendation-score-label {
+            margin-bottom: 2px;
+            color: #536177;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .job-recommendation-score {
+            color: #1268f3;
+            font-size: 36px;
+            font-weight: 750;
+            letter-spacing: -1px;
+            line-height: 1.15;
+        }
+
+        .job-recommendation-score-max {
+            margin-left: 3px;
+            color: #7b8798;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0;
+        }
+
+        /* マッチ度を示す星。お気に入りボタンではない */
+        .job-recommendation-stars {
+            position: relative;
+            display: inline-block;
+            margin-top: 5px;
+            color: #d9e1ec;
+            font-size: 18px;
+            line-height: 1;
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+
+        .job-recommendation-stars-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+            overflow: hidden;
+            color: #1268f3;
+            white-space: nowrap;
+        }
+
+        .job-recommendation-categories {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .job-recommendation-category {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding-bottom: 7px;
+            border-bottom: 1px solid #edf1f6;
+        }
+
+        .job-recommendation-category:last-child {
+            padding-bottom: 0;
+            border-bottom: 0;
+        }
+
+        .job-recommendation-category-name {
+            color: #657187;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .job-recommendation-category-score {
+            flex-shrink: 0;
+            color: #26334d;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .job-recommendation-category-score.is-unrated {
+            color: #a3adba;
+            font-weight: 500;
+        }
+
+        .job-recommendation-coverage {
+            padding: 9px 10px;
+            margin-top: auto;
+            margin-bottom: 12px;
+            background: #eef6ff;
+            border: 1px solid #d8eaff;
+            border-radius: 9px;
+        }
+
+        .job-recommendation-coverage-title {
+            margin: 0 0 3px;
+            color: #1268f3;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .job-recommendation-coverage-description {
+            margin: 0;
+            color: #52647e;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+
+        .job-recommendation-detail {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 40px;
+            padding: 8px 14px;
+            box-sizing: border-box;
+            background: #1268f3;
+            border: 1px solid #1268f3;
+            border-radius: 8px;
+            color: #ffffff !important;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none !important;
+            box-shadow:
+                0 4px 10px rgba(18, 104, 243, 0.20);
+        }
+
+        .job-recommendation-detail:hover {
+            background: #0759d9;
+            border-color: #0759d9;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            box-shadow:
+                0 6px 14px rgba(18, 104, 243, 0.28);
+        }
+
+        @media (max-width: 900px) {
+            .job-recommendation-card {
+                min-height: auto;
+            }
+        }
+
+        /* 求人一覧カード */
+        .job-list-card-marker {
+            display: block;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-list-card-marker
+        ) {
+            background: #ffffff;
+            border: 1px solid #dfe6f0;
+            border-radius: 13px;
+            box-shadow:
+                0 3px 12px rgba(16, 33, 61, 0.045);
+            transition:
+                border-color 0.2s ease,
+                box-shadow 0.2s ease;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-list-card-marker
+        ):hover {
+            border-color: #bfd1ee;
+            box-shadow:
+                0 7px 18px rgba(16, 33, 61, 0.075);
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-list-card-marker
+        ) label[data-testid="stWidgetLabel"] {
+            color: #536177;
+            font-size: 12px;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-list-card-marker
+        ) .stButton > button {
+            min-height: 36px;
+            border-color: #d5deea;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #41516b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-list-card-marker
+        ) .stButton > button:hover {
+            border-color: #9db8e5;
+            background: #f5f9ff;
+            color: #0759d9;
+        }
+
+        .job-list-company-link {
+            display: inline-block;
+            margin-bottom: 5px;
+            color: #1268f3 !important;
+            font-size: 15px;
+            font-weight: 750;
+            line-height: 1.5;
+            text-decoration: none !important;
+        }
+
+        .job-list-company-link:hover {
+            color: #0759d9 !important;
+            text-decoration: underline !important;
+        }
+
+        .job-list-id {
+            margin: 0;
+            color: #98a3b2;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .job-list-primary-value {
+            margin: 0 0 5px;
+            color: #1c2b45;
+            font-size: 14px;
+            font-weight: 650;
+            line-height: 1.5;
+        }
+
+        .job-list-secondary-value {
+            margin: 0;
+            color: #7b8798;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .job-list-source-list {
+            margin: 0 0 8px;
+            color: #465570;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .job-list-source-item {
+            margin-bottom: 2px;
+        }
+
+        .job-list-ai-score {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 3px 9px;
+            margin-top: 6px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 750;
+            line-height: 1;
+        }
+
+        .job-list-ai-score.is-scored {
+            background: #eaf3ff;
+            color: #1268f3;
+        }
+
+        .job-list-ai-score.is-pending {
+            background: #fff6df;
+            color: #a86100;
+        }
+
+        .job-list-ai-score.is-unrated {
+            background: #f0f2f5;
+            color: #7f8a99;
+        }
+
+        .job-list-decision {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 3px 9px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .job-list-decision.is-unhandled {
+            background: #fff6df;
+            border-color: #ffe0a3;
+            color: #a86100;
+        }
+
+        .job-list-decision.is-positive {
+            background: #e8f8ef;
+            border-color: #bee8ce;
+            color: #138847;
+        }
+
+        .job-list-decision.is-negative {
+            background: #fff0f1;
+            border-color: #f5c8cc;
+            color: #c43742;
+        }
+
+        .job-list-decision.is-hold {
+            background: #eaf3ff;
+            border-color: #c7dcfb;
+            color: #1268f3;
+        }
+
+        .job-list-decision.is-other {
+            background: #f1efff;
+            border-color: #d7d1ff;
+            color: #6554c0;
+        }
+
+        .job-list-table-heading {
+            color: #7b8798;
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+        }
+
+        @media (max-width: 900px) {
+            .job-list-company-link {
+                font-size: 14px;
+            }
+        }
+                /* コンパクトな求人一覧 */
+        .job-row-marker {
+            display: block;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) {
+            background: #ffffff;
+            border: 1px solid #dfe6f0;
+            border-radius: 12px;
+            box-shadow:
+                0 2px 9px rgba(16, 33, 61, 0.04);
+            transition:
+                border-color 0.2s ease,
+                box-shadow 0.2s ease;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ):hover {
+            border-color: #b8cdf2;
+            box-shadow:
+                0 6px 15px rgba(16, 33, 61, 0.07);
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) div[data-testid="stVerticalBlock"] {
+            gap: 0.45rem;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button {
+            min-height: 34px;
+            padding: 4px 8px;
+            border-color: #d7dfe9;
+            border-radius: 7px;
+            background: #ffffff;
+            color: #465570;
+            font-size: 11px;
+            font-weight: 650;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button:hover {
+            border-color: #9db8e5;
+            background: #f5f9ff;
+            color: #0759d9;
+        }
+
+        .job-row-table-heading {
+            padding-bottom: 3px;
+            color: #7b8798;
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+
+        .job-row-company-link {
+            display: block;
+            margin: 0 0 4px;
+            color: #1268f3 !important;
+            font-size: 14px;
+            font-weight: 750;
+            line-height: 1.45;
+            text-decoration: none !important;
+        }
+
+        .job-row-company-link:hover {
+            color: #0759d9 !important;
+            text-decoration: underline !important;
+        }
+
+        .job-row-job-name {
+            display: -webkit-box;
+            margin: 0;
+            overflow: hidden;
+            color: #6f7c90;
+            font-size: 11px;
+            line-height: 1.5;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+        }
+
+        .job-row-primary {
+            margin: 0 0 3px;
+            color: #22314a;
+            font-size: 13px;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
+        .job-row-secondary {
+            margin: 0;
+            color: #7b8798;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .job-row-salary {
+            margin: 0;
+            color: #22314a;
+            font-size: 13px;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
+        .job-row-ai {
+            display: inline-flex;
+            align-items: center;
+            min-height: 25px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 750;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .job-row-ai.is-scored {
+            background: #eaf3ff;
+            color: #1268f3;
+        }
+
+        .job-row-ai.is-pending {
+            background: #fff6df;
+            color: #a86100;
+        }
+
+        .job-row-ai.is-unrated {
+            background: #f0f2f5;
+            color: #7f8a99;
+        }
+
+        .job-row-decision {
+            display: inline-flex;
+            align-items: center;
+            min-height: 25px;
+            max-width: 100%;
+            padding: 3px 8px;
+            overflow: hidden;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .job-row-decision.is-unhandled {
+            background: #fff6df;
+            border-color: #ffe0a3;
+            color: #a86100;
+        }
+
+        .job-row-decision.is-positive {
+            background: #e8f8ef;
+            border-color: #bee8ce;
+            color: #138847;
+        }
+
+        .job-row-decision.is-negative {
+            background: #fff0f1;
+            border-color: #f5c8cc;
+            color: #c43742;
+        }
+
+        .job-row-decision.is-hold {
+            background: #eaf3ff;
+            border-color: #c7dcfb;
+            color: #1268f3;
+        }
+
+        .job-row-decision.is-other {
+            background: #f1efff;
+            border-color: #d7d1ff;
+            color: #6554c0;
+        }
+
+        .job-row-source {
+            margin: 5px 0 0;
+            overflow: hidden;
+            color: #7b8798;
+            font-size: 10px;
+            line-height: 1.4;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 900px) {
+            .job-row-table-heading {
+                white-space: normal;
+            }
+
+            .job-row-company-link {
+                font-size: 13px;
+            }
+        }
+                /* 求人一覧画面の表示密度を基準UIへ近づける */
+        .block-container {
+            max-width: 1320px;
+            padding-top: 1.25rem;
+            padding-bottom: 2.5rem;
+        }
+
+        .stApp h1 {
+            margin-bottom: 0.2rem;
+            color: #10213d;
+            font-size: 34px !important;
+            font-weight: 750;
+            letter-spacing: -0.03em;
+            line-height: 1.25;
+        }
+
+        .stApp h2 {
+            color: #10213d;
+            font-size: 24px !important;
+            font-weight: 750;
+            letter-spacing: -0.02em;
+            line-height: 1.35;
+        }
+
+        .stApp h3 {
+            margin-top: 0.5rem;
+            margin-bottom: 0.2rem;
+            color: #10213d;
+            font-size: 22px !important;
+            font-weight: 750;
+            letter-spacing: -0.02em;
+            line-height: 1.35;
+        }
+
+        .stApp [data-testid="stCaptionContainer"] {
+            color: #7b8798;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        /* 管理通知をコンパクト化 */
+        .job-pending-notice {
+            gap: 18px;
+            margin: 10px 0 22px;
+            padding: 14px 18px;
+            border-radius: 10px;
+        }
+
+        .job-pending-notice-main {
+            gap: 11px;
+        }
+
+        .job-pending-notice-icon {
+            font-size: 22px;
+        }
+
+        .job-pending-notice-title {
+            margin-bottom: 3px;
+            font-size: 14px;
+            font-weight: 750;
+        }
+
+        .job-pending-notice-description {
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .job-pending-notice-count {
+            min-width: 82px;
+            padding-left: 16px;
+        }
+
+        .job-pending-notice-count strong {
+            font-size: 23px;
+        }
+
+        .job-pending-notice-count span {
+            font-size: 10px;
+        }
+
+        /* TOP3カードの表示密度 */
+        .job-recommendation-card {
+            min-height: 405px;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow:
+                0 3px 12px rgba(16, 33, 61, 0.05);
+        }
+
+        .job-recommendation-card:hover {
+            box-shadow:
+                0 7px 17px rgba(18, 104, 243, 0.09);
+        }
+
+        .job-recommendation-header {
+            margin-bottom: 10px;
+        }
+
+        .job-recommendation-rank {
+            min-width: 25px;
+            height: 25px;
+            padding: 0 7px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .job-recommendation-provisional {
+            min-height: 21px;
+            padding: 1px 7px;
+            font-size: 10px;
+        }
+
+        .job-recommendation-company {
+            margin-bottom: 3px;
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .job-recommendation-name {
+            min-height: 34px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .job-recommendation-score-area {
+            padding: 9px 12px 8px;
+            margin-bottom: 10px;
+            border-radius: 9px;
+        }
+
+        .job-recommendation-score-label {
+            font-size: 10px;
+        }
+
+        .job-recommendation-score {
+            font-size: 32px;
+            letter-spacing: -1px;
+        }
+
+        .job-recommendation-score-max {
+            font-size: 10px;
+        }
+
+        .job-recommendation-stars {
+            margin-top: 3px;
+            font-size: 16px;
+            letter-spacing: 1.5px;
+        }
+
+        .job-recommendation-categories {
+            gap: 4px;
+            margin-bottom: 9px;
+        }
+
+        .job-recommendation-category {
+            padding-bottom: 5px;
+        }
+
+        .job-recommendation-category-name {
+            font-size: 10.5px;
+        }
+
+        .job-recommendation-category-score {
+            font-size: 11px;
+        }
+
+        .job-recommendation-coverage {
+            padding: 7px 8px;
+            margin-bottom: 9px;
+            border-radius: 8px;
+        }
+
+        .job-recommendation-coverage-title {
+            margin-bottom: 2px;
+            font-size: 10.5px;
+        }
+
+        .job-recommendation-coverage-description {
+            font-size: 10px;
+            line-height: 1.45;
+        }
+
+        .job-recommendation-detail {
+            min-height: 34px;
+            padding: 6px 12px;
+            border-radius: 7px;
+            font-size: 11px;
+        }
+
+        /* 検索・絞り込み */
+        div[data-testid="stTextInput"] label,
+        div[data-testid="stSelectbox"] label {
+            color: #536177;
+            font-size: 11px;
+            font-weight: 650;
+        }
+
+        div[data-testid="stTextInput"] input {
+            min-height: 37px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            background: #f1f4f8;
+            border-color: #e1e7ef;
+            font-size: 12px;
+        }
+
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+            min-height: 37px;
+            background: #f1f4f8;
+            border-color: #e1e7ef;
+            font-size: 12px;
+        }
+
+        div[data-testid="stTextInput"] input:focus {
+            border-color: #1268f3;
+            box-shadow:
+                0 0 0 1px #1268f3;
+        }
+
+        /* 通常ボタンの高さ */
+        .stButton > button {
+            min-height: 36px;
+            border-radius: 7px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .block-container {
+                padding-top: 1rem;
+            }
+
+            .stApp h1 {
+                font-size: 30px !important;
+            }
+
+            .job-recommendation-card {
+                min-height: auto;
+            }
+        }
+                /* TOP3カードの高さを統一 */
+        .job-recommendation-card {
+            height: 420px;
+            min-height: 420px;
+            box-sizing: border-box;
+        }
+
+        .job-recommendation-name {
+            display: -webkit-box;
+            height: 34px;
+            min-height: 34px;
+            overflow: hidden;
+            overflow-wrap: anywhere;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+        }
+
+        /* 通常一覧では求人名を省略しない */
+        .job-row-job-name {
+            display: block;
+            overflow: visible;
+            overflow-wrap: anywhere;
+            color: #6f7c90;
+            white-space: normal;
+            -webkit-box-orient: initial;
+            -webkit-line-clamp: initial;
+        }
+
+        /* 紹介元も省略せずに折り返す */
+        .job-row-source {
+            margin-top: 6px;
+            overflow: visible;
+            overflow-wrap: anywhere;
+            color: #7b8798;
+            white-space: normal;
+            text-overflow: initial;
+        }
+
+        .job-row-decision {
+            margin-bottom: 1px;
+        }
+
+        /* 各列の情報が接近しすぎないようにする */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) div[data-testid="column"] {
+            min-width: 0;
+        }
+
+        @media (max-width: 900px) {
+            .job-recommendation-card {
+                height: auto;
+                min-height: auto;
+            }
+        }
+                /* TOP3を高さが揃うHTMLグリッドにする */
+        .job-recommendation-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .job-recommendation-card {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            box-sizing: border-box;
+            overflow: visible;
+        }
+
+        .job-recommendation-name {
+            display: -webkit-box;
+            height: auto;
+            min-height: 50px;
+            max-height: 50px;
+            overflow: hidden;
+            overflow-wrap: anywhere;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+        }
+
+        .job-recommendation-coverage {
+            margin-top: auto;
+        }
+
+        .job-recommendation-coverage-title {
+            font-size: 10px;
+            line-height: 1.35;
+        }
+
+        .job-recommendation-coverage-description {
+            font-size: 9.5px;
+            line-height: 1.4;
+        }
+
+        /* 通常一覧の文字階層を再調整 */
+        .job-row-company-link {
+            margin-bottom: 5px;
+            font-size: 14px;
+            font-weight: 750;
+        }
+
+        .job-row-job-name {
+            color: #526177;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.5;
+        }
+
+        .job-row-primary {
+            margin-bottom: 4px;
+            color: #17233c;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .job-row-secondary {
+            color: #718096;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .job-row-salary {
+            color: #17233c;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        /* AI評価を現在より強調 */
+        .job-row-ai {
+            min-height: 30px;
+            padding: 5px 11px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .job-row-decision {
+            min-height: 27px;
+            padding: 4px 9px;
+            font-size: 11px;
+        }
+
+        .job-row-source {
+            margin-top: 7px;
+            color: #657187;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        /* 編集・削除を必ず横書きにする */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button {
+            min-width: 0;
+            min-height: 34px;
+            padding: 4px 6px;
+            font-size: 11px;
+            line-height: 1;
+            word-break: keep-all !important;
+            white-space: nowrap !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button p {
+            word-break: keep-all !important;
+            white-space: nowrap !important;
+        }
+
+        @media (max-width: 900px) {
+            .job-recommendation-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .job-recommendation-name {
+                min-height: auto;
+                max-height: none;
+            }
+        }
+                /* TOP3の求人名を全文表示する */
+        .job-recommendation-name {
+            display: block;
+            height: auto;
+            min-height: 52px;
+            max-height: none;
+            overflow: visible;
+            overflow-wrap: anywhere;
+            white-space: normal;
+            -webkit-box-orient: initial;
+            -webkit-line-clamp: initial;
+        }
+
+        /* 求人一覧カードの余白を縮める */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) {
+            border-radius: 9px;
+            box-shadow: none;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) > div[data-testid="stVerticalBlock"] {
+            gap: 0.25rem;
+            padding: 0.7rem 0.8rem;
+        }
+
+        .job-row-company-link {
+            margin-bottom: 3px;
+            font-size: 14px;
+            line-height: 1.35;
+        }
+
+        .job-row-job-name {
+            margin: 0;
+            color: #526177;
+            font-size: 11.5px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .job-row-primary {
+            margin-bottom: 2px;
+            font-size: 12.5px;
+            line-height: 1.35;
+        }
+
+        .job-row-secondary {
+            font-size: 10.5px;
+            line-height: 1.35;
+        }
+
+        .job-row-ai {
+            min-height: 31px;
+            padding: 5px 11px;
+            font-size: 13px;
+        }
+
+        .job-row-ai-coverage {
+            margin: 5px 0 0;
+            color: #657187;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.3;
+            white-space: nowrap;
+        }
+
+        .job-row-decision {
+            min-height: 26px;
+            padding: 4px 9px;
+            font-size: 11px;
+        }
+
+        .job-row-source {
+            margin-top: 5px;
+            color: #657187;
+            font-size: 10.5px;
+            line-height: 1.35;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button {
+            min-height: 32px;
+            padding: 3px 6px;
+            font-size: 11px;
+            word-break: keep-all !important;
+            white-space: nowrap !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button p {
+            word-break: keep-all !important;
+            white-space: nowrap !important;
+        }
+                /* 説明文を読める大きさへ戻す */
+        .stApp [data-testid="stCaptionContainer"],
+        .stApp [data-testid="stCaptionContainer"] p {
+            color: #718096 !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* 求人一覧の列見出し */
+        .job-row-table-heading {
+            color: #657187 !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 最重要情報：会社名 */
+        .job-row-company-link {
+            margin: 0 0 4px !important;
+            color: #1268f3 !important;
+            font-size: 15px !important;
+            font-weight: 750 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 補足情報：求人名 */
+        .job-row-job-name {
+            margin: 0 !important;
+            color: #526177 !important;
+            font-size: 12px !important;
+            font-weight: 450 !important;
+            line-height: 1.45 !important;
+        }
+
+        /* 職種 */
+        .job-row-primary {
+            margin: 0 0 3px !important;
+            color: #1c2b45 !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 勤務地 */
+        .job-row-secondary {
+            margin: 0 !important;
+            color: #718096 !important;
+            font-size: 11.5px !important;
+            font-weight: 400 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* AI評価：会社名に次ぐ重要情報 */
+        .job-row-ai {
+            min-height: 31px !important;
+            padding: 5px 11px !important;
+            font-size: 13px !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+        }
+
+        .job-row-ai-coverage {
+            margin: 5px 0 0 !important;
+            color: #657187 !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            line-height: 1.35 !important;
+        }
+
+        /* 応募状況 */
+        .job-row-decision {
+            min-height: 27px !important;
+            padding: 4px 9px !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            line-height: 1 !important;
+        }
+
+        /* 紹介元 */
+        .job-row-source {
+            margin: 6px 0 0 !important;
+            color: #657187 !important;
+            font-size: 11px !important;
+            font-weight: 400 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 編集・削除 */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(
+            .job-row-marker
+        ) .stButton > button {
+            min-height: 32px !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+        }
+
+        /* TOP3の会社名と求人名も同じ階層へ統一 */
+        .job-recommendation-company {
+            color: #10213d !important;
+            font-size: 15px !important;
+            font-weight: 750 !important;
+            line-height: 1.4 !important;
+        }
+
+        .job-recommendation-name {
+            color: #657187 !important;
+            font-size: 12px !important;
+            font-weight: 450 !important;
+            line-height: 1.5 !important;
+        }
+                /* 求人一覧画面：タイポグラフィ最終調整 */
+
+        /* ページタイトルや各セクションの説明文 */
+        /* ページやセクションの説明文 */
+        .stApp [data-testid="stCaptionContainer"],
+        .stApp [data-testid="stCaptionContainer"] p {
+            color: #5f6f86 !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            line-height: 1.6 !important;
+        }
+
+        /* TOP3：カテゴリ名 */
+        .job-recommendation-category-name {
+            color: #657187 !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            line-height: 1.45 !important;
+        }
+
+        /* TOP3：カテゴリの点数・未評価 */
+        .job-recommendation-category-score {
+            color: #26334d !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            line-height: 1.45 !important;
+        }
+
+        .job-recommendation-category-score.is-unrated {
+            color: #8d99aa !important;
+            font-weight: 500 !important;
+        }
+
+        /* TOP3：評価カバー率の見出し */
+        .job-recommendation-coverage-title {
+            color: #1268f3 !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* TOP3：評価カバー率の説明文 */
+        .job-recommendation-coverage-description {
+            color: #52647e !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            line-height: 1.5 !important;
+        }
+
+        /* 通常一覧：列見出し */
+        .job-row-table-heading {
+            color: #657187 !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 通常一覧：求人名 */
+        .job-row-job-name {
+            margin: 0 !important;
+            color: #526177 !important;
+            font-size: 12.5px !important;
+            font-weight: 500 !important;
+            line-height: 1.5 !important;
+        }
+
+        /* 通常一覧：職種 */
+        .job-row-primary {
+            margin: 0 0 4px !important;
+            color: #1c2b45 !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            line-height: 1.45 !important;
+        }
+
+        /* 通常一覧：勤務地 */
+        .job-row-secondary {
+            margin: 0 !important;
+            color: #657187 !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            line-height: 1.45 !important;
+        }
+
+        /* 通常一覧：評価カバー率 */
+        .job-row-ai-coverage {
+            margin: 6px 0 0 !important;
+            color: #526987 !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            line-height: 1.4 !important;
+        }
+
+        /* 通常一覧：紹介元 */
+        .job-row-source {
+            margin: 6px 0 0 !important;
+            color: #657187 !important;
+            font-size: 12px !important;
+            font-weight: 400 !important;
+            line-height: 1.45 !important;
+        }
+            /* keyを使って求人一覧カードを白背景に固定する */
+        div[class*="st-key-job_row_card_"] {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            background-image: none !important;
+        }
+
+        div[class*="st-key-job_row_card_"]
+        div[data-testid="stVerticalBlockBorderWrapper"],
+        div[class*="st-key-job_row_card_"]
+        div[data-testid="stVerticalBlock"],
+        div[class*="st-key-job_row_card_"]
+        div[data-testid="stHorizontalBlock"],
+        div[class*="st-key-job_row_card_"]
+        div[data-testid="column"] {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            background-image: none !important;
+        }
+
+        /* ページ外周はトップ画面と同じ背景色を維持する */
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"] {
+            background-color: #f7f9fc !important;
+        }
+                /* 求人一覧の最下部に表示する使い方案内 */
+        .job-list-usage-guide {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin: 0 0 28px;
+            padding: 18px 20px;
+            background: #ffffff;
+            border: 1px solid #dfe6f0;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(16, 33, 61, 0.04);
+        }
+
+        .job-list-usage-guide-icon {
+            display: flex;
+            flex: 0 0 34px;
+            align-items: center;
+            justify-content: center;
+            min-height: 34px;
+            color: #f59e0b;
+            font-size: 23px;
+            line-height: 1;
+        }
+
+        .job-list-usage-guide-body {
+            min-width: 0;
+        }
+
+        .job-list-usage-guide-title {
+            margin: 0 0 5px;
+            color: #1c2b45;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .job-list-usage-guide-description {
+            margin: 0;
+            color: #657187;
+            font-size: 12.5px;
+            font-weight: 400;
+            line-height: 1.65;
+        }
+        /* 応募判断の変更場所を分かりやすい案内帯で表示する */
+        .job-list-decision-help {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin: 6px 0 14px;
+            padding: 10px 13px;
+            color: #254b7c;
+            background: #eef6ff;
+            border: 1px solid #cfe1ff;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+
+        .job-list-decision-help-icon {
+            display: inline-flex;
+            flex: 0 0 22px;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            color: #1268f3;
+            background: #ffffff;
+            border: 1px solid #b9d3ff;
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -767,8 +2418,9 @@ def show_page() -> None:
     pending_notice_html = (
         '<div class="job-pending-notice">'
         '<div class="job-pending-notice-main">'
-        '<div class="job-pending-notice-icon">'
-        '♢'
+        '<div class="job-pending-notice-icon" '
+        'aria-hidden="true">'
+        '🔔'
         '</div>'
         '<div>'
         '<p class="job-pending-notice-title">'
@@ -788,8 +2440,34 @@ def show_page() -> None:
         '</div>'
     )
 
+    if pending_count > 0:
+        st.markdown(
+            pending_notice_html,
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
-        pending_notice_html,
+        """
+        <div class="job-list-usage-guide">
+            <div
+                class="job-list-usage-guide-icon"
+                aria-hidden="true"
+            >
+                💡
+            </div>
+            <div class="job-list-usage-guide-body">
+                <p class="job-list-usage-guide-title">
+                    求人一覧の使い方
+                </p>
+                <p class="job-list-usage-guide-description">
+                    会社名を押すと、求人の詳細と
+                    AIマッチング結果を確認できます。<br>
+                    比較したい求人にチェックを入れると、
+                    2～3件の求人を並べて比較できます。
+                </p>
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -824,9 +2502,7 @@ def show_page() -> None:
     )[:3]
 
     if recommendation_evaluations:
-        recommendation_columns = st.columns(
-            3
-        )
+        recommendation_cards = []
 
         for index, evaluation in enumerate(
             recommendation_evaluations,
@@ -835,13 +2511,25 @@ def show_page() -> None:
             job_id = evaluation.job_id
             job = jobs_by_id[job_id]
 
-            with recommendation_columns[index - 1]:
+            recommendation_cards.append(
                 render_recommendation_candidate(
                     rank=index,
                     job_id=job_id,
                     job=job,
                     evaluation=evaluation,
                 )
+            )
+
+        recommendation_grid_html = (
+            '<div class="job-recommendation-grid">'
+            + "".join(recommendation_cards)
+            + '</div>'
+        )
+
+        st.markdown(
+            recommendation_grid_html,
+            unsafe_allow_html=True,
+        )
 
     else:
         st.info(
@@ -1057,6 +2745,24 @@ def show_page() -> None:
         )
 
     st.subheader("求人一覧")
+
+    st.markdown(
+        """
+        <div class="job-list-decision-help">
+            <span
+                class="job-list-decision-help-icon"
+                aria-hidden="true"
+            >
+                ⓘ
+            </span>
+            <span>
+                応募判断を変更する場合は、会社名を押して
+                求人確認画面を開いてください。
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     total_job_count = len(
         filtered_jobs

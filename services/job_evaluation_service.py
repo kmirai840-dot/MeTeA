@@ -54,7 +54,7 @@ def save_job_match_evaluation_data(
         ),
         (
             evaluation.work_value_score,
-            "価値観との一致度",
+            "就活の軸との一致度",
         ),
         (
             evaluation.career_skill_score,
@@ -116,4 +116,17 @@ def save_job_application_decision_data(
         decision=decision,
     )
 
+    if decision.decision_status in {
+        "応募する",
+        "他経路から応募する",
+    }:
+        from services.application_management_service import (
+            ensure_application_from_decision,
+        )
+        ensure_application_from_decision(
+            job_id=decision.job_id,
+            decision_status=decision.decision_status,
+            next_action=decision.next_action,
+            action_deadline=decision.action_deadline,
+        )
     return []

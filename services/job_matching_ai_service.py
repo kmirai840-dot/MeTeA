@@ -22,14 +22,14 @@ from services.job_matching_rule_service import (
 )
 
 
-PROMPT_VERSION = "job-matching-v5"
+PROMPT_VERSION = "job-matching-v6"
 DEFAULT_AI_MODEL = "gpt-5.4-mini"
 
-MAX_AI_ITEMS = 100
+MAX_AI_ITEMS = 20
 MAX_ITEM_NAME_LENGTH = 100
-MAX_REASON_LENGTH = 500
-MAX_EVIDENCE_LENGTH = 500
-MAX_AI_OUTPUT_TOKENS = 2000
+MAX_REASON_LENGTH = 240
+MAX_EVIDENCE_LENGTH = 240
+MAX_AI_OUTPUT_TOKENS = 4000
 
 ALLOWED_CATEGORIES = {
     "hope_condition",
@@ -430,11 +430,8 @@ def filter_unavailable_categories(
             "hope_condition"
         )
 
-    if (
-        user_information.get("work_values")
-        or user_information.get(
-            "job_hunting_axes"
-        )
+    if user_information.get(
+        "job_hunting_axes"
     ):
         allowed_categories.add(
             "work_value"

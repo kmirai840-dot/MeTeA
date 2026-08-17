@@ -7,6 +7,7 @@ import streamlit as st
 from data.master_data import (
     AGE_GROUP_OPTIONS,
     CAREER_CONDITIONS,
+    CAREER_PRIORITY_LABELS,
     EMPLOYMENT_TYPE_OPTIONS,
     HOLIDAY_OPTIONS,
     INDUSTRY_OPTIONS,
@@ -15,6 +16,8 @@ from data.master_data import (
     PRIORITY_LABELS,
     WORKSTYLE_CONDITIONS,
 )
+
+from pages.self_discovery_theme import apply_self_discovery_theme
 
 from models import HopeCondition, HopeConditionItem
 from services.hope_condition_service import (
@@ -122,10 +125,17 @@ def initialize_hope_conditions_state() -> None:
                 hope_condition.other_conditions
             )
 
+        st.session_state["hope_industry_no_preference"] = any(
+            item.condition_type == "industry"
+            and item.condition_value == "こだわらない"
+            for item in items
+        )
+
         st.session_state["hope_industries"] = [
             item.condition_value
             for item in items
             if item.condition_type == "industry"
+            and item.condition_value != "こだわらない"
         ]
 
         st.session_state["hope_occupations"] = [
@@ -281,21 +291,34 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
     items: list[HopeConditionItem] = []
 
     # 希望業種
-    for rank, value in enumerate(
-        st.session_state.get("hope_industries", []),
-        start=1,
+    if st.session_state.get(
+        "hope_industry_no_preference",
+        False,
     ):
         items.append(
             HopeConditionItem(
                 condition_type="industry",
-                condition_value=value,
-                priority=st.session_state.get(
-                    f"hope_industry_priority_{rank}_{value}",
-                    "want",
-                ),
-                rank=rank,
+                condition_value="こだわらない",
+                priority="no_preference",
+                rank=1,
             )
         )
+    else:
+        for rank, value in enumerate(
+            st.session_state.get("hope_industries", []),
+            start=1,
+        ):
+            items.append(
+                HopeConditionItem(
+                    condition_type="industry",
+                    condition_value=value,
+                    priority=st.session_state.get(
+                        f"hope_industry_priority_{rank}_{value}",
+                        "want",
+                    ),
+                    rank=rank,
+                )
+            )
 
     # 希望職種
     for rank, value in enumerate(
@@ -448,27 +471,22 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
 # 優先度の表示
 # --------------------------------------------------
 
-def format_priority(value: str) -> str:
-    """優先度の内部値を日本語表示へ変換する。"""
-
-    return PRIORITY_LABELS[value]
-
-
 def render_priority_select(
     label: str,
     key: str,
     default: str = "no_preference",
     label_visibility: str = "visible",
+    priority_labels: dict[str, str] = PRIORITY_LABELS,
 ) -> str:
     """優先度の選択欄を表示する。"""
 
-    options = list(PRIORITY_LABELS)
+    options = list(priority_labels)
 
     return st.selectbox(
         label,
         options=options,
         index=options.index(default),
-        format_func=format_priority,
+        format_func=lambda value: priority_labels[value],
         key=key,
         label_visibility=label_visibility,
     )
@@ -509,6 +527,7 @@ def render_selected_item_priorities(
 def render_condition_priorities(
     conditions: tuple[tuple[str, str], ...],
     key_prefix: str,
+    priority_labels: dict[str, str] = PRIORITY_LABELS,
 ) -> None:
     """働き方などの条件ごとに優先度を表示する。"""
 
@@ -523,35 +542,49 @@ def render_condition_priorities(
                 "優先度",
                 key=f"{key_prefix}_{condition_code}",
                 label_visibility="collapsed",
+                priority_labels=priority_labels,
             )
 
 
 def render_hope_conditions_page() -> None:
     """希望条件の入力画面を表示する。"""
 
+    apply_self_discovery_theme(current_step=2)
+
     initialize_hope_conditions_state()
 
     if st.button(
-        "← トップ画面へ戻る",
+        "← 基本情報へ戻る",
         key="hope_conditions_back_top",
     ):
-        st.query_params.clear()
+        st.query_params["page"] = "basic_info"
         st.rerun()
 
     st.title("希望条件")
     st.write("これからの働き方について教えてください")
 
     st.progress(
-        4 / 6,
-        text="入力のステップ 4 / 6",
+        2 / 5,
+        text="自分を知る 2 / 5　希望条件",
     )
 
-    st.info(
-        "優先度を設定してください。\n\n"
-        "必須：絶対に譲れない条件\n\n"
-        "希望：できれば満たしたい条件\n\n"
-        "許容：妥協できる条件\n\n"
-        "こだわらない：求人比較の条件にしない"
+    st.markdown(
+        """
+        <section class="metea-priority-guide">
+          <div class="metea-priority-guide__intro">
+            <span class="metea-priority-guide__icon">i</span>
+            <div><strong>優先度を設定してください</strong>
+            <p>求人を比較するときに、どの程度重視するかを選びます。</p></div>
+          </div>
+          <div class="metea-priority-guide__items">
+            <div><span class="is-required">必須</span><p>絶対に譲れない条件</p></div>
+            <div><span class="is-desired">希望</span><p>できれば満たしたい条件</p></div>
+            <div><span class="is-acceptable">許容</span><p>状況により妥協できる条件</p></div>
+            <div><span class="is-neutral">こだわらない</span><p>求人比較の条件にしない</p></div>
+          </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
     )
 
     # --------------------------------------------------
@@ -567,17 +600,28 @@ def render_hope_conditions_page() -> None:
         job_columns = st.columns(2)
 
         with job_columns[0]:
+            industry_no_preference = st.checkbox(
+                "企業の業種にはこだわらない",
+                key="hope_industry_no_preference",
+            )
+
             selected_industries = st.multiselect(
-                "希望業種（最大3件）",
+                "企業業種（最大3件）",
                 options=INDUSTRY_OPTIONS,
                 max_selections=3,
                 key="hope_industries",
+                disabled=industry_no_preference,
             )
 
-            render_selected_item_priorities(
-                selected_industries,
-                "hope_industry_priority",
-            )
+            if industry_no_preference:
+                st.caption(
+                    "企業業種はAIマッチングの評価対象にしません。"
+                )
+            else:
+                render_selected_item_priorities(
+                    selected_industries,
+                    "hope_industry_priority",
+                )
 
         with job_columns[1]:
             selected_occupations = st.multiselect(
@@ -912,9 +956,15 @@ def render_hope_conditions_page() -> None:
 
         st.subheader("キャリア・組織風土")
 
+        st.caption(
+            "避けたい条件は「希望しない」、"
+            "受け入れられない条件は「不可」を選択してください。"
+        )
+
         render_condition_priorities(
             CAREER_CONDITIONS,
             "hope_career",
+            priority_labels=CAREER_PRIORITY_LABELS,
         )
 
         st.multiselect(
@@ -968,11 +1018,11 @@ def render_hope_conditions_page() -> None:
 
     with action_columns[0]:
         if st.button(
-            "← トップ画面へ戻る",
+            "← 基本情報へ戻る",
             key="hope_conditions_back_bottom",
             use_container_width=True,
         ):
-            st.query_params.clear()
+            st.query_params["page"] = "basic_info"
             st.rerun()
 
     with action_columns[1]:
@@ -997,9 +1047,10 @@ def render_hope_conditions_page() -> None:
 
     with action_columns[2]:
         if st.button(
-            "保存する",
+            "保存して次へ →",
             key="hope_conditions_save",
             use_container_width=True,
+            type="primary",
         ):
             try:
                 hope_condition = build_hope_condition()
@@ -1015,6 +1066,8 @@ def render_hope_conditions_page() -> None:
                 st.session_state[DRAFT_MESSAGE_KEY] = (
                     "希望条件を保存しました。"
                 )
+                st.query_params["page"] = "work_values"
+                st.rerun()
 
             except Exception as error:
                 st.error(

@@ -341,19 +341,9 @@ def build_ai_matching_context(
                         hope_items=hope_items,
                     )
                 ),
-                "work_values": (
-                    build_work_value_context(
-                        rankings=(
-                            work_value_rankings
-                        ),
-                        details=(
-                            work_value_details
-                        ),
-                        work_style_answers=(
-                            work_style_answers
-                        ),
-                    )
-                ),
+                # 価値観の回答は軸候補の作成にだけ使う。
+                # AI採点には、利用者が確認・確定した軸だけを渡す。
+                "work_values": {},
                 "job_hunting_axes": (
                     build_job_hunting_axis_context(
                         job_hunting_axes

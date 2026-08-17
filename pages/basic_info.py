@@ -4,6 +4,8 @@ from datetime import date
 import streamlit as st
 
 from data.master_data import GENDER_LABELS, PREFECTURES
+from pages.self_discovery_theme import apply_self_discovery_theme
+
 from models import BasicInfo
 from services.basic_info_service import (
     load_basic_info,
@@ -332,6 +334,8 @@ def get_selected_station_values() -> tuple[str, str]:
 def render_basic_info_page() -> None:
     """基本情報の入力画面を表示する。"""
 
+    apply_self_discovery_theme(current_step=1)
+
     initialize_basic_info_state()
 
     errors=st.session_state[ERRORS_KEY]
@@ -345,8 +349,8 @@ def render_basic_info_page() -> None:
     st.write("あなたについて教えてください")
 
     st.progress(
-        12,
-        text="入力の進捗 12%",
+        1 / 5,
+        text="自分を知る 1 / 5　基本情報",
     )
 
     render_error_summary(errors)
@@ -363,7 +367,7 @@ def render_basic_info_page() -> None:
 
         with name_columns[0]:
             st.text_input(
-                "姓 *",
+                "姓 :red[*]",
                 key=FAMILY_NAME_KEY,
                 placeholder="例）山田",
             )
@@ -374,7 +378,7 @@ def render_basic_info_page() -> None:
 
         with name_columns[1]:
             st.text_input(
-                "名 *",
+                "名 :red[*]",
                 key=GIVEN_NAME_KEY,
                 placeholder="例）太郎",
             )
@@ -384,7 +388,7 @@ def render_basic_info_page() -> None:
             )
 
         st.selectbox(
-            "性別 *",
+            "性別 :red[*]",
             options=[
                 value
                 for value in GENDER_LABELS
@@ -463,7 +467,7 @@ def render_basic_info_page() -> None:
 
         with location_columns[0]:
             st.selectbox(
-                "都道府県 *",
+                "都道府県 :red[*]",
                 options=[
                     *PREFECTURES,
                 ],
@@ -479,7 +483,7 @@ def render_basic_info_page() -> None:
 
         with location_columns[1]:
             st.text_input(
-                "市区町村 *",
+                "市区町村 :red[*]",
                 key=MUNICIPALITY_KEY,
                 placeholder="例）福岡市中央区",
             )
@@ -542,7 +546,7 @@ def render_basic_info_page() -> None:
 
             selected_station_place_id_in_form = (
                 st.selectbox(
-                    "検索結果から最寄駅を選択してください *",
+                    "検索結果から最寄駅を選択してください :red[*]",
                     options=station_place_id_options,
                     index=station_select_index,
                     format_func=format_station_candidate,
@@ -568,6 +572,7 @@ def render_basic_info_page() -> None:
 
         submitted = st.form_submit_button(
             "次へ →",
+            type="primary",
             use_container_width=True,
         )
 
@@ -702,7 +707,8 @@ def render_basic_info_page() -> None:
     st.session_state[ERRORS_KEY] = {}
     st.session_state[SAVE_MESSAGE_KEY] = (
         "基本情報を保存しました。"
-        "次の「転職理由」を入力してください。"
+        "続けて希望条件を入力してください。"
     )
 
-    st.query_params["page"] = "job_change_reason"
+    st.query_params["page"] = "hope_conditions"
+    st.rerun()

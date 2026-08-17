@@ -386,3 +386,71 @@ class JobApplicationDecision:
     next_action: str = ""
     action_deadline: str | None = None
     memo: str = ""
+
+@dataclass
+class ApplicationRecord:
+    """実際に応募する求人と応募経路ごとの管理情報。"""
+    id: int = 0
+    user_id: int = 1
+    job_id: int = 0
+    actual_route: str = ""
+    current_phase: str = "応募準備"
+    phase_category: str = "応募準備"
+    selection_result: str = ""
+    application_date: str | None = None
+    status: str = "active"
+    notes: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class ApplicationMilestone:
+    """応募後に管理する予定・期限・実績。"""
+    id: int = 0
+    application_id: int = 0
+    milestone_type: str = ""
+    detail_name: str = ""
+    title: str = ""
+    schedule_kind: str = "event"
+    scheduled_date: str | None = None
+    start_time: str = ""
+    end_time: str = ""
+    status: str = "pending"
+    rescheduled_from_id: int | None = None
+    memo: str = ""
+    completed_at: str | None = None
+    cancelled_at: str | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class ApplicationActivity:
+    """応募後に発生した活動履歴。"""
+    id: int = 0
+    application_id: int = 0
+    activity_type: str = ""
+    occurred_at: str = ""
+    title: str = ""
+    detail: str = ""
+    is_automatic: bool = False
+    created_at: str = ""
+
+
+@dataclass
+class ApplicationPreparation:
+    """企業・選考単位で整理する選考準備テーマ。"""
+    id: int = 0
+    application_id: int = 0
+    scope: str = "selection"
+    selection_type: str = ""
+    theme_key: str = ""
+    title: str = ""
+    description: str = ""
+    content: str = ""
+    is_completed: bool = False
+    is_custom: bool = False
+    sort_order: int = 0
+    created_at: str = ""
+    updated_at: str = ""

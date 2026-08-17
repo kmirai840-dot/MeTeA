@@ -64,6 +64,11 @@ def render_job_navigation(
             "応募管理",
         ),
         (
+            "application_dashboard",
+            "▥",
+            "活動分析",
+        ),
+        (
             "basic_info",
             "●",
             "基本情報",
@@ -107,10 +112,24 @@ def render_job_navigation(
         "job_comparison",
     ):
         effective_active_page = "job_list"
+    if active_page in (
+        "application_detail",
+        "selection_preparation",
+        "milestones",
+        "activity_history",
+    ):
+        effective_active_page = "application_list"
+
 
     navigation_links = []
 
     for page_name, icon, label in navigation_items:
+        navigation_href = f"?page={page_name}"
+        if page_name == "application_list":
+            navigation_href = (
+                "?page=application_list&focus=all"
+            )
+
         is_active = (
             page_name
             == effective_active_page
@@ -132,7 +151,7 @@ def render_job_navigation(
         navigation_links.append(
             f'<a class="metea-side-link'
             f'{active_class}" '
-            f'href="?page={page_name}" '
+            f'href="{navigation_href}" '
             f'target="_self" '
             f'style="{active_style}">'
             f'<span class="metea-side-icon">'

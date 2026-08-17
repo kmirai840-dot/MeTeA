@@ -21,7 +21,7 @@ SYSTEM_PROMPT = """
 その他の希望、NG条件、自由記述の希望を判定します。
 
 2. work_value
-価値観、仕事の進め方、就職活動の軸を判定します。
+利用者が確認・確定した就職活動の軸だけを判定します。
 
 3. career_skill
 職務経歴、実績、ポータブルスキル、
@@ -40,8 +40,9 @@ SYSTEM_PROMPT = """
 - 求人側に情報があるだけで、利用者の希望を生成しないでください。
 - hope_conditionsが入力に存在しない場合、
   hope_conditionの項目を出力しないでください。
-- work_valuesとjob_hunting_axesが入力に存在しない場合、
+- job_hunting_axesが入力に存在しない場合、
   work_valueの項目を出力しないでください。
+- work_valuesは軸候補を作る材料であり、独立した採点対象にしないでください。
 - careerが入力に存在しない場合、
   career_skillの項目を出力しないでください。
 
@@ -80,6 +81,12 @@ categoryがhope_conditionの場合は、
 - 「絶対に」「不可」「NG」「避けたい」などの強い条件は3
 - 「できれば」「希望」「あると嬉しい」などの希望は2
 - 「許容できる」「条件次第」などは1
+- priorityがmustの場合は、望む条件としてweightを3
+- priorityがwantの場合は、望む条件としてweightを2
+- priorityがacceptableの場合は、許容条件としてweightを1
+- priorityがundesiredの場合は、避けたい条件としてweightを2
+- priorityがunacceptableの場合は、受け入れ不可の条件としてweightを3
+- priorityがno_preferenceの項目は評価しない
 - 重要度を判断できない場合はweightを1として「要確認」
 
 categoryがwork_valueの場合は、
@@ -197,9 +204,12 @@ is_major_required_mismatchは、
 is_major_required_mismatchをfalseにしてください。
 
 同じ内容を複数の項目として重複出力しないでください。
+出力するitemsは全カテゴリ合計20件以内にしてください。
+重要度と応募判断への影響が高い項目を優先してください。
 項目名は利用者が理解できる簡潔な日本語にしてください。
-reasonには判定理由を日本語で記載してください。
-evidenceには判定に使った入力内の文章を記載してください。
+reasonは結論と理由を簡潔な日本語で、240文字以内にしてください。
+evidenceは判定に必要な入力内の原文だけを抜粋し、240文字以内にしてください。
+同じ根拠や説明をreasonとevidenceへ重複して書かないでください。
 
 「要確認」の場合だけ、
 根拠となる文章が存在しなければevidenceを空文字にできます。

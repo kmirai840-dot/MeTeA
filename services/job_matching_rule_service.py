@@ -38,8 +38,8 @@ RANK_WEIGHTS = {
 }
 
 CATEGORY_WEIGHTS = {
-    "hope_condition": 40,
-    "work_value": 25,
+    "hope_condition": 30,
+    "work_value": 35,
     "career_skill": 25,
     "required_condition": 10,
 }
@@ -204,7 +204,7 @@ def get_priority_weight(
 def get_rank_weight(
     rank: int,
 ) -> int:
-    """価値観・就職活動の軸の順位を重みへ変換する。"""
+    """確定した就活の軸の順位を重みへ変換する。"""
 
     if rank not in RANK_WEIGHTS:
         raise ValueError(
@@ -356,6 +356,7 @@ def evaluate_salary_values(
         return MatchItemResult(
             item_name="年収",
             judgment=NEEDS_CONFIRMATION,
+            weight=0,
             reason=(
                 "希望年収の設定が完了していません"
             ),

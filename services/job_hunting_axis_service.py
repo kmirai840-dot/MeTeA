@@ -59,12 +59,17 @@ def validate_job_hunting_axes(
                 "入力してください。"
             )
 
+        if not axis_description:
+            errors.append(
+                f"{index}件目の具体的な判断基準を入力してください。"
+            )
+
         if (
             len(axis_description)
             > MAX_AXIS_DESCRIPTION_LENGTH
         ):
             errors.append(
-                f"{index}件目の補足説明は"
+                f"{index}件目の具体的な判断基準は"
                 f"{MAX_AXIS_DESCRIPTION_LENGTH}文字以内で"
                 "入力してください。"
             )

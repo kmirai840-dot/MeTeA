@@ -69,6 +69,13 @@ PRIORITY_LABELS = {
     "no_preference": "こだわらない",
 }
 
+# キャリア・組織風土は、望む条件だけでなく避けたい条件も扱う。
+CAREER_PRIORITY_LABELS = {
+    **PRIORITY_LABELS,
+    "undesired": "希望しない",
+    "unacceptable": "不可",
+}
+
 
 # 希望業種
 INDUSTRY_OPTIONS = (

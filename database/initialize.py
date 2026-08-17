@@ -228,6 +228,50 @@ def initialize_database() -> None:
             """
         )
 
+        application_table_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(user_applications)"
+            ).fetchall()
+        }
+        if "deleted_at" not in application_table_columns:
+            connection.execute(
+                "ALTER TABLE user_applications ADD COLUMN deleted_at TEXT"
+            )
+
+        milestone_table_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(application_milestones)"
+            ).fetchall()
+        }
+        if "deleted_at" not in milestone_table_columns:
+            connection.execute(
+                "ALTER TABLE application_milestones ADD COLUMN deleted_at TEXT"
+            )
+        if "rescheduled_from_id" not in milestone_table_columns:
+            connection.execute(
+                "ALTER TABLE application_milestones ADD COLUMN rescheduled_from_id INTEGER"
+            )
+        if "cancelled_at" not in milestone_table_columns:
+            connection.execute(
+                "ALTER TABLE application_milestones ADD COLUMN cancelled_at TEXT"
+            )
+
+        phase_history_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(application_phase_history)"
+            ).fetchall()
+        }
+        if "selection_result" not in phase_history_columns:
+            connection.execute(
+                """
+                ALTER TABLE application_phase_history
+                ADD COLUMN selection_result TEXT NOT NULL DEFAULT ''
+                """
+            )
+
         connection.commit()
 
     except Exception:
