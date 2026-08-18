@@ -1,6 +1,7 @@
 """求人AIマッチング評価全体の流れを管理する。"""
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from models import (
@@ -37,6 +38,7 @@ from services.job_matching_rule_evaluation_service import (
     evaluate_rule_hope_groups,
 )
 from services.job_matching_rule_service import (
+    EVALUATION_RULE_VERSION,
     MATCH,
     MISMATCH,
     NEEDS_CONFIRMATION,
@@ -354,6 +356,16 @@ def build_complete_job_matching_result(
         ),
         is_provisional=(
             score_summary.is_provisional
+        ),
+        rule_version=EVALUATION_RULE_VERSION,
+        prompt_version=(
+            semantic_evaluation.prompt_version
+        ),
+        model_name=semantic_evaluation.model_name,
+        evaluation_result_json=json.dumps(
+            asdict(semantic_evaluation),
+            ensure_ascii=False,
+            sort_keys=True,
         ),
     )
 

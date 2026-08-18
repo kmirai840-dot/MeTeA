@@ -4,8 +4,10 @@ from datetime import date
 
 from data.master_data import GENDER_LABELS, PREFECTURES
 from database.repositories.draft_repository import get_draft, save_draft
+from database.repositories.home_activity_repository import save_general_activity
 from database.repositories.user_repository import (
     get_user_profile,
+    get_user_profile_updated_at,
     save_user_profile,
 )
 from models import BasicInfo
@@ -191,6 +193,13 @@ def save_basic_info(
     )
 
     if saved_basic_info != basic_info:
+        save_general_activity(
+            user_id,
+            "basic_info_updated",
+            "基本情報を更新しました",
+            target_page="basic_info",
+            icon_name="user.svg",
+        )
         invalidate_current_user_job_evaluations(
             reason="基本情報が変更されました。",
         )
@@ -202,3 +211,8 @@ def load_basic_info() -> BasicInfo | None:
     return get_user_profile(
         user_id=get_current_user_id(),
     )
+
+
+def load_basic_info_updated_at() -> str | None:
+    """基本情報の最終更新日時を返す。"""
+    return get_user_profile_updated_at(user_id=get_current_user_id())

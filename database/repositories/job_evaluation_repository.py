@@ -31,6 +31,15 @@ def get_job_match_evaluations(
                 is_provisional,
                 is_stale,
                 stale_reason,
+                rule_version,
+                prompt_version,
+                model_name,
+                evaluation_result_json,
+                evaluation_status,
+                failure_reason,
+                failed_at,
+                retry_count,
+                result_notice_pending,
                 matching_points,
                 concern_points,
                 confirmation_points,
@@ -81,6 +90,17 @@ def get_job_match_evaluations(
                 row["stale_reason"]
                 or ""
             ),
+            rule_version=(row["rule_version"] or ""),
+            prompt_version=(row["prompt_version"] or ""),
+            model_name=(row["model_name"] or ""),
+            evaluation_result_json=(
+                row["evaluation_result_json"] or ""
+            ),
+            evaluation_status=(row["evaluation_status"] or "ready"),
+            failure_reason=(row["failure_reason"] or ""),
+            failed_at=row["failed_at"],
+            retry_count=int(row["retry_count"] or 0),
+            result_notice_pending=bool(row["result_notice_pending"]),
             matching_points=(
                 row["matching_points"]
             ),
@@ -120,6 +140,15 @@ def save_job_match_evaluation(
                 is_provisional,
                 is_stale,
                 stale_reason,
+                rule_version,
+                prompt_version,
+                model_name,
+                evaluation_result_json,
+                evaluation_status,
+                failure_reason,
+                failed_at,
+                retry_count,
+                result_notice_pending,
                 matching_points,
                 concern_points,
                 confirmation_points,
@@ -128,7 +157,7 @@ def save_job_match_evaluation(
             )
             VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT (
                 user_id,
@@ -153,6 +182,23 @@ def save_job_match_evaluation(
                     excluded.is_stale,
                 stale_reason =
                     excluded.stale_reason,
+                rule_version =
+                    excluded.rule_version,
+                prompt_version =
+                    excluded.prompt_version,
+                model_name =
+                    excluded.model_name,
+                evaluation_result_json =
+                    excluded.evaluation_result_json,
+                evaluation_status =
+                    excluded.evaluation_status,
+                failure_reason =
+                    excluded.failure_reason,
+                failed_at = excluded.failed_at,
+                retry_count = excluded.retry_count,
+                result_notice_pending =
+                    excluded.result_notice_pending,
+                status_updated_at = CURRENT_TIMESTAMP,
                 matching_points =
                     excluded.matching_points,
                 concern_points =
@@ -180,6 +226,15 @@ def save_job_match_evaluation(
                 int(evaluation.is_provisional),
                 int(evaluation.is_stale),
                 evaluation.stale_reason,
+                evaluation.rule_version,
+                evaluation.prompt_version,
+                evaluation.model_name,
+                evaluation.evaluation_result_json,
+                evaluation.evaluation_status,
+                evaluation.failure_reason,
+                evaluation.failed_at,
+                evaluation.retry_count,
+                int(evaluation.result_notice_pending),
                 evaluation.matching_points,
                 evaluation.concern_points,
                 evaluation.confirmation_points,
@@ -430,5 +485,79 @@ def save_job_application_decision(
         connection.rollback()
         raise
 
+    finally:
+        connection.close()
+
+
+def set_job_match_evaluation_status(
+    user_id: int,
+    job_id: int,
+    status: str,
+    failure_reason: str = "",
+    increment_retry: bool = False,
+    result_notice_pending: bool = False,
+) -> None:
+    """評価結果を維持したままバックグラウンド処理状態を更新する。"""
+
+    connection = get_connection()
+    try:
+        connection.execute(
+            """
+            INSERT INTO user_job_match_evaluations (
+                user_id, job_id, evaluation_status, failure_reason,
+                failed_at, retry_count, result_notice_pending,
+                status_updated_at
+            ) VALUES (
+                ?, ?, ?, ?,
+                CASE WHEN ? = 'failed' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                CASE WHEN ? THEN 1 ELSE 0 END,
+                ?, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (user_id, job_id) DO UPDATE SET
+                evaluation_status = excluded.evaluation_status,
+                failure_reason = excluded.failure_reason,
+                failed_at = CASE
+                    WHEN excluded.evaluation_status = 'failed'
+                    THEN CURRENT_TIMESTAMP ELSE NULL END,
+                retry_count = CASE WHEN ?
+                    THEN user_job_match_evaluations.retry_count + 1
+                    ELSE user_job_match_evaluations.retry_count END,
+                result_notice_pending = excluded.result_notice_pending,
+                status_updated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                user_id,
+                job_id,
+                status,
+                failure_reason.strip(),
+                status,
+                int(increment_retry),
+                int(result_notice_pending),
+                int(increment_retry),
+            ),
+        )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def mark_job_match_evaluation_result_seen(user_id: int, job_id: int) -> None:
+    """評価完了通知を確認済みにする。"""
+
+    connection = get_connection()
+    try:
+        connection.execute(
+            """
+            UPDATE user_job_match_evaluations
+            SET result_notice_pending = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND job_id = ? AND deleted_at IS NULL
+            """,
+            (user_id, job_id),
+        )
+        connection.commit()
     finally:
         connection.close()

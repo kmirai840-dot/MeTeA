@@ -1,21 +1,29 @@
 """求人登録画面。"""
 
+import base64
 from dataclasses import asdict
 from datetime import (
     date,
     datetime,
     time,
 )
+from pathlib import Path
 
 import streamlit as st
+
+from pages.job_layout import render_job_navigation
 
 from models import Job
 
 from services.job_extraction_service import (
     extract_job_data,
+    normalize_job_document_text,
+)
+from services.career_document_service import (
+    extract_text_from_pdf,
 )
 from services.job_matching_auto_evaluation_service import (
-    automatically_evaluate_and_save_job,
+    enqueue_job_evaluation,
 )
 
 from services.job_service import (
@@ -31,6 +39,12 @@ from services.job_service import (
     load_jobs,
     save_job_data,
     update_job_data,
+)
+from services.current_user_service import get_current_user_id
+from database.repositories.draft_repository import (
+    delete_draft,
+    get_draft,
+    save_draft,
 )
 
 
@@ -48,9 +62,29 @@ JOB_COMPLETE_NOTE_KEY = "job_complete_note"
 JOB_COMPLETE_JOB_ID_KEY = "job_complete_job_id"
 JOB_DUPLICATE_ID_KEY = "job_duplicate_id"
 JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
+JOB_FORM_ERRORS_KEY = "job_form_validation_errors"
+JOB_FORM_GENERAL_ERRORS_KEY = "job_form_general_validation_errors"
+JOB_SCROLL_TO_ERRORS_KEY = "job_form_scroll_to_errors"
+JOB_REGISTRATION_DRAFT_FORM_NAME = "job_registration"
+JOB_REGISTRATION_DRAFT_LOADED_KEY = (
+    "job_registration_draft_loaded"
+)
+JOB_REGISTRATION_DRAFT_NOTICE_KEY = (
+    "job_registration_draft_notice"
+)
 JOB_FORM_RETURN_PAGE_KEY = (
     "job_form_return_page"
 )
+
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+
+def svg_data_uri(filename: str) -> str:
+    """ローカルSVGをHTML表示用のdata URIへ変換する。"""
+
+    svg_bytes = (ASSETS_DIR / filename).read_bytes()
+    encoded = base64.b64encode(svg_bytes).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def start_new_job_registration() -> None:
@@ -58,7 +92,7 @@ def start_new_job_registration() -> None:
 
     st.session_state[
         JOB_REGISTRATION_MODE_KEY
-    ] = "url"
+    ] = ""
 
     st.session_state[
         JOB_FORM_STEP_KEY
@@ -96,6 +130,83 @@ def start_new_job_registration() -> None:
         JOB_DUPLICATE_TYPE_KEY
     ] = None
 
+    st.session_state[JOB_FORM_ERRORS_KEY] = {}
+    st.session_state[JOB_FORM_GENERAL_ERRORS_KEY] = []
+    st.session_state[JOB_SCROLL_TO_ERRORS_KEY] = False
+
+
+def save_extracted_job_draft(
+    extracted_data: dict,
+    *,
+    show_notice: bool = True,
+) -> None:
+    """AI抽出結果を正式登録前の求人下書きとして保存する。"""
+
+    save_draft(
+        user_id=get_current_user_id(),
+        form_name=JOB_REGISTRATION_DRAFT_FORM_NAME,
+        draft_data={
+            "registration_mode": st.session_state.get(
+                JOB_REGISTRATION_MODE_KEY,
+                "",
+            ),
+            "extracted_data": extracted_data,
+            "source_text": st.session_state.get(
+                "job_registration_text",
+                "",
+            ),
+        },
+    )
+    st.session_state[JOB_REGISTRATION_DRAFT_LOADED_KEY] = True
+    if show_notice:
+        st.session_state[JOB_REGISTRATION_DRAFT_NOTICE_KEY] = (
+            "AIの読み取り結果を下書き保存しました。"
+        )
+
+
+def restore_extracted_job_draft() -> None:
+    """新しいセッションで求人登録のAI抽出下書きを復元する。"""
+
+    if JOB_REGISTRATION_DRAFT_LOADED_KEY in st.session_state:
+        return
+
+    st.session_state[JOB_REGISTRATION_DRAFT_LOADED_KEY] = True
+
+    # すでに画面上の求人データがある場合は上書きしない。
+    if st.session_state.get(JOB_EDIT_ID_KEY) is not None:
+        return
+
+    if any(
+        key.startswith("job_form_")
+        for key in st.session_state
+    ):
+        return
+
+    draft_data = get_draft(
+        user_id=get_current_user_id(),
+        form_name=JOB_REGISTRATION_DRAFT_FORM_NAME,
+    )
+    if not draft_data:
+        return
+
+    extracted_data = draft_data.get("extracted_data")
+    if not isinstance(extracted_data, dict):
+        return
+
+    apply_new_extracted_job_data(extracted_data)
+    st.session_state["job_extracted_data"] = extracted_data
+    st.session_state["job_registration_text"] = str(
+        draft_data.get("source_text") or ""
+    )
+    st.session_state[JOB_REGISTRATION_MODE_KEY] = str(
+        draft_data.get("registration_mode") or ""
+    )
+    st.session_state[JOB_FORM_STEP_KEY] = "form"
+    st.session_state["job_extraction_completed"] = True
+    st.session_state[JOB_REGISTRATION_DRAFT_NOTICE_KEY] = (
+        "前回AIで読み取った求人情報の下書きを復元しました。"
+    )
+
 
 SOURCE_TYPES = (
     "選択してください",
@@ -107,6 +218,138 @@ SOURCE_TYPES = (
     "知人・社員紹介",
     "その他",
 )
+
+REQUIRED_JOB_FIELDS = {
+    "company_name": "会社名を入力してください",
+    "source_type": "紹介経路の種別を選択してください",
+    "source_name": "紹介経路の具体名を入力してください",
+    "occupation": "募集ポジション（職種）を入力してください",
+    "job_summary": "仕事内容・業務概要を入力してください",
+}
+
+
+def clear_job_form_error(field_name: str) -> None:
+    """入力を修正した必須項目のエラー表示を解除する。"""
+
+    errors = dict(st.session_state.get(JOB_FORM_ERRORS_KEY, {}))
+    errors.pop(field_name, None)
+    st.session_state[JOB_FORM_ERRORS_KEY] = errors
+
+
+def validate_required_job_fields(
+    *,
+    company_name: str,
+    source_type: str,
+    source_name: str,
+    occupation: str,
+    job_summary: str,
+) -> dict[str, str]:
+    """保存前確認へ進むための必須項目を検証する。"""
+
+    values = {
+        "company_name": company_name,
+        "source_type": source_type,
+        "source_name": source_name,
+        "occupation": occupation,
+        "job_summary": job_summary,
+    }
+    errors: dict[str, str] = {}
+    for field_name, message in REQUIRED_JOB_FIELDS.items():
+        value = str(values.get(field_name) or "").strip()
+        if not value or (field_name == "source_type" and value == "選択してください"):
+            errors[field_name] = message
+    return errors
+
+
+def render_required_field_error(field_name: str) -> None:
+    """必須入力欄の赤枠用マーカーと項目別メッセージを表示する。"""
+
+    message = st.session_state.get(JOB_FORM_ERRORS_KEY, {}).get(field_name)
+    if not message:
+        return
+    st.markdown(
+        f'<span class="job-field-error-marker"></span>'
+        f'<div class="job-field-error-message">{message}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_job_field_error_styles(errors: dict[str, str]) -> None:
+    """赤枠を、検証エラーがある必須入力欄だけに適用する。"""
+
+    widget_selectors = {
+        "company_name": (
+            '.st-key-job_form_company_name '
+            '[data-testid="stTextInputRootElement"]'
+        ),
+        "source_type": (
+            '.st-key-job_form_source_type '
+            '[data-testid="stSelectbox"] '
+            '.react-aria-ComboBox > div'
+        ),
+        "source_name": (
+            '.st-key-job_form_source_name '
+            '[data-testid="stTextInputRootElement"]'
+        ),
+        "occupation": (
+            '.st-key-job_form_occupation '
+            '[data-testid="stTextInputRootElement"]'
+        ),
+        "job_summary": (
+            '.st-key-job_form_job_summary '
+            '[data-testid="stTextAreaRootElement"]'
+        ),
+    }
+    selectors = [
+        widget_selectors[field_name]
+        for field_name in errors
+        if field_name in widget_selectors
+    ]
+
+    if not selectors:
+        return
+
+    st.markdown(
+        "<style>"
+        + ",\n".join(selectors)
+        + """ {
+            border-color: #ef4050 !important;
+            box-shadow: 0 0 0 1px #ef4050 !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
+
+def _format_comma_input(key: str) -> None:
+    """金額入力を3桁カンマ表記へ整形する。"""
+
+    raw_value = str(st.session_state.get(key, "") or "")
+    digits = raw_value.replace(",", "").strip()
+    if not digits:
+        st.session_state[key] = ""
+        return
+    if digits.isdigit():
+        st.session_state[key] = f"{int(digits):,}"
+
+
+def comma_number_input(label: str, key: str, placeholder: str = "") -> int | None:
+    """カンマ付きで表示し、数値として返す金額入力欄。"""
+
+    current = st.session_state.get(key)
+    if current not in (None, ""):
+        digits = str(current).replace(",", "").strip()
+        if digits.isdigit():
+            st.session_state[key] = f"{int(digits):,}"
+    value = st.text_input(
+        label,
+        key=key,
+        placeholder=placeholder,
+        on_change=_format_comma_input,
+        args=(key,),
+    )
+    digits = str(value or "").replace(",", "").strip()
+    return int(digits) if digits.isdigit() else None
 
 LISTING_STATUSES = (
     "",
@@ -296,9 +539,41 @@ def render_styles() -> None:
     st.markdown(
         """
         <style>
+        .stApp, .stApp button, .stApp input, .stApp textarea,
+        .stApp [data-baseweb="select"] {
+            font-family: "Noto Sans JP", "Yu Gothic UI", "Yu Gothic",
+                "Hiragino Kaku Gothic ProN", sans-serif;
+        }
+
+        [data-testid="stAppViewContainer"] {
+            background: #f4f7fb;
+        }
+
+        .block-container {
+            padding-top: 2.1rem;
+            width: calc(100% - 32px);
+            max-width: 1680px;
+        }
+
+        div[data-testid="stVerticalBlock"]:has(
+            > [data-testid="stElementContainer"] .job-registration-shell-marker
+        ) {
+            padding: 28px 30px 30px;
+            border: 1px solid #d8e2f0;
+            border-radius: 16px;
+            background: #ffffff !important;
+            box-shadow: 0 10px 28px rgba(30, 67, 116, 0.07);
+        }
+
+        .job-registration-shell-marker {
+            display: none;
+        }
+
         .job-page-title {
-            font-size: 32px;
-            font-weight: 700;
+            color: #061b3a;
+            font-size: 34px;
+            font-weight: 800;
+            line-height: 1.35;
             margin-bottom: 4px;
         }
 
@@ -309,8 +584,9 @@ def render_styles() -> None:
         }
 
         .job-section-title {
+            color: #061b3a;
             font-size: 20px;
-            font-weight: 700;
+            font-weight: 800;
             margin-top: 12px;
             margin-bottom: 4px;
         }
@@ -333,8 +609,583 @@ def render_styles() -> None:
             margin-bottom: 14px;
         }
 
+        .job-list-back-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 38px;
+            margin-bottom: 26px;
+            padding: 8px 14px;
+            border: 1px solid #a9c9ff;
+            border-radius: 9px;
+            background: #ffffff;
+            color: #146cff !important;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.4;
+            text-decoration: none !important;
+            box-shadow: 0 2px 7px rgba(20, 108, 255, 0.04);
+            transition: background .16s ease, border-color .16s ease,
+                transform .16s ease;
+        }
+
+        .job-list-back-link:hover {
+            border-color: #72a6ff;
+            background: #eef5ff;
+            color: #0759df !important;
+            text-decoration: none !important;
+            transform: translateY(-1px);
+        }
+
         div[data-testid="stVerticalBlockBorderWrapper"] {
             border-radius: 14px;
+            background-color: #ffffff !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]
+        > div,
+        div[data-testid="stVerticalBlockBorderWrapper"]
+        div[data-testid="stVerticalBlock"] {
+            background-color: #ffffff !important;
+        }
+
+        div[data-testid="stVerticalBlock"]:has(
+            > [data-testid="stElementContainer"] h3
+        ) {
+            background-color: #ffffff !important;
+        }
+
+        .job-source-required-note {
+            margin: 6px 0 14px;
+            padding: 14px 16px;
+            border: 1px solid #b8d2ff;
+            border-radius: 11px;
+            background: #f3f7ff;
+            color: #24466f;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .job-source-required-note strong {
+            display: block;
+            margin-bottom: 2px;
+            color: #075ee8;
+            font-size: 14px;
+        }
+
+        .job-validation-summary {
+            display: flex;
+            gap: 12px;
+            margin: 6px 0 18px;
+            padding: 15px 17px;
+            border: 1px solid #ff9aa5;
+            border-radius: 11px;
+            background: #fff5f6;
+            color: #d92d3a;
+        }
+
+        .job-validation-summary > span {
+            display: grid;
+            place-items: center;
+            flex: 0 0 23px;
+            width: 23px;
+            height: 23px;
+            border: 2px solid #ef4050;
+            border-radius: 50%;
+            font-weight: 800;
+        }
+
+        .job-validation-summary strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .job-validation-summary ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .job-field-error-marker { display: none; }
+
+        .job-field-error-message {
+            margin-top: -9px;
+            margin-bottom: 8px;
+            color: #e02f3f;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .job-progress {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 8px;
+            margin: 18px 0 28px;
+        }
+
+        .job-progress-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 42px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: #f4f7fb;
+            color: #7b879b;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .job-progress-item.is-active {
+            background: #eaf2ff;
+            color: #075ee8;
+        }
+
+        .job-progress-item.is-complete {
+            background: #f0f6ff;
+            color: #3974cc;
+        }
+
+        .job-progress-number {
+            display: grid;
+            place-items: center;
+            flex: 0 0 24px;
+            width: 24px;
+            height: 24px;
+            border: 1px solid #cbd7e8;
+            border-radius: 50%;
+            background: #fff;
+        }
+
+        .job-progress-item.is-active .job-progress-number {
+            border-color: #1f6fff;
+            background: #1f6fff;
+            color: #fff;
+        }
+
+        .job-complete-content {
+            max-width: 780px;
+            margin: 18px auto 4px;
+            text-align: center;
+        }
+
+        .job-complete-icon {
+            display: grid;
+            place-items: center;
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 18px;
+            border-radius: 22px;
+            background: #eaf2ff;
+            box-shadow: inset 0 0 0 1px #d6e5ff;
+        }
+
+        .job-complete-icon img {
+            width: 38px;
+            height: 38px;
+        }
+
+        .job-complete-title {
+            margin: 0;
+            color: #061b3a;
+            font-size: 30px;
+            font-weight: 800;
+            line-height: 1.4;
+        }
+
+        .job-complete-description {
+            margin: 10px 0 0;
+            color: #667085;
+            font-size: 15px;
+            line-height: 1.8;
+        }
+
+        .job-complete-status {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            max-width: 700px;
+            margin: 26px auto 22px;
+            padding: 18px 20px;
+            border: 1px solid #bdd5ff;
+            border-radius: 12px;
+            background: #f1f6ff;
+            text-align: left;
+        }
+
+        .job-complete-status-mark {
+            position: relative;
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
+            margin-top: 2px;
+            border: 2px solid #1f6fff;
+            border-radius: 50%;
+        }
+
+        .job-complete-status-mark::after {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #1f6fff;
+            content: "";
+        }
+
+        .job-complete-status strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #075ee8;
+            font-size: 14px;
+        }
+
+        .job-complete-status span {
+            color: #475467;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .job-complete-id {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            margin-bottom: 20px;
+            padding: 4px 11px;
+            border-radius: 999px;
+            background: #f4f7fb;
+            color: #7b879b;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        div[data-testid="stVerticalBlock"]:has(
+            > [data-testid="stElementContainer"] .job-complete-actions-marker
+        ) {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .job-complete-actions-marker {
+            display: none;
+        }
+
+        .job-method-heading {
+            margin-bottom: 18px;
+            padding-left: 14px;
+            border-left: 4px solid #1f6fff;
+        }
+
+        .job-method-heading strong {
+            display: block;
+            color: #061b3a;
+            font-size: 19px;
+            margin-bottom: 3px;
+        }
+
+        .job-method-heading span {
+            color: #667085;
+            font-size: 13px;
+        }
+
+        .job-method-icon {
+            width: 48px;
+            height: 48px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 12px;
+            border-radius: 14px;
+            background: #eaf2ff;
+        }
+
+        .job-method-icon.manual { background: #fff3e8; }
+        .job-method-icon img { width: 34px; height: 34px; }
+
+        .job-method-label {
+            min-height: 108px;
+        }
+
+        div[data-testid="stVerticalBlock"]:has(
+            > [data-testid="stElementContainer"] .job-method-selected
+        ) {
+            position: relative;
+            border-color: #1f6fff;
+            background: #f5f9ff;
+            box-shadow: 0 8px 22px rgba(31, 111, 255, 0.10);
+        }
+
+        .job-method-selected {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: fit-content;
+            margin: 0;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #e6f0ff;
+            color: #075ee8;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .job-method-selected::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #1f6fff;
+        }
+
+        .job-selected-source-heading {
+            margin-top: 22px;
+            padding: 14px 16px;
+            border: 1px solid #a9c9ff;
+            border-radius: 11px;
+            background: #edf5ff;
+            color: #12345f;
+        }
+
+        .job-selected-source-heading strong {
+            display: block;
+            margin-bottom: 3px;
+            color: #075ee8;
+            font-size: 15px;
+        }
+
+        .job-selected-source-heading span {
+            font-size: 13px;
+        }
+
+        .job-method-title {
+            color: #061b3a;
+            font-size: 18px;
+            font-weight: 800;
+            margin: 0 0 8px;
+        }
+
+        .job-method-label p {
+            color: #667085;
+            font-size: 13px;
+            line-height: 1.7;
+            margin: 0;
+        }
+
+        .job-method-label--compact {
+            min-height: 118px;
+        }
+
+        .job-method-label--compact .job-method-title {
+            min-height: 44px;
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .job-method-label--compact p {
+            min-height: 58px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .job-recommended {
+            display: inline-flex;
+            margin-left: 7px;
+            padding: 3px 8px;
+            border: 1px solid #8bb6ff;
+            border-radius: 999px;
+            background: #fff;
+            color: #075ee8;
+            font-size: 11px;
+            vertical-align: 2px;
+        }
+
+        .job-secondary-methods-title {
+            margin: 18px 0 10px;
+            color: #42526a;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .job-secondary-methods-note {
+            margin-left: 6px;
+            color: #8a96a8;
+            font-weight: 500;
+        }
+
+        .job-flow-panel {
+            margin-top: 18px;
+            padding: 16px 18px;
+            border: 1px solid #cfe0fb;
+            border-radius: 12px;
+            background: #f7faff;
+            color: #42526a;
+            font-size: 13px;
+            line-height: 1.75;
+        }
+
+        .job-method-guide {
+            transform: translateX(-10mm);
+            padding: 20px 18px;
+            border: 1px dashed #9fc2f7;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 8px 22px rgba(30, 67, 116, 0.06);
+        }
+
+        .job-method-guide-title {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 12px;
+            color: #075ee8;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .job-method-guide-title::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            background: #1f6fff;
+        }
+
+        .job-method-guide-list {
+            margin-bottom: 16px;
+            color: #42526a;
+            font-size: 11.5px;
+            line-height: 1.8;
+            white-space: nowrap;
+        }
+
+        .job-method-guide-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 11px;
+            border: 1px solid #d9e3f1;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #274365;
+            font-size: 12px;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(31, 78, 140, 0.04);
+        }
+
+        .job-method-guide-step img {
+            flex: 0 0 23px;
+            width: 23px;
+            height: 23px;
+            object-fit: contain;
+        }
+
+        .job-method-guide-arrow {
+            position: relative;
+            width: 2px;
+            height: 18px;
+            margin: 2px auto;
+            background: #9ebce8;
+        }
+
+        .job-method-guide-arrow::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -1px;
+            width: 6px;
+            height: 6px;
+            border-right: 2px solid #7aa7ea;
+            border-bottom: 2px solid #7aa7ea;
+            transform: translateX(-50%) rotate(45deg);
+        }
+
+        .job-flow-panel strong {
+            color: #12345f;
+        }
+
+        .job-url-note {
+            position: relative;
+            margin: 0 0 18px;
+            padding: 15px 18px 15px 48px;
+            border: 1px solid #f3bd78;
+            border-radius: 12px;
+            background: #fff8ed;
+            color: #71491c;
+            font-size: 13px;
+            line-height: 1.75;
+            box-shadow: 0 4px 12px rgba(202, 123, 31, 0.06);
+        }
+
+        .job-url-note::before {
+            content: "!";
+            position: absolute;
+            top: 16px;
+            left: 17px;
+            display: grid;
+            place-items: center;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e98a22;
+            border-radius: 50%;
+            color: #d97400;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .job-url-note strong {
+            color: #a85400;
+            font-size: 14px;
+        }
+
+        .job-source-layout {
+            margin-top: 22px;
+        }
+
+        .job-flow-step {
+            margin: 8px 0;
+            padding: 9px 12px;
+            border: 1px solid #d9e5f7;
+            border-radius: 9px;
+            background: #fff;
+            color: #274365;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .job-flow-arrow {
+            position: relative;
+            width: 2px;
+            height: 14px;
+            margin: 3px auto;
+            background: #9ebce8;
+        }
+
+        .job-flow-arrow::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -1px;
+            width: 6px;
+            height: 6px;
+            border-right: 2px solid #7aa7ea;
+            border-bottom: 2px solid #7aa7ea;
+            transform: translateX(-50%) rotate(45deg);
+        }
+
+        @media (max-width: 900px) {
+            .job-progress { grid-template-columns: 1fr; }
+            .job-method-label { min-height: auto; }
+            div[data-testid="stVerticalBlock"]:has(
+                > [data-testid="stElementContainer"] .job-registration-shell-marker
+            ) {
+                padding: 20px 16px;
+            }
+            .job-method-guide-list { white-space: normal; }
+            .job-method-guide { transform: none; }
         }
         </style>
         """,
@@ -346,133 +1197,348 @@ def render_styles() -> None:
 # 登録方法選択
 # ========================================
 
+def render_registration_progress(
+    active_step: int,
+) -> None:
+    """求人登録の5段階を共通表示する。"""
+
+    labels = (
+        "登録方法の選択",
+        "求人情報の準備",
+        "求人情報の入力",
+        "登録内容の確認",
+        "登録完了",
+    )
+    items = []
+
+    for index, label in enumerate(labels, start=1):
+        state_class = (
+            "is-active"
+            if index == active_step
+            else "is-complete"
+            if index < active_step
+            else ""
+        )
+        items.append(
+            f'<div class="job-progress-item {state_class}">'
+            f'<span class="job-progress-number">{index}</span>'
+            f'<span>{label}</span></div>'
+        )
+
+    st.markdown(
+        f'<div class="job-progress">{"".join(items)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def select_registration_mode(mode: str) -> None:
+    """登録方式を選択し、入力欄を同一画面に展開する。"""
+
+    st.session_state[JOB_REGISTRATION_MODE_KEY] = mode
+    st.session_state[JOB_FORM_STEP_KEY] = "select"
+    st.rerun()
+
+
 def render_method_selection() -> None:
-    """3種類の登録方法を横並びで表示する。"""
+    """利用頻度で整理した4種類の登録方法を表示する。"""
 
     st.markdown(
         """
-        <div class="job-section-title">
-            ① 登録方法の選択
-        </div>
-        <div class="job-section-description">
-            3つの方法から選択してください。
-            選択した方法に応じて入力欄が表示されます。
+        <div class="job-method-heading">
+            <strong>求人情報をどの方法で登録しますか？</strong>
+            <span>選んだ方法の入力欄が、この画面の下に表示されます。AIが整理した内容は、保存前に確認・修正できます。</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    url_col, text_col, manual_col = st.columns(3)
+    selected_mode = st.session_state.get(
+        JOB_REGISTRATION_MODE_KEY,
+        "",
+    )
+
+    pdf_col, text_col, url_col, manual_col = st.columns(
+        [1.25, 1.25, 0.85, 0.85],
+        gap="small",
+    )
 
     # ------------------------
-    # URL
+    # PDFアップロード（推奨）
     # ------------------------
 
-    with url_col:
+    with pdf_col:
         with st.container(border=True):
-            st.markdown("### 🔗")
-            st.markdown("#### 求人URLから登録")
-
-            st.caption(
-                "求人ページのURLを入力すると、"
-                "AIが情報を取得します。"
+            if selected_mode == "pdf":
+                st.markdown(
+                    '<div class="job-method-selected">選択中</div>',
+                    unsafe_allow_html=True,
+                )
+            st.image("assets/job-pdf.svg", width=48)
+            st.markdown(
+                """
+                <div class="job-method-label">
+                    <div class="job-method-title">求人票をアップロード<span class="job-recommended">おすすめ</span></div>
+                    <p>PDFの求人票を読み込み、AIが必要な情報を整理します。</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
             if st.button(
-                "この方法を選択",
-                key="select_job_url",
-                type=(
-                    "primary"
-                    if st.session_state[
-                        JOB_REGISTRATION_MODE_KEY
-                    ] == "url"
-                    else "secondary"
-                ),
+                "この方法を選ぶ",
+                key="select_job_pdf",
+                type="primary",
                 use_container_width=True,
             ):
-                st.session_state[
-                    JOB_REGISTRATION_MODE_KEY
-                ] = "url"
-
-                st.session_state[
-                    JOB_FORM_STEP_KEY
-                ] = "source"
-
-                st.rerun()
+                select_registration_mode("pdf")
 
     # ------------------------
-    # 貼り付け
+    # 貼り付け（推奨）
     # ------------------------
 
     with text_col:
         with st.container(border=True):
-            st.markdown("### 📄")
+            if selected_mode == "text":
+                st.markdown(
+                    '<div class="job-method-selected">選択中</div>',
+                    unsafe_allow_html=True,
+                )
+            st.image("assets/job-paste.svg", width=48)
             st.markdown(
-                "#### 求人票を貼り付けて登録"
-            )
-
-            st.caption(
-                "求人票の本文を貼り付けると、"
-                "AIが情報を抽出します。"
+                """
+                <div class="job-method-label">
+                    <div class="job-method-title">求人票を貼り付け</div>
+                    <p>求人票の本文を貼り付けると、AIが必要な情報を整理します。</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
             if st.button(
-                "この方法を選択",
+                "この方法を選ぶ",
                 key="select_job_text",
-                type=(
-                    "primary"
-                    if st.session_state[
-                        JOB_REGISTRATION_MODE_KEY
-                    ] == "text"
-                    else "secondary"
-                ),
+                type="primary",
                 use_container_width=True,
             ):
-                st.session_state[
-                    JOB_REGISTRATION_MODE_KEY
-                ] = "text"
-
-                st.session_state[
-                    JOB_FORM_STEP_KEY
-                ] = "source"
-
-                st.rerun()
+                select_registration_mode("text")
 
     # ------------------------
-    # 手動
+    # URL（補助方法）
+    # ------------------------
+
+    with url_col:
+        with st.container(border=True):
+            if selected_mode == "url":
+                st.markdown(
+                    '<div class="job-method-selected">選択中</div>',
+                    unsafe_allow_html=True,
+                )
+            st.image("assets/job-url.svg", width=40)
+            st.markdown(
+                """
+                <div class="job-method-label job-method-label--compact">
+                    <div class="job-method-title">求人URLから登録</div>
+                    <p>公開求人ページからAIが情報を取得します。</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "この方法を選ぶ",
+                key="select_job_url",
+                type="primary",
+                use_container_width=True,
+            ):
+                select_registration_mode("url")
+
+    # ------------------------
+    # 手動（補助方法）
     # ------------------------
 
     with manual_col:
         with st.container(border=True):
-            st.markdown("### ✏️")
-            st.markdown("#### 手動入力")
-
-            st.caption(
-                "AIで取得できない場合や、"
-                "手動で入力したい場合に選択します。"
+            if selected_mode == "manual":
+                st.markdown(
+                    '<div class="job-method-selected">選択中</div>',
+                    unsafe_allow_html=True,
+                )
+            st.image("assets/job-manual.svg", width=40)
+            st.markdown(
+                """
+                <div class="job-method-label job-method-label--compact">
+                    <div class="job-method-title">手動で入力</div>
+                    <p>確認しながら必要な情報を入力します。</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-
             if st.button(
-                "この方法を選択",
+                "入力を始める",
                 key="select_job_manual",
-                type=(
-                    "primary"
-                    if st.session_state[
-                        JOB_REGISTRATION_MODE_KEY
-                    ] == "manual"
-                    else "secondary"
-                ),
+                type="primary",
                 use_container_width=True,
             ):
-                st.session_state[
-                    JOB_REGISTRATION_MODE_KEY
-                ] = "manual"
+                st.session_state[JOB_REGISTRATION_MODE_KEY] = "manual"
+                st.session_state[JOB_FORM_STEP_KEY] = "form"
+                st.session_state["job_extraction_completed"] = False
+                st.rerun()
 
-                st.session_state[
-                    JOB_FORM_STEP_KEY
-                ] = "form"
+    if selected_mode in {"pdf", "text", "url"}:
+        selected_label = (
+            "求人票をアップロード"
+            if selected_mode == "pdf"
+            else "求人票を貼り付け"
+            if selected_mode == "text"
+            else "求人URLから登録"
+        )
+        st.markdown(
+            f"""
+            <div class="job-selected-source-heading">
+                <strong>{selected_label}を選択しました</strong>
+                <span>続けて、下の入力欄から求人情報を登録してください。</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-                st.rerun()  
+        st.markdown(
+            '<div class="job-source-layout"></div>',
+            unsafe_allow_html=True,
+        )
+        if selected_mode == "pdf":
+            render_pdf_registration()
+        elif selected_mode == "text":
+            render_text_registration()
+        else:
+            render_url_registration()
+
+
+def render_registration_method_guide() -> None:
+    """登録方法の違いと、AI処理後の流れを表示する。"""
+
+    input_icon = svg_data_uri("job-paste.svg")
+    ai_icon = svg_data_uri("sparkle.svg")
+    review_icon = svg_data_uri("review-basic.svg")
+    save_icon = svg_data_uri("value-check.svg")
+
+    st.markdown(
+        f"""
+        <div class="job-method-guide">
+            <div class="job-method-guide-title">登録方法の違い</div>
+            <div class="job-method-guide-list">
+                ・PDFをアップロード：求人票ファイルから抽出<br>
+                ・URLから登録：公開Webページから自動取得<br>
+                ・求人票を貼り付け：求人票の文章から抽出<br>
+                ・手動入力：AIで取得できない情報を手入力
+            </div>
+            <div class="job-method-guide-step">
+                <img src="{input_icon}" alt="">
+                <span>アップロード・貼り付け・入力</span>
+            </div>
+            <div class="job-method-guide-arrow"></div>
+            <div class="job-method-guide-step">
+                <img src="{ai_icon}" alt="">
+                <span>AIで情報を取得・抽出</span>
+            </div>
+            <div class="job-method-guide-arrow"></div>
+            <div class="job-method-guide-step">
+                <img src="{review_icon}" alt="">
+                <span>AI抽出結果の確認・修正</span>
+            </div>
+            <div class="job-method-guide-arrow"></div>
+            <div class="job-method-guide-step">
+                <img src="{save_icon}" alt="">
+                <span>登録内容の確認・保存</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ========================================
+# PDF入力
+# ========================================
+
+def render_pdf_registration() -> None:
+    """テキストを取得できるPDF求人票の入力欄を表示する。"""
+
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="job-input-title">求人票をアップロード</div>
+            <div class="job-input-description">
+                1求人分のPDFを選択してください。読み取り後に内容を確認・修正できます。
+            </div>
+            <div class="job-url-note">
+                <strong>PDFの文字情報について</strong><br>
+                <span>
+                    画像として保存・スキャンされたPDFは読み取れません。
+                    文字を選択・コピーできる状態のPDFをご利用ください。
+                    文字を選択できない場合は、求人票の本文をコピーして「求人票を貼り付け」をご利用ください。
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        uploaded_file = st.file_uploader(
+            "PDF求人票",
+            type=["pdf"],
+            key="job_registration_pdf",
+            help="テキストを選択できるPDFに対応しています。上限は10MBです。",
+        )
+        st.caption(
+            "対応形式：PDF（1ファイル1求人・10MBまで）"
+        )
+
+        if st.button(
+            "PDFから求人情報を抽出する",
+            key="job_registration_pdf_button",
+            type="primary",
+            use_container_width=True,
+        ):
+            if uploaded_file is None:
+                st.warning("PDF求人票を選択してください。")
+                return
+
+            if uploaded_file.size > 10 * 1024 * 1024:
+                st.error("ファイルサイズは10MB以下にしてください。")
+                return
+
+            try:
+                with st.spinner("PDFから求人情報を読み取っています..."):
+                    extracted_text = extract_text_from_pdf(uploaded_file)
+            except Exception as error:
+                st.error(
+                    "PDFを読み取れませんでした。破損していないファイルか確認し、もう一度お試しください。"
+                )
+                st.caption(f"エラー内容：{error}")
+                return
+
+            if not extracted_text.strip():
+                st.error(
+                    "PDFから文字情報を読み取れませんでした。文字を選択・コピーできるPDFへ変換するか、求人票の本文を貼り付けてください。"
+                )
+                return
+
+            try:
+                with st.spinner("AIが求人票の情報を整理しています..."):
+                    extracted_text = normalize_job_document_text(extracted_text)
+                    extracted_data = extract_job_data(extracted_text)
+            except Exception as error:
+                st.error(
+                    "求人票のAI抽出に失敗しました。API設定を確認して、もう一度お試しください。"
+                )
+                st.caption(f"エラー内容：{error}")
+                return
+
+            apply_new_extracted_job_data(extracted_data)
+            st.session_state["job_extracted_data"] = extracted_data
+            st.session_state["job_registration_text"] = extracted_text
+            save_extracted_job_draft(extracted_data)
+            st.session_state[JOB_FORM_STEP_KEY] = "form"
+            st.session_state["job_extraction_completed"] = True
+            st.rerun()
 
 
 # ========================================
@@ -492,6 +1558,12 @@ def render_url_registration() -> None:
             <div class="job-input-description">
                 求人ページのURLを入力してください。
             </div>
+            <div class="job-url-note">
+                <strong>URLから登録できる求人について</strong><br>
+                URLから読み込めるのは、企業の採用ページなど、ログインせずに閲覧できる公開求人ページです。<br>
+                会員登録・ログインが必要な求人サイトや、アクセスが制限されているページは読み込めない場合があります。<br>
+                その場合は、求人票の本文をコピーして「求人票を貼り付け」をご利用ください。
+            </div>
             """,
             unsafe_allow_html=True,
         )
@@ -502,17 +1574,8 @@ def render_url_registration() -> None:
             key="job_registration_url",
         )
 
-        st.info(
-            "URLから読み込めるのは、企業の採用ページなど、"
-            "ログインせずに閲覧できる公開求人ページです。\n\n"
-            "会員登録・ログインが必要な求人サイトや、"
-            "アクセスが制限されているページは読み込めない場合があります。\n\n"
-            "その場合は、求人票の本文をコピーして"
-            "「求人票を貼り付け」をご利用ください。"
-        )
-
         if st.button(
-            "🔍 求人情報を取得する",
+            "求人URLから情報を取得する",
             key="job_registration_url_button",
             type="primary",
             use_container_width=True,
@@ -569,6 +1632,9 @@ def apply_extracted_job_data(
         "goals_kpi": "job_form_goals_kpi",
         "expected_results": (
             "job_form_expected_results"
+        ),
+        "organizational_culture": (
+            "job_form_organizational_culture"
         ),
         "employment_type": (
             "job_form_employment_type"
@@ -934,6 +2000,19 @@ def apply_extracted_job_data(
             extracted_integer(field_name)
         )
 
+
+def apply_new_extracted_job_data(
+    extracted_data: dict,
+) -> None:
+    """新しい求人の抽出結果だけでフォームを作り直す。"""
+
+    # 前回確認した求人の値が、今回の未記載項目へ残ることを防ぐ。
+    for state_key in tuple(st.session_state.keys()):
+        if state_key.startswith("job_form_"):
+            st.session_state.pop(state_key, None)
+
+    apply_extracted_job_data(extracted_data)
+
 # ========================================
 # 貼り付け入力
 # ========================================
@@ -966,7 +2045,7 @@ def render_text_registration() -> None:
         )
 
         if st.button(
-            "求人情報を抽出する",
+            "求人票から情報を抽出する",
             key="job_registration_text_button",
             type="primary",
             use_container_width=True,
@@ -983,7 +2062,7 @@ def render_text_registration() -> None:
                     ):
                         extracted_data = (
                             extract_job_data(
-                                job_text
+                                normalize_job_document_text(job_text)
                             )
                         )
 
@@ -1000,13 +2079,17 @@ def render_text_registration() -> None:
 
                     return
 
-                apply_extracted_job_data(
+                apply_new_extracted_job_data(
                     extracted_data
                 )
 
                 st.session_state[
                     "job_extracted_data"
                 ] = extracted_data
+
+                save_extracted_job_draft(
+                    extracted_data
+                )
 
                 st.session_state[
                     JOB_FORM_STEP_KEY
@@ -1473,6 +2556,10 @@ def load_job_for_edit(
     st.session_state[
         "job_form_expected_results"
     ] = job.expected_results
+
+    st.session_state[
+        "job_form_organizational_culture"
+    ] = job.organizational_culture
 
     st.session_state[
         "job_form_occupation"
@@ -1943,6 +3030,27 @@ def load_job_for_edit(
 def render_job_form() -> None:
     """求人情報の入力フォームを表示する。"""
 
+    # 抽出直後の処理経路だけに依存せず、AI結果フォームを表示した
+    # 時点でも必ずSQLiteへ同期する。これによりブラウザー更新後も
+    # 登録方法選択へ戻らず、同じ確認フォームを復元できる。
+    extracted_data = st.session_state.get("job_extracted_data")
+    if (
+        st.session_state.get(JOB_EDIT_ID_KEY) is None
+        and st.session_state.get("job_extraction_completed")
+        and isinstance(extracted_data, dict)
+    ):
+        save_extracted_job_draft(
+            extracted_data,
+            show_notice=False,
+        )
+
+    draft_notice = st.session_state.pop(
+        JOB_REGISTRATION_DRAFT_NOTICE_KEY,
+        None,
+    )
+    if draft_notice:
+        st.info(draft_notice)
+
     edit_job_id = st.session_state.get(
         JOB_EDIT_ID_KEY
     )
@@ -1996,14 +3104,21 @@ def render_job_form() -> None:
             f"求人ID {edit_job_id} を編集中です。"
         )
 
+    render_registration_progress(3)
+
+    form_title = (
+        "求人情報を編集してください"
+        if edit_job_id is not None
+        else "求人情報を入力してください"
+    )
     st.markdown(
-        """
+        f"""
         <div class="job-section-title">
-            ② AI抽出内容を確認してください
+            {form_title}
         </div>
         <div class="job-section-description">
-            AIが整理した求人情報を確認し、
-            誤りや不足があれば修正してください。
+            求人票の内容をもとに、必要な情報を入力してください。
+            入力した内容は、保存前に次の画面で確認できます。
         </div>
         """,
         unsafe_allow_html=True,
@@ -2019,34 +3134,98 @@ def render_job_form() -> None:
             "内容を確認し、不足項目を入力してください。"
         )
 
+    validation_errors = st.session_state.get(JOB_FORM_ERRORS_KEY, {})
+    general_validation_errors = st.session_state.get(
+        JOB_FORM_GENERAL_ERRORS_KEY,
+        [],
+    )
+    render_job_field_error_styles(validation_errors)
+    all_validation_messages = [
+        *validation_errors.values(),
+        *general_validation_errors,
+    ]
+    if all_validation_messages:
+        error_items = "".join(
+            f"<li>{message}</li>"
+            for message in all_validation_messages
+        )
+        st.markdown(
+            '<div class="job-validation-summary"><span>!</span><div>'
+            '<strong>入力内容を確認してください</strong>'
+            f'<ul>{error_items}</ul></div></div>',
+            unsafe_allow_html=True,
+        )
+
+        if st.session_state.pop(JOB_SCROLL_TO_ERRORS_KEY, False):
+            st.components.v1.html(
+                """
+                <script>
+                    window.setTimeout(() => {
+                        const summary = window.parent.document
+                            .querySelector('.job-validation-summary');
+                        if (summary) {
+                            summary.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                            });
+                        }
+                    }, 80);
+                </script>
+                """,
+                height=0,
+            )
+
     with st.container(border=True):
 
         st.markdown("### 求人基本情報")
 
-        company_name = st.text_input(
-            "会社名 *",
-            key="job_form_company_name",
-        )
+        with st.container():
+            company_name = st.text_input(
+                "会社名 :red[*]",
+                key="job_form_company_name",
+                on_change=clear_job_form_error,
+                args=("company_name",),
+            )
+            render_required_field_error("company_name")
 
         job_title = st.text_input(
             "求人名",
             key="job_form_job_title",
         )
 
-        source_type = st.selectbox(
-            "紹介経路の種別 *",
-            SOURCE_TYPES,
-            key="job_form_source_type",
+        st.markdown(
+            '<div class="job-source-required-note">'
+            '<strong>紹介経路を入力してください</strong>'
+            '紹介経路は求人票から自動判定できないため、保存前に必ず入力してください。'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
-        source_name = st.text_input(
-            "紹介経路の具体名 *",
-            placeholder=(
-                "例：リクルートエージェント、"
-                "Indeed、企業採用ページ"
-            ),
-            key="job_form_source_name",
-        )
+        source_col1, source_col2 = st.columns(2)
+        with source_col1:
+            with st.container():
+                source_type = st.selectbox(
+                    "紹介経路の種別 :red[*]",
+                    SOURCE_TYPES,
+                    key="job_form_source_type",
+                    on_change=clear_job_form_error,
+                    args=("source_type",),
+                )
+                render_required_field_error("source_type")
+
+        with source_col2:
+            with st.container():
+                source_name = st.text_input(
+                    "紹介経路の具体名 :red[*]",
+                    placeholder=(
+                        "例：リクルートエージェント、"
+                        "Indeed、企業採用ページ"
+                    ),
+                    key="job_form_source_name",
+                    on_change=clear_job_form_error,
+                    args=("source_name",),
+                )
+                render_required_field_error("source_name")
 
         job_number = st.text_input(
             "求人番号",
@@ -2153,10 +3332,14 @@ def render_job_form() -> None:
         col5, col6 = st.columns(2)
 
         with col5:
-            occupation = st.text_input(
-                "募集ポジション（職種） *",
-                key="job_form_occupation",
-            )
+            with st.container():
+                occupation = st.text_input(
+                    "募集ポジション（職種） :red[*]",
+                    key="job_form_occupation",
+                    on_change=clear_job_form_error,
+                    args=("occupation",),
+                )
+                render_required_field_error("occupation")
 
             department = st.text_input(
                 "配属部署",
@@ -2203,11 +3386,15 @@ def render_job_form() -> None:
 
         st.markdown("### 仕事内容")
 
-        job_summary = st.text_area(
-            "仕事内容・業務概要 *",
-            height=140,
-            key="job_form_job_summary",
-        )
+        with st.container():
+            job_summary = st.text_area(
+                "仕事内容・業務概要 :red[*]",
+                height=140,
+                key="job_form_job_summary",
+                on_change=clear_job_form_error,
+                args=("job_summary",),
+            )
+            render_required_field_error("job_summary")
 
         responsibility_scope = st.text_area(
             "担当範囲・役割",
@@ -2242,6 +3429,20 @@ def render_job_form() -> None:
         expected_results = st.text_area(
             "期待される成果",
             key="job_form_expected_results",
+        )
+
+        organizational_culture = st.text_area(
+            "組織風土・企業文化",
+            height=120,
+            placeholder=(
+                "例：チームで相談しながら進める文化、"
+                "週次で相互フィードバックを行う"
+            ),
+            key="job_form_organizational_culture",
+            help=(
+                "求人票に明記された相談・協働・評価・"
+                "フィードバックなどの特徴を入力します。"
+            ),
         )
 
     with st.container(border=True):
@@ -2542,31 +3743,22 @@ def render_job_form() -> None:
         col13, col14 = st.columns(2)
 
         with col13:
-            monthly_salary_min = st.number_input(
+            monthly_salary_min = comma_number_input(
                 "月給最低額（円）",
-                min_value=0,
-                step=1000,
-                value=None,
-                placeholder="例：280000",
                 key="job_form_monthly_salary_min",
+                placeholder="例：280,000",
             )
 
-            base_salary_min = st.number_input(
+            base_salary_min = comma_number_input(
                 "基本給最低額（円）",
-                min_value=0,
-                step=1000,
-                value=None,
-                placeholder="例：240000",
                 key="job_form_base_salary_min",
+                placeholder="例：240,000",
             )
 
-            expected_salary_min = st.number_input(
+            expected_salary_min = comma_number_input(
                 "想定年収最低額（万円）",
-                min_value=0,
-                step=10,
-                value=None,
-                placeholder="例：400",
                 key="job_form_expected_salary_min",
+                placeholder="例：400",
             )
 
             bonus = st.text_input(
@@ -2575,31 +3767,22 @@ def render_job_form() -> None:
             )
 
         with col14:
-            monthly_salary_max = st.number_input(
+            monthly_salary_max = comma_number_input(
                 "月給最高額（円）",
-                min_value=0,
-                step=1000,
-                value=None,
-                placeholder="例：350000",
                 key="job_form_monthly_salary_max",
+                placeholder="例：350,000",
             )
 
-            base_salary_max = st.number_input(
+            base_salary_max = comma_number_input(
                 "基本給最高額（円）",
-                min_value=0,
-                step=1000,
-                value=None,
-                placeholder="例：300000",
                 key="job_form_base_salary_max",
+                placeholder="例：300,000",
             )
 
-            expected_salary_max = st.number_input(
+            expected_salary_max = comma_number_input(
                 "想定年収最高額（万円）",
-                min_value=0,
-                step=10,
-                value=None,
-                placeholder="例：550",
                 key="job_form_expected_salary_max",
+                placeholder="例：550",
             )
 
             salary_increase = st.text_input(
@@ -2639,23 +3822,17 @@ def render_job_form() -> None:
                     key="job_form_fixed_overtime_hours",
                 )
 
-                fixed_overtime_pay_min = st.number_input(
+                fixed_overtime_pay_min = comma_number_input(
                     "固定残業代最低額（円）",
-                    min_value=0,
-                    step=1000,
-                    value=None,
-                    placeholder="例：40000",
                     key="job_form_fixed_overtime_pay_min",
+                    placeholder="例：40,000",
                 )
 
             with fixed_col2:
-                fixed_overtime_pay_max = st.number_input(
+                fixed_overtime_pay_max = comma_number_input(
                     "固定残業代最高額（円）",
-                    min_value=0,
-                    step=1000,
-                    value=None,
-                    placeholder="例：60000",
                     key="job_form_fixed_overtime_pay_max",
+                    placeholder="例：60,000",
                 )
 
                 overtime_extra_pay = st.selectbox(
@@ -2969,19 +4146,25 @@ def render_job_form() -> None:
         type="primary",
         use_container_width=True,
     ):
+        required_errors = validate_required_job_fields(
+            company_name=company_name,
+            source_type=source_type,
+            source_name=source_name,
+            occupation=occupation,
+            job_summary=job_summary,
+        )
+        general_errors: list[str] = []
         if interview_count_error:
-            st.error(interview_count_error)
-            return
-
+            general_errors.append(interview_count_error)
         if employee_count_error:
-            st.error(employee_count_error)
-            return
+            general_errors.append(employee_count_error)
+        general_errors.extend(salary_range_errors)
 
-        if salary_range_errors:
-            for error in salary_range_errors:
-                st.error(error)
-
-            return
+        st.session_state[JOB_FORM_ERRORS_KEY] = required_errors
+        st.session_state[JOB_FORM_GENERAL_ERRORS_KEY] = general_errors
+        if required_errors or general_errors:
+            st.session_state[JOB_SCROLL_TO_ERRORS_KEY] = True
+            st.rerun()
         job = Job(
             registration_method=st.session_state[
                 JOB_REGISTRATION_MODE_KEY
@@ -3042,6 +4225,7 @@ def render_job_form() -> None:
             external_partners=external_partners,
             goals_kpi=goals_kpi,
             expected_results=expected_results,
+            organizational_culture=organizational_culture,
 
             employment_type=employment_type,
             probation_period_status=(
@@ -3241,10 +4425,12 @@ def render_job_confirmation() -> None:
 
         return
 
+    render_registration_progress(4)
+
     st.markdown(
         """
         <div class="job-section-title">
-            ③ 登録内容を確認してください
+            登録内容を確認してください
         </div>
         <div class="job-section-description">
             以下の内容で求人情報を登録します。
@@ -3340,6 +4526,22 @@ def render_job_confirmation() -> None:
         show_value(
             "必須資格",
             job.required_qualifications,
+        )
+        show_value(
+            "歓迎経験",
+            job.preferred_experience,
+        )
+        show_value(
+            "歓迎スキル",
+            job.preferred_skills,
+        )
+        show_value(
+            "求める人物像",
+            job.desired_personality,
+        )
+        show_value(
+            "組織風土・企業文化",
+            job.organizational_culture,
         )
 
     with st.container(border=True):
@@ -3620,6 +4822,11 @@ def move_to_job_completion(
 ) -> None:
     """保存完了画面へ移動する。"""
 
+    delete_draft(
+        user_id=get_current_user_id(),
+        form_name=JOB_REGISTRATION_DRAFT_FORM_NAME,
+    )
+
     st.session_state[
         JOB_CONFIRM_DATA_KEY
     ] = None
@@ -3647,45 +4854,21 @@ def move_to_job_completion_after_ai_evaluation(
     message: str,
     job_id: int,
 ) -> None:
-    """求人保存後にAI評価を行い、完了画面へ移動する。"""
+    """求人保存後にAI評価を予約し、待たずに完了画面へ移動する。"""
 
-    with st.spinner(
-        "求人情報を保存しました。"
-        "AIマッチング評価を行っています。"
-    ):
-        (
-            evaluation,
-            evaluation_error,
-        ) = automatically_evaluate_and_save_job(
-            job_id=job_id
-        )
-
-    if evaluation_error:
-        move_to_job_completion(
-            message=message,
-            job_id=job_id,
-            note=evaluation_error,
-        )
-        return
-
-    completion_message = (
-        f"{message.rstrip('。')}。"
-        "AIマッチング評価も完了しました。"
+    queued = enqueue_job_evaluation(job_id=job_id)
+    completion_message = message
+    note = (
+        "AIがマッチ度を確認しています。"
+        "評価が完了すると、求人一覧から確認画面を開けるようになります。"
+        if queued else
+        "AI評価はすでに処理中です。完了後に求人一覧から確認できます。"
     )
-
-    if (
-        evaluation is not None
-        and evaluation.is_provisional
-    ):
-        completion_message = (
-            f"{completion_message}"
-            "現在評価できた情報："
-            f"{evaluation.evaluation_coverage}%"
-        )
 
     move_to_job_completion(
         message=completion_message,
         job_id=job_id,
+        note=note,
     )
 
 
@@ -3723,41 +4906,76 @@ def render_job_completion() -> None:
 
         return
 
-    st.success(message)
-
-    if note:
-        st.warning(note)
-
-    st.caption(
-        f"求人ID：{job_id}"
+    complete_icon = svg_data_uri("value-check.svg")
+    is_ai_pending = "AI" in note and (
+        "確認" in note or "評価" in note
+    )
+    status_title = (
+        "AIマッチングを確認中"
+        if is_ai_pending
+        else "確認しておきたいこと"
     )
 
-    detail_col, list_col = st.columns(2)
+    with st.container(border=True):
+        st.markdown(
+            '<div class="job-registration-shell-marker"></div>',
+            unsafe_allow_html=True,
+        )
+        render_registration_progress(5)
+        st.markdown(
+            f"""
+            <div class="job-complete-content">
+                <div class="job-complete-icon">
+                    <img src="{complete_icon}" alt="">
+                </div>
+                <h1 class="job-complete-title">{message}</h1>
+                <p class="job-complete-description">
+                    求人情報の登録が完了しました。<br>
+                    登録した内容は、求人一覧からいつでも確認できます。
+                </p>
+                {(
+                    f'<div class="job-complete-status">'
+                    f'<span class="job-complete-status-mark"></span>'
+                    f'<div><strong>{status_title}</strong>'
+                    f'<span>{note}</span></div></div>'
+                    if note else ''
+                )}
+                <span class="job-complete-id">求人ID：{job_id}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with detail_col:
-        if st.button(
-            "登録した求人を確認する",
-            key="job_complete_to_detail",
-            type="primary",
-            use_container_width=True,
-        ):
-            st.query_params["page"] = "job_detail"
-            st.query_params["job_id"] = str(job_id)
-            st.rerun()
+        st.markdown(
+            '<div class="job-complete-actions-marker"></div>',
+            unsafe_allow_html=True,
+        )
+        list_col, new_col = st.columns(2, gap="medium")
 
-    with list_col:
-        if st.button(
-            "求人一覧へ戻る",
-            key="job_complete_to_list",
-            use_container_width=True,
-        ):
-            st.query_params["page"] = "job_list"
-            st.query_params.pop("job_id", None)
-            st.rerun()
+        with list_col:
+            if st.button(
+                "求人一覧へ戻る",
+                key="job_complete_to_list",
+                type="primary",
+                use_container_width=True,
+            ):
+                st.query_params["page"] = "job_list"
+                st.query_params.pop("job_id", None)
+                st.rerun()
 
+        with new_col:
+            if st.button(
+                "続けて求人を登録する",
+                key="job_complete_register_another",
+                use_container_width=True,
+            ):
+                start_new_job_registration()
+                st.rerun()
 
 def render_duplicate_confirmation() -> None:
     """登録済みの同一求人を案内する画面。"""
+
+    render_registration_progress(4)
 
     duplicate_type = st.session_state.get(
         JOB_DUPLICATE_TYPE_KEY
@@ -4081,12 +5299,15 @@ def render_duplicate_confirmation() -> None:
 def show_page() -> None:
     """求人登録画面を表示する。"""
 
+    restore_extracted_job_draft()
+
+    render_job_navigation("job_registration")
     render_styles()
 
     if JOB_REGISTRATION_MODE_KEY not in st.session_state:
         st.session_state[
             JOB_REGISTRATION_MODE_KEY
-        ] = "url"
+        ] = ""
 
     if JOB_FORM_STEP_KEY not in st.session_state:
         st.session_state[
@@ -4119,51 +5340,48 @@ def show_page() -> None:
         return
 
     if current_step == "source":
-        if st.button(
-            "← 登録方法の選択に戻る",
-            key="job_source_back",
-        ):
-            st.session_state[
-                JOB_FORM_STEP_KEY
-            ] = "select"
-
-            st.rerun()
-
-        st.markdown(
-            """
-            <div class="job-page-title">
-                求人を登録する
-            </div>
-            <div class="job-page-description">
-                登録元の情報を入力してください。
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        mode = st.session_state[
-            JOB_REGISTRATION_MODE_KEY
-        ]
-
-        if mode == "url":
-            render_url_registration()
-
-        elif mode == "text":
-            render_text_registration()
-
-        return
+        # 旧状態から、新しい同一画面内入力へ移行する。
+        st.session_state[JOB_FORM_STEP_KEY] = "select"
+        st.rerun()
 
     st.markdown(
         """
-        <div class="job-page-title">
-            求人を登録する
-        </div>
-        <div class="job-page-description">
-            気になる求人の情報を取り込みます。
-            登録方法を選択してください。
-        </div>
+        <a class="job-list-back-link" href="?page=job_list" target="_self">
+            ← 求人一覧に戻る
+        </a>
         """,
         unsafe_allow_html=True,
     )
 
-    render_method_selection()
+    selected_mode = st.session_state.get(
+        JOB_REGISTRATION_MODE_KEY,
+        "",
+    )
+
+    registration_col, guide_col = st.columns(
+        [3.1, 1.25],
+        gap="large",
+    )
+
+    with registration_col:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div class="job-registration-shell-marker"></div>
+                <div class="job-page-title">
+                    求人を登録する
+                </div>
+                <div class="job-page-description">
+                    気になる求人を、あなたに合った方法で登録できます。
+                    AIが整理した内容は、保存する前に確認・修正できます。
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            render_registration_progress(
+                2 if selected_mode in {"pdf", "text", "url"} else 1
+            )
+            render_method_selection()
+
+    with guide_col:
+        render_registration_method_guide()

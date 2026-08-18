@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from models import JobAISemanticEvaluation
 from services.job_matching_rule_service import (
     CATEGORY_WEIGHTS,
+    EVALUATION_COMPONENT_WEIGHTS,
     HOPE_CONDITION_GROUP_WEIGHTS,
     MatchItemResult,
     calculate_grouped_match_rate,
@@ -19,13 +20,6 @@ MAX_MAJOR_REQUIRED_MISMATCH_PENALTY = 40
 
 @dataclass(frozen=True)
 class SemanticScoreSummary:
-    category_scores: dict[str, int | None]
-    overall_score_before_penalty: int | None
-    major_required_mismatch_count: int
-    major_required_mismatch_penalty: int
-    final_score: int | None
-    evaluation_coverage: int
-    is_provisional: bool
     """AI意味判定部分の点数計算結果。"""
 
     category_scores: dict[
@@ -36,22 +30,26 @@ class SemanticScoreSummary:
     major_required_mismatch_count: int
     major_required_mismatch_penalty: int
     final_score: int | None
+    evaluation_coverage: int
+    is_provisional: bool
+    work_value_component_scores: dict[str, int | None]
+    career_component_scores: dict[str, int | None]
 
 
 def calculate_evaluation_coverage(
-    category_scores: dict[str, int | None],
+    component_scores: dict[str, int | None],
 ) -> int:
     """実際に採点できたカテゴリの配点割合を計算する。"""
 
     available_weight = sum(
-        category_weight
-        for category, category_weight
-        in CATEGORY_WEIGHTS.items()
-        if category_scores.get(category) is not None
+        component_weight
+        for component, component_weight
+        in EVALUATION_COMPONENT_WEIGHTS.items()
+        if component_scores.get(component) is not None
     )
 
     total_weight = sum(
-        CATEGORY_WEIGHTS.values()
+        EVALUATION_COMPONENT_WEIGHTS.values()
     )
 
     if total_weight <= 0:
@@ -91,6 +89,144 @@ def convert_semantic_items_by_category(
         )
 
     return category_items
+
+
+def convert_work_value_items_by_group(
+    evaluation: JobAISemanticEvaluation,
+) -> dict[str, list[MatchItemResult]]:
+    """就活の軸項目を確定軸と仕事の進め方へ分ける。"""
+
+    groups = {"confirmed_axis": [], "work_style": []}
+    for item in evaluation.items:
+        if item.category != "work_value":
+            continue
+        group_name = item.evaluation_group or "confirmed_axis"
+        if group_name not in groups:
+            raise ValueError(
+                "未対応の就活の軸評価グループです："
+                f"{group_name}"
+            )
+        groups[group_name].append(
+            MatchItemResult(
+                item_name=item.item_name,
+                judgment=item.judgment,
+                weight=item.weight,
+                reason=item.reason,
+            )
+        )
+    return groups
+
+
+def calculate_work_value_component_scores(
+    evaluation: JobAISemanticEvaluation,
+) -> dict[str, int | None]:
+    """確定軸25点分と仕事の進め方10点分の一致率を返す。"""
+
+    return {
+        group_name: calculate_weighted_match_rate(items)
+        for group_name, items in convert_work_value_items_by_group(
+            evaluation
+        ).items()
+    }
+
+
+def combine_work_value_score(
+    component_scores: dict[str, int | None],
+) -> int | None:
+    """画面・DB用の就活の軸35点カテゴリ一致率へまとめる。"""
+
+    return calculate_grouped_match_rate(
+        group_scores=component_scores,
+        group_weights={"confirmed_axis": 25, "work_style": 10},
+    )
+
+
+def convert_career_items_by_group(
+    evaluation: JobAISemanticEvaluation,
+) -> dict[str, list[MatchItemResult]]:
+    """職務経歴・スキルを3つの評価観点へ分ける。"""
+
+    groups = {
+        "direct_experience": [],
+        "portable_skill": [],
+        "achievement_reproducibility": [],
+    }
+    for item in evaluation.items:
+        if item.category != "career_skill":
+            continue
+        if item.evaluation_group not in groups:
+            raise ValueError(
+                "未対応の職務経歴・スキル評価グループです："
+                f"{item.evaluation_group}"
+            )
+        groups[item.evaluation_group].append(
+            MatchItemResult(
+                item_name=item.item_name,
+                judgment=item.judgment,
+                weight=item.weight,
+                reason=item.reason,
+            )
+        )
+    return groups
+
+
+def calculate_career_component_scores(
+    evaluation: JobAISemanticEvaluation,
+) -> dict[str, int | None]:
+    """業務経験・ポータブルスキル・実績再現性の一致率を返す。"""
+
+    return {
+        group_name: calculate_weighted_match_rate(items)
+        for group_name, items in convert_career_items_by_group(
+            evaluation
+        ).items()
+    }
+
+
+def combine_career_skill_score(
+    component_scores: dict[str, int | None],
+) -> int | None:
+    """画面・DB用の職務経歴・スキル25点へまとめる。"""
+
+    return calculate_grouped_match_rate(
+        group_scores=component_scores,
+        group_weights={
+            "direct_experience": 10,
+            "portable_skill": 10,
+            "achievement_reproducibility": 5,
+        },
+    )
+
+
+def build_evaluation_component_scores(
+    category_scores: dict[str, int | None],
+    work_value_component_scores: dict[str, int | None],
+    career_component_scores: dict[str, int | None],
+) -> dict[str, int | None]:
+    """総合点・カバー率計算用の7要素を作る。"""
+
+    return {
+        "hope_condition": category_scores.get("hope_condition"),
+        "confirmed_axis": work_value_component_scores.get("confirmed_axis"),
+        "work_style": work_value_component_scores.get("work_style"),
+        "direct_experience": career_component_scores.get("direct_experience"),
+        "portable_skill": career_component_scores.get("portable_skill"),
+        "achievement_reproducibility": career_component_scores.get(
+            "achievement_reproducibility"
+        ),
+        "required_condition": category_scores.get("required_condition"),
+    }
+
+
+def calculate_component_overall_score(
+    component_scores: dict[str, int | None],
+) -> int | None:
+    """採点可能な5要素だけで総合一致率を計算する。"""
+
+    return calculate_grouped_match_rate(
+        group_scores=component_scores,
+        group_weights=EVALUATION_COMPONENT_WEIGHTS,
+    )
 
 
 def convert_semantic_hope_items_by_group(
@@ -182,6 +318,12 @@ def calculate_semantic_category_scores(
     ] = calculate_semantic_hope_score(
         evaluation
     )
+    category_scores["work_value"] = combine_work_value_score(
+        calculate_work_value_component_scores(evaluation)
+    )
+    category_scores["career_skill"] = combine_career_skill_score(
+        calculate_career_component_scores(evaluation)
+    )
 
     return {
         category_name: category_scores.get(
@@ -262,10 +404,17 @@ def calculate_semantic_score_summary(
         )
     )
 
-    overall_score_before_penalty = (
-        calculate_overall_score(
-            category_scores
-        )
+    work_value_component_scores = calculate_work_value_component_scores(
+        evaluation
+    )
+    career_component_scores = calculate_career_component_scores(evaluation)
+    component_scores = build_evaluation_component_scores(
+        category_scores,
+        work_value_component_scores,
+        career_component_scores,
+    )
+    overall_score_before_penalty = calculate_component_overall_score(
+        component_scores
     )
 
     mismatch_count = (
@@ -287,7 +436,7 @@ def calculate_semantic_score_summary(
 
     evaluation_coverage = (
         calculate_evaluation_coverage(
-            category_scores
+            component_scores
         )
     )
 
@@ -309,6 +458,8 @@ def calculate_semantic_score_summary(
         is_provisional=(
             evaluation_coverage < 100
         ),
+        work_value_component_scores=work_value_component_scores,
+        career_component_scores=career_component_scores,
     )
 
 
@@ -411,10 +562,23 @@ def calculate_combined_score_summary(
         evaluation=evaluation,
     )
 
-    overall_score_before_penalty = (
-        calculate_overall_score(
-            category_scores
-        )
+    work_value_component_scores = calculate_work_value_component_scores(
+        evaluation
+    )
+    category_scores["work_value"] = combine_work_value_score(
+        work_value_component_scores
+    )
+    career_component_scores = calculate_career_component_scores(evaluation)
+    category_scores["career_skill"] = combine_career_skill_score(
+        career_component_scores
+    )
+    component_scores = build_evaluation_component_scores(
+        category_scores,
+        work_value_component_scores,
+        career_component_scores,
+    )
+    overall_score_before_penalty = calculate_component_overall_score(
+        component_scores
     )
 
     mismatch_count = (
@@ -436,7 +600,7 @@ def calculate_combined_score_summary(
 
     evaluation_coverage = (
         calculate_evaluation_coverage(
-            category_scores
+            component_scores
         )
     )
 
@@ -458,4 +622,6 @@ def calculate_combined_score_summary(
         is_provisional=(
             evaluation_coverage < 100
         ),
+        work_value_component_scores=work_value_component_scores,
+        career_component_scores=career_component_scores,
     )

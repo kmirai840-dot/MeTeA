@@ -10,6 +10,8 @@ PARTIAL_MATCH = "一部一致"
 MISMATCH = "不一致"
 NEEDS_CONFIRMATION = "要確認"
 
+EVALUATION_RULE_VERSION = "job-matching-rules-v3"
+
 JUDGMENT_SCORES = {
     MATCH: 100,
     PARTIAL_MATCH: 60,
@@ -41,6 +43,18 @@ CATEGORY_WEIGHTS = {
     "hope_condition": 30,
     "work_value": 35,
     "career_skill": 25,
+    "required_condition": 10,
+}
+
+# 総合点の計算単位。画面・DB上は就活の軸35点として扱うが、
+# 内部では本人が確定した軸と仕事の進め方を分けて採点する。
+EVALUATION_COMPONENT_WEIGHTS = {
+    "hope_condition": 30,
+    "confirmed_axis": 25,
+    "work_style": 10,
+    "direct_experience": 10,
+    "portable_skill": 10,
+    "achievement_reproducibility": 5,
     "required_condition": 10,
 }
 

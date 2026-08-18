@@ -42,68 +42,24 @@ def render_job_navigation(
         "logo.svg"
     )
 
-    navigation_items = [
-        (
-            "home",
-            "⌂",
-            "ダッシュボード",
-        ),
-        (
-            "job_list",
-            "▣",
-            "求人一覧",
-        ),
-        (
-            "job_registration",
-            "＋",
-            "求人登録",
-        ),
-        (
-            "application_list",
-            "♡",
-            "応募管理",
-        ),
-        (
-            "application_dashboard",
-            "▥",
-            "活動分析",
-        ),
-        (
-            "basic_info",
-            "●",
-            "基本情報",
-        ),
-        (
-            "hope_conditions",
-            "◎",
-            "希望条件",
-        ),
-        (
-            "job_hunting_axis",
-            "◇",
-            "就活の軸",
-        ),
-        (
-            "work_values",
-            "◉",
-            "価値観",
-        ),
-        (
-            "career",
-            "▤",
-            "職務経歴・スキル",
-        ),
-        (
-            "settings",
-            "⚙",
-            "設定",
-        ),
-        (
-            "help",
-            "?",
-            "ヘルプ",
-        ),
-    ]
+    groups = (
+        ("self_discovery", "user.svg", "① 自分を知る", (
+            ("basic_info", "自分の情報を登録する"),
+            ("profile_review", "登録した内容を見直す"),
+        )),
+        ("job_list", "compare.svg", "② 求人を比較する", (
+            ("job_list", "求人一覧"),
+            ("job_registration", "求人を登録する"),
+        )),
+        ("application_list", "flag.svg", "③ 応募後を管理する", (
+            ("application_list", "応募管理"),
+            ("milestones", "予定・マイルストーン"),
+            ("activity_history", "活動履歴"),
+        )),
+        ("application_dashboard", "analytics.svg", "④ 活動を振り返る", (
+            ("application_dashboard", "活動分析"),
+        )),
+    )
 
     effective_active_page = active_page
 
@@ -121,44 +77,34 @@ def render_job_navigation(
         effective_active_page = "application_list"
 
 
-    navigation_links = []
-
-    for page_name, icon, label in navigation_items:
-        navigation_href = f"?page={page_name}"
+    def href(page_name: str) -> str:
         if page_name == "application_list":
-            navigation_href = (
-                "?page=application_list&focus=all"
+            return "?page=application_list&focus=all"
+        return f"?page={page_name}"
+
+    navigation_groups = []
+    for parent_page, icon_file, parent_label, children in groups:
+        child_pages = {page for page, _ in children}
+        is_group_active = effective_active_page in child_pages or effective_active_page == parent_page
+        icon_uri = svg_data_uri(icon_file)
+        child_links = []
+        for child_page, child_label in children:
+            active_class = " metea-side-child-active" if effective_active_page == child_page else ""
+            child_links.append(
+                f'<a class="metea-side-child{active_class}" href="{href(child_page)}" target="_self">'
+                f'<span></span>{child_label}</a>'
             )
-
-        is_active = (
-            page_name
-            == effective_active_page
+        group_class = " metea-side-group-active" if is_group_active else ""
+        navigation_groups.append(
+            f'<section class="metea-side-section{group_class}">'
+            f'<a class="metea-side-parent" href="{href(parent_page)}" target="_self">'
+            f'<img src="{icon_uri}" alt=""><strong>{parent_label}</strong></a>'
+            f'<div class="metea-side-children">{"".join(child_links)}</div></section>'
         )
 
-        active_class = (
-            " metea-side-link-active"
-            if is_active
-            else ""
-        )
-
-        active_style = (
-            "background:#1268f3;"
-            "color:#ffffff;"
-            if is_active
-            else ""
-        )
-
-        navigation_links.append(
-            f'<a class="metea-side-link'
-            f'{active_class}" '
-            f'href="{navigation_href}" '
-            f'target="_self" '
-            f'style="{active_style}">'
-            f'<span class="metea-side-icon">'
-            f'{icon}</span>'
-            f'<span>{label}</span>'
-            f'</a>'
-        )
+    home_icon = svg_data_uri("logo.svg")
+    settings_icon = svg_data_uri("nav-settings.svg")
+    help_icon = svg_data_uri("help.svg")
 
     navigation_html = (
         '<nav class="metea-side-navigation">'
@@ -167,10 +113,12 @@ def render_job_navigation(
         f'src="{logo_uri}" '
         f'alt="MeTeA">'
         '</div>'
-        '<div class="metea-side-group-label">'
-        '求人管理'
-        '</div>'
-        + "".join(navigation_links)
+        f'<a class="metea-side-home" href="?page=home" target="_self"><span>ホーム</span></a>'
+        + "".join(navigation_groups)
+        + '<div class="metea-side-utilities">'
+        + f'<a href="?page=settings" target="_self"><img src="{settings_icon}" alt="">設定</a>'
+        + f'<a href="?page=help" target="_self"><img src="{help_icon}" alt="">ヘルプ</a>'
+        + '</div>'
         + '</nav>'
     )
 
@@ -226,55 +174,32 @@ def render_job_navigation(
             transform: scale(2);
         }
 
-        .metea-side-group-label {
-            margin: 24px 12px 8px;
-            color: #1268f3;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .metea-side-link {
+        .metea-side-home,
+        .metea-side-parent,
+        .metea-side-child,
+        .metea-side-utilities a {
             display: flex;
             align-items: center;
-            gap: 12px;
-            min-height: 44px;
-            margin-bottom: 4px;
-            padding: 10px 12px;
-            color: #24344d !important;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
             text-decoration: none !important;
+            color: #24344d !important;
         }
-
-        .metea-side-link:hover {
+        .metea-side-home { min-height:40px; padding:9px 12px; margin-bottom:10px; border-radius:9px; font-size:13px; font-weight:800; }
+        .metea-side-section { margin: 0 0 7px; padding:5px; border-radius:12px; }
+        .metea-side-parent { gap:10px; min-height:40px; padding:8px; border-radius:9px; font-size:13px; }
+        .metea-side-parent img, .metea-side-utilities img { width:20px; height:20px; object-fit:contain; }
+        .metea-side-children { margin:1px 0 3px 27px; padding-left:10px; border-left:1px solid #dce6f3; }
+        .metea-side-child { gap:7px; min-height:31px; padding:5px 7px; border-radius:7px; font-size:12px; font-weight:600; }
+        .metea-side-child > span { width:4px; height:4px; border-radius:50%; background:#b5c2d3; }
+        .metea-side-home:hover, .metea-side-parent:hover, .metea-side-child:hover, .metea-side-utilities a:hover {
             background: #f1f6ff;
             color: #1268f3 !important;
         }
-
-        .metea-side-navigation
-        a.metea-side-link-active {
-            background: #1268f3 !important;
-            color: #ffffff !important;
-        }
-
-        .metea-side-navigation
-        a.metea-side-link-active span {
-            color: #ffffff !important;
-        }
-
-        .metea-side-navigation
-        a.metea-side-link-active:hover {
-            background: #0759d9 !important;
-            color: #ffffff !important;
-        }
-
-        .metea-side-icon {
-            width: 20px;
-            flex: 0 0 20px;
-            text-align: center;
-            font-size: 17px;
-        }
+        .metea-side-group-active { background:#f7faff; }
+        .metea-side-group-active .metea-side-parent { color:#0759df !important; }
+        .metea-side-child-active { background:#eaf2ff !important; color:#0759df !important; font-weight:800; }
+        .metea-side-child-active > span { background:#146cff; }
+        .metea-side-utilities { margin-top:14px; padding-top:12px; border-top:1px solid #e4eaf2; }
+        .metea-side-utilities a { gap:10px; min-height:36px; padding:7px 11px; border-radius:8px; font-size:12px; font-weight:700; }
 
         @media (max-width: 900px) {
             .metea-side-navigation {

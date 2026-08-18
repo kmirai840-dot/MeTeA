@@ -2,12 +2,19 @@
 
 from datetime import date
 from html import escape
+import json
 
 import streamlit as st
 
-from models import JobApplicationDecision
+from models import AISemanticMatchItem, JobAISemanticEvaluation, JobApplicationDecision
+from services.job_matching_score_service import (
+    calculate_career_component_scores,
+    calculate_work_value_component_scores,
+)
 from services.job_evaluation_service import (
     APPLICATION_DECISION_OPTIONS,
+    acknowledge_job_match_evaluation_result,
+    is_job_match_evaluation_ready,
     load_job_application_decisions,
     load_job_match_evaluations,
     save_job_application_decision_data,
@@ -28,7 +35,7 @@ from services.job_confirmation_service import (
     restore_confirmation_item,
 )
 from services.job_matching_auto_evaluation_service import (
-    automatically_evaluate_and_save_job,
+    enqueue_job_evaluation,
 )
 from services.job_matching_cache_service import (
     invalidate_current_user_job_evaluation,
@@ -291,6 +298,11 @@ def render_requirements(
                 job.desired_personality,
             )
 
+        render_field(
+            "組織風土・企業文化",
+            job.organizational_culture,
+        )
+
 
 def render_working_conditions(
     job,
@@ -417,24 +429,21 @@ def render_score(
     label: str,
     score: int | None,
     tone: str,
+    breakdown: list[tuple[str, int | None]] | None = None,
 ) -> None:
     """カテゴリ点数を円形メーターで表示する。"""
 
-    normalized_score = (
-        max(0, min(int(score), 100))
-        if score is not None
-        else 0
-    )
-    score_text = (
-        f"{normalized_score}%"
-        if score is not None
-        else "未評価"
-    )
-    state_class = (
-        "is-unscored"
-        if score is None
-        else ""
-    )
+    normalized_score = max(0, min(int(score), 100)) if score is not None else 0
+    score_text = f"{normalized_score}%" if score is not None else "未評価"
+    state_class = "is-unscored" if score is None else ""
+    breakdown_html = ""
+    if breakdown is not None:
+        rows = "".join(
+            f'<span>{escape(row_label)} '
+            f'<b>{escape(f"{row_score}%" if row_score is not None else "要確認")}</b></span>'
+            for row_label, row_score in breakdown
+        )
+        breakdown_html = f'<div class="category-score-breakdown">{rows}</div>'
 
     st.markdown(
         f"""
@@ -446,10 +455,42 @@ def render_score(
                     <span>{escape(score_text)}</span>
                 </div>
             </div>
+            {breakdown_html}
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def load_score_breakdowns(evaluation) -> tuple[
+    list[tuple[str, int | None]],
+    list[tuple[str, int | None]],
+]:
+    """キャッシュ済み構造化結果から就活の軸の内訳を復元する。"""
+
+    try:
+        payload = json.loads(evaluation.evaluation_result_json or "{}")
+        items = [
+            AISemanticMatchItem(**item)
+            for item in payload.get("items", [])
+            if isinstance(item, dict)
+        ]
+        semantic = JobAISemanticEvaluation(job_id=evaluation.job_id, items=items)
+        work_scores = calculate_work_value_component_scores(semantic)
+        career_scores = calculate_career_component_scores(semantic)
+        return (
+            [
+                ("確定軸 25点分", work_scores.get("confirmed_axis")),
+                ("仕事の進め方 10点分", work_scores.get("work_style")),
+            ],
+            [
+                ("業務経験の接続度 10点分", career_scores.get("direct_experience")),
+                ("ポータブルスキル 10点分", career_scores.get("portable_skill")),
+                ("実績・再現性 5点分", career_scores.get("achievement_reproducibility")),
+            ],
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return [], []
 
 
 def render_overall_score(
@@ -714,10 +755,7 @@ def render_commute_confirmation(
         )
 
         if save_message:
-            st.success(
-                save_message,
-                icon="✅",
-            )
+            st.toast(save_message)
 
         if saved_commute is not None:
             st.success(
@@ -807,33 +845,11 @@ def render_commute_confirmation(
                     ),
                 )
 
-                with st.spinner(
-                    "通勤時間をもとにAI評価を"
-                    "更新しています..."
-                ):
-                    (
-                        updated_evaluation,
-                        evaluation_error,
-                    ) = (
-                        automatically_evaluate_and_save_job(
-                            job_id=job_id,
-                        )
-                    )
-
-                if (
-                    updated_evaluation is not None
-                    and not evaluation_error
-                ):
-                    save_message = (
-                        "通勤時間を保存し、"
-                        "AI評価を更新しました。"
-                    )
-
-                else:
-                    save_message = (
-                        "通勤時間は保存しましたが、"
-                        "AI評価を更新できませんでした。"
-                    )
+                enqueue_job_evaluation(job_id=job_id)
+                save_message = (
+                    "通勤時間を保存しました。AIがマッチ度を確認しています。"
+                    "ほかの操作を続けられます。"
+                )
 
                 st.session_state[
                     save_message_key
@@ -888,6 +904,23 @@ def render_ai_matching_result(
         "現在のプロフィールと求人情報をもとに評価しています。",
     )
 
+    st.markdown(
+        """
+        <div class="ai-evaluation-scope-note">
+            <div class="ai-evaluation-scope-note__icon">i</div>
+            <div>
+                <strong>評価できない情報があります</strong>
+                <p>
+                    登録内容と求人票に記載された情報を照らし合わせています。
+                    人間関係、実際の企業文化など、求人票から確認できない事項は採点していません。
+                    気になる点は面接や面談で確認してください。
+                </p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if evaluation is None:
         st.info(
             "この求人のAIマッチング評価は"
@@ -895,7 +928,39 @@ def render_ai_matching_result(
         )
 
     else:
-        if evaluation.is_stale:
+        if evaluation.result_notice_pending:
+            notice_col, result_col = st.columns([5, 1.5], vertical_alignment="center")
+            with notice_col:
+                st.info("AIマッチング評価が完了しました。")
+            with result_col:
+                if st.button(
+                    "結果を見る",
+                    key=f"job_detail_view_ai_result_{job_id}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    acknowledge_job_match_evaluation_result(job_id)
+                    st.rerun()
+
+        if evaluation.evaluation_status in {"queued", "running"}:
+            st.info(
+                "AIがマッチ度を確認しています。ほかの操作を続けられます。"
+                "完了後に結果をご案内します。"
+            )
+            if evaluation.overall_score is not None:
+                st.caption("以下には前回の評価結果を表示しています。")
+        elif evaluation.evaluation_status == "failed":
+            st.warning(
+                "AI評価を完了できませんでした。求人情報と前回の評価は保持されています。"
+            )
+            if st.button(
+                "AI評価を再試行",
+                key=f"job_detail_retry_ai_{job_id}",
+                use_container_width=False,
+            ):
+                enqueue_job_evaluation(job_id, retry=True)
+                st.rerun()
+        elif evaluation.is_stale:
             stale_reason = (
                 evaluation.stale_reason.strip()
                 or "評価に使用した情報が変更されました。"
@@ -955,6 +1020,9 @@ def render_ai_matching_result(
 
 
             with detail_col:
+                work_breakdown, career_breakdown = load_score_breakdowns(
+                    evaluation
+                )
                 (
                     hope_col,
                     value_col,
@@ -977,6 +1045,7 @@ def render_ai_matching_result(
                         "就活の軸",
                         evaluation.work_value_score,
                         "tone-green",
+                        breakdown=work_breakdown,
                     )
 
                 with career_col:
@@ -984,6 +1053,7 @@ def render_ai_matching_result(
                         "職務経歴・スキル",
                         evaluation.career_skill_score,
                         "tone-orange",
+                        breakdown=career_breakdown,
                     )
 
                 with required_col:
@@ -1565,10 +1635,7 @@ def _render_application_decision_content(
             deadline_value = None
 
     if save_message:
-        st.success(
-            save_message,
-            icon="✅",
-        )
+        st.toast(save_message)
 
     if (
         decision is not None
@@ -1834,13 +1901,57 @@ def render_job_detail_styles() -> None:
             height: 20px;
         }
 
+        .ai-evaluation-scope-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin: 0 0 16px;
+            padding: 14px 16px;
+            color: #7a3d16;
+            background: linear-gradient(135deg, #fffaf5, #fff2e8);
+            border: 1px solid #f2b47f;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(217, 106, 35, 0.07);
+        }
+
+        .ai-evaluation-scope-note__icon {
+            display: grid;
+            flex: 0 0 25px;
+            place-items: center;
+            width: 25px;
+            height: 25px;
+            color: #ffffff;
+            background: #e76f24;
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .ai-evaluation-scope-note strong {
+            display: block;
+            margin: 1px 0 4px;
+            color: #7a310d;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.5;
+        }
+
+        .ai-evaluation-scope-note p {
+            margin: 0;
+            color: #6f4b34;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.7;
+        }
+
         [class*="st-key-ai_matching_result_card"]
         [data-testid="stHorizontalBlock"] {
             column-gap: 18px;
         }
         .overall-score-panel {
             box-sizing: border-box;
-            min-height: 190px;
+            min-height: 230px;
             padding: 22px 18px;
             text-align: center;
             background: #f8fbff;
@@ -1898,7 +2009,7 @@ def render_job_detail_styles() -> None:
         }
 
         .category-score-card {
-            min-height: 190px;
+            min-height: 230px;
             padding: 18px 8px 14px;
             text-align: center;
             background: #ffffff;
@@ -1971,6 +2082,23 @@ def render_job_detail_styles() -> None:
         .category-score-card .category-score-ring {
             --ring-color: inherit;
         }
+        .category-score-breakdown {
+            display: grid;
+            gap: 4px;
+            margin: 10px auto 0;
+            color: #64748b;
+            font-size: 10px;
+            line-height: 1.35;
+        }
+        .category-score-breakdown span {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 3px 6px;
+            border-radius: 6px;
+            background: #f5f8fc;
+        }
+        .category-score-breakdown b { color: #17365f; }
         .evaluation-point-card {
             box-sizing: border-box;
             width: 100%;
@@ -2610,23 +2738,36 @@ def show_page() -> None:
 
         return
 
-    return_page = st.query_params.get(
-        "return_page",
-        "",
-    )
+    evaluation = load_job_match_evaluations().get(job_id)
 
-    back_button_label = (
-        "← 比較結果へ戻る"
-        if return_page == "job_comparison"
-        else "← 求人一覧へ戻る"
-    )
+    if not is_job_match_evaluation_ready(evaluation):
+        if evaluation is None or evaluation.evaluation_status in {"queued", "running"} or evaluation.is_stale:
+            st.info(
+                "AIがマッチ度を確認しています。評価が完了すると、求人の確認画面を開けるようになります。"
+            )
+        elif evaluation.evaluation_status == "failed":
+            st.warning(
+                "AIマッチングを完了できませんでした。求人情報は保存されています。"
+            )
+            if st.button(
+                "AIマッチングを再試行する",
+                key=f"job_detail_gate_retry_{job_id}",
+                type="primary",
+            ):
+                enqueue_job_evaluation(job_id, retry=True)
+                st.rerun()
+        else:
+            st.info(
+                "AIマッチングの完了を待っています。完了後に求人の確認画面を表示します。"
+            )
 
-    if st.button(
-        back_button_label,
-        key="job_detail_back",
-    ):
-        move_back_from_job_detail()
+        if st.button(
+            "← 求人一覧へ戻る",
+            key="job_detail_gate_back",
+        ):
+            move_to_job_list()
 
+        return
 
     st.title(
         job.company_name
@@ -2669,3 +2810,19 @@ def show_page() -> None:
     st.divider()
 
     render_application_decision(job_id)
+
+    return_page = st.query_params.get(
+        "return_page",
+        "",
+    )
+    back_button_label = (
+        "← 比較結果へ戻る"
+        if return_page == "job_comparison"
+        else "← 求人一覧へ戻る"
+    )
+    if st.button(
+        back_button_label,
+        key="job_detail_back",
+        use_container_width=True,
+    ):
+        move_back_from_job_detail()

@@ -48,7 +48,11 @@ def _render_input_stepper(current_step: int) -> None:
     )
 
 
-def apply_self_discovery_theme(current_step: int) -> None:
+def apply_self_discovery_theme(
+    current_step: int,
+    *,
+    render_stepper: bool = True,
+) -> None:
     """TOP画面を基準にした共通スタイルを現在の画面へ適用する。"""
 
     st.markdown(
@@ -70,6 +74,15 @@ def apply_self_discovery_theme(current_step: int) -> None:
         [data-testid="stAppViewContainer"],
         [data-testid="stMain"] {
             background: var(--metea-page);
+        }
+
+        .stApp,
+        .stApp button,
+        .stApp input,
+        .stApp textarea,
+        .stApp select {
+            font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN",
+                "Noto Sans JP", sans-serif;
         }
 
         [data-testid="stMainBlockContainer"],
@@ -114,7 +127,11 @@ def apply_self_discovery_theme(current_step: int) -> None:
             overflow: hidden;
         }
 
-        [data-testid="stProgress"] [role="progressbar"] > div {
+        [data-testid="stProgressBarTrack"] {
+            background: #e5edf7 !important;
+        }
+
+        [data-testid="stProgressBarTrack"] > div {
             background: linear-gradient(90deg, var(--metea-blue), #3f8cff);
         }
 
@@ -159,7 +176,7 @@ def apply_self_discovery_theme(current_step: int) -> None:
         .metea-priority-guide .is-required { color:#b42318; background:#fff0ef; }
         .metea-priority-guide .is-desired { color:#075fdc; background:#eaf3ff; }
         .metea-priority-guide .is-acceptable { color:#08745d; background:#eaf9f4; }
-        .metea-priority-guide .is-neutral { color:#58677b; background:#f0f3f7; }
+        .metea-priority-guide .is-neutral { color:#405168; background:#e8edf3; }
 
         .metea-selected-rank { min-height:58px; display:flex; gap:10px; align-items:center; }
         .metea-selected-rank span {
@@ -283,15 +300,24 @@ def apply_self_discovery_theme(current_step: int) -> None:
         }
 
         [data-testid="stButton"] > button[kind="primary"],
-        [data-testid="stFormSubmitButton"] > button[kind="primary"] {
+        [data-testid="stFormSubmitButton"] > button[kind="primary"],
+        [data-testid="stButton"] button[data-testid="stBaseButton-primary"],
+        [data-testid="stFormSubmitButton"] button[data-testid="stBaseButton-primary"] {
             border-color: var(--metea-blue);
             background: linear-gradient(180deg, #2878ff, #0862f1);
             color: #ffffff;
             box-shadow: 0 7px 16px rgba(20, 108, 255, 0.22);
         }
 
+        [data-testid="stButton"] button[data-testid="stBaseButton-primary"] p,
+        [data-testid="stFormSubmitButton"] button[data-testid="stBaseButton-primary"] p {
+            color: #ffffff !important;
+        }
+
         [data-testid="stButton"] > button[kind="primary"]:hover,
-        [data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
+        [data-testid="stFormSubmitButton"] > button[kind="primary"]:hover,
+        [data-testid="stButton"] button[data-testid="stBaseButton-primary"]:hover,
+        [data-testid="stFormSubmitButton"] button[data-testid="stBaseButton-primary"]:hover {
             border-color: var(--metea-blue-dark);
             background: linear-gradient(180deg, #1e70f5, #0759df);
             color: #ffffff;
@@ -375,4 +401,7 @@ def apply_self_discovery_theme(current_step: int) -> None:
         unsafe_allow_html=True,
     )
 
-    _render_input_stepper(max(1, min(current_step, len(SELF_DISCOVERY_STEPS))))
+    if render_stepper:
+        _render_input_stepper(
+            max(1, min(current_step, len(SELF_DISCOVERY_STEPS)))
+        )

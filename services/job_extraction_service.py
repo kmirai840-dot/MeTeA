@@ -1,6 +1,8 @@
 """AIを利用して求人票本文を構造化する処理。"""
 
 import json
+import re
+import unicodedata
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -31,6 +33,7 @@ STRING_FIELDS = (
     "external_partners",
     "goals_kpi",
     "expected_results",
+    "organizational_culture",
     "employment_type",
     "probation_period_status",
     "probation_period_months",
@@ -93,6 +96,50 @@ LIST_FIELDS = (
     "desired_personality",
     "not_listed_fields",
 )
+
+
+FIELD_LABELS = {
+    "employee_count": "従業員数の記載なし",
+    "employee_count_min": "従業員数の記載なし",
+    "employee_count_max": "従業員数の記載なし",
+    "established_date": "設立年月の記載なし",
+    "capital": "資本金の記載なし",
+    "listing_status": "上場区分の記載なし",
+    "planned_hires": "採用予定人数の記載なし",
+    "nearest_station": "最寄り駅の記載なし",
+    "overtime": "月平均残業時間の記載なし",
+    "housing_allowance": "住宅手当の記載なし",
+    "retirement_plan": "退職金制度の記載なし",
+    "qualification_support": "資格取得支援の記載なし",
+    "expected_join_date": "入社予定時期の記載なし",
+}
+
+
+def normalize_job_document_text(job_text: str) -> str:
+    """PDFと貼り付け入力を同じ読み取り条件へ整える。"""
+
+    normalized = unicodedata.normalize("NFKC", job_text)
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"[ \t\u3000]+", " ", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
+
+
+def localize_not_listed_fields(values: object) -> list[str]:
+    """内部フィールド名を利用者向けの確認事項へ変換する。"""
+
+    if not isinstance(values, list):
+        return []
+
+    localized: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        label = FIELD_LABELS.get(text, text)
+        if label not in localized:
+            localized.append(label)
+    return localized
 
 
 def build_job_schema() -> dict:
@@ -312,6 +359,10 @@ def normalize_extracted_choices(
             )
         )
 
+    extracted_data["not_listed_fields"] = localize_not_listed_fields(
+        extracted_data.get("not_listed_fields", [])
+    )
+
     return extracted_data
 
 
@@ -320,7 +371,9 @@ def extract_job_data(
 ) -> dict:
     """求人票本文をAIで共通の求人データへ変換する。"""
 
-    if not job_text.strip():
+    normalized_job_text = normalize_job_document_text(job_text)
+
+    if not normalized_job_text:
         raise ValueError(
             "求人票本文が入力されていません。"
         )
@@ -344,6 +397,12 @@ def extract_job_data(
                     "記載がない文字列項目は空文字、"
                     "記載がない配列項目は空配列にしてください。"
                     "会社情報と求人情報を混同しないでください。"
+                    "company_nameは会社概要中に登場する関連会社名ではなく、"
+                    "『募集者の名称（雇用元）』『雇用主』などに明記された"
+                    "実際の雇用元を最優先してください。"
+                    "departmentは組織紹介の一般説明ではなく、"
+                    "『配属部署』『配属先』に明記された組織名を"
+                    "最優先してください。"
                     "会社所在地ではなく実際の勤務地を"
                     "prefectureとmunicipalityへ設定してください。"
                     "job_titleは求人票に記載された求人名または"
@@ -356,6 +415,27 @@ def extract_job_data(
                     "事実の範囲で整理してください。"
                     "job_details、応募要件などの配列は、"
                     "内容ごとに分けてください。"
+                    "応募要件（MUST）は、経験をrequired_experience、"
+                    "業務で発揮する能力をrequired_skills、"
+                    "免許・検定・学位などをrequired_qualificationsへ"
+                    "意味に応じて分けてください。"
+                    "応募要件（WANT）や歓迎条件も同様に、"
+                    "具体的な経験はpreferred_experience、"
+                    "論理的思考力・課題特定力・提案力・"
+                    "巻き込み力など業務で発揮できる能力は"
+                    "preferred_skills、姿勢・志向・価値観は"
+                    "desired_personalityへ分けてください。"
+                    "見出しが『求める人物像』でも、内容が能力なら"
+                    "preferred_skillsへ入れてください。"
+                    "一つの長文にまとめず、判定可能な要素ごとに"
+                    "配列を分けてください。"
+                    "organizational_cultureには、求人票に明記された"
+                    "相談・協働・意思決定・フィードバック・評価・"
+                    "目標管理・仕事の進め方・コミュニケーション等の"
+                    "組織風土を、断定を強めず原文の事実に沿って"
+                    "整理してください。制度の有無だけではなく、"
+                    "実際に期待される行動や運用が分かる記述を"
+                    "優先してください。記載がなければ空文字です。"
                     "金額、人数、時間、日数、回数、月数は"
                     "単位とカンマを除いた数字だけを"
                     "文字列で返してください。"
@@ -371,6 +451,9 @@ def extract_job_data(
                     "monthly_salary_is_explicitはfalseです。"
                     "年収・年俸・基本給から月給を計算したり、"
                     "基本給を月給として複製してはいけません。"
+                    "給与例が複数地域・複数職種について記載されている場合、"
+                    "対象求人の勤務地・職種に明確に対応する値だけを"
+                    "採用し、対応関係が不明なら空欄にしてください。"
                     "start_timeとend_timeはHH:MM形式、"
                     "scheduled_work_hoursは1日あたりの実働時間です。"
                     "求人票に所定労働時間が明記されている場合は"
@@ -407,16 +490,24 @@ def extract_job_data(
                     "あり・なし・条件付き・不明・空文字、"
                     "flextimeも"
                     "あり・なし・条件付き・不明・空文字、"
+                    "work_styleは求人票全体を確認し、入社直後だけでなく"
+                    "通常時の勤務形態を設定してください。"
+                    "在宅勤務が可能で出社日もある場合は一部在宅、"
+                    "入社後一定期間のみ原則出社の場合も、その後に"
+                    "在宅勤務が可能なら出社のみにはしないでください。"
                     "overtime_extra_payは"
                     "あり・なし・不明・空文字としてください。"
                     "不明な情報を補完せず、"
                     "確認が必要な項目名を"
                     "not_listed_fieldsへ入れてください。"
+                    "not_listed_fieldsには内部の英語フィールド名ではなく、"
+                    "『従業員数の記載なし』のような利用者が"
+                    "そのまま読める日本語を入れてください。"
                 ),
             },
             {
                 "role": "user",
-                "content": job_text,
+                "content": normalized_job_text,
             },
         ],
         text={

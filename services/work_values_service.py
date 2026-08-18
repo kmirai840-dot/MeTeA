@@ -1,6 +1,7 @@
 """価値観回答の入力確認・保存・取得を担当する。"""
 
 from collections import defaultdict
+from database.repositories.home_activity_repository import save_general_activity
 
 from constants.work_values import (
     DETAIL_ENVIRONMENT_REASON,
@@ -360,6 +361,13 @@ def save_work_values_data(
         or saved_details != validated_details
         or saved_work_style_answers != validated_answers
     ):
+        save_general_activity(
+            user_id,
+            "work_values_updated",
+            "価値観を更新しました",
+            target_page="work_values",
+            icon_name="user.svg",
+        )
         invalidate_current_user_job_evaluations(
             reason="価値観が変更されました。",
         )

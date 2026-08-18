@@ -54,6 +54,9 @@ def initialize_database() -> None:
         }
 
         required_job_columns = {
+            "organizational_culture": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
             "employee_count_min": (
                 "TEXT NOT NULL DEFAULT ''"
             ),
@@ -177,6 +180,32 @@ def initialize_database() -> None:
             "stale_reason": (
                 "TEXT NOT NULL DEFAULT ''"
             ),
+            "rule_version": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "prompt_version": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "model_name": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "evaluation_result_json": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "evaluation_status": (
+                "TEXT NOT NULL DEFAULT 'ready'"
+            ),
+            "failure_reason": (
+                "TEXT NOT NULL DEFAULT ''"
+            ),
+            "failed_at": "TEXT",
+            "retry_count": (
+                "INTEGER NOT NULL DEFAULT 0"
+            ),
+            "result_notice_pending": (
+                "INTEGER NOT NULL DEFAULT 0"
+            ),
+            "status_updated_at": "TEXT",
         }
 
         for (
@@ -237,6 +266,10 @@ def initialize_database() -> None:
         if "deleted_at" not in application_table_columns:
             connection.execute(
                 "ALTER TABLE user_applications ADD COLUMN deleted_at TEXT"
+            )
+        if "selection_stage" not in application_table_columns:
+            connection.execute(
+                "ALTER TABLE user_applications ADD COLUMN selection_stage TEXT NOT NULL DEFAULT ''"
             )
 
         milestone_table_columns = {

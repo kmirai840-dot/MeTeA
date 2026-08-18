@@ -6,11 +6,12 @@ from datetime import date, datetime, timedelta
 
 from database.repositories.application_repository import (
     add_phase_history, get_activities, get_application, get_application_by_job_route,
-    get_applications, get_milestones, get_preparations, save_activity, save_application, save_milestone,
-    save_preparation,
-    soft_delete_milestone,
+    delete_milestone, get_applications, get_milestones, get_preparations,
+    get_user_preparation_templates, save_activity, save_application, save_milestone,
+    save_preparation, save_user_preparation_template,
 )
-from models import ApplicationActivity, ApplicationMilestone, ApplicationPreparation, ApplicationRecord
+from models import (ApplicationActivity, ApplicationMilestone, ApplicationPreparation,
+                    ApplicationRecord, UserPreparationTemplate)
 from services.current_user_service import get_current_user_id
 from services.job_evaluation_service import load_job_application_decisions
 from services.job_service import load_job, load_jobs, load_job_sources
@@ -27,7 +28,9 @@ PHASE_OPTIONS = (
     "次回選考調整中", "オファー面談調整中", "オファー面談予定",
     "条件確認中", "内定", "保留", "不合格", "辞退", "見送り", "選考終了",
 )
-RESULT_OPTIONS = ("", "未確定", "通過", "不合格", "辞退", "内定", "保留")
+SELECTION_STAGES = ("書類選考", "適性検査", "カジュアル面談", "一次面接", "二次面接", "最終面接",
+                    "オファー面談", "条件面談", "その他の面接・選考")
+RESULT_OPTIONS = ("未確定", "通過", "不合格", "辞退", "内定", "保留", "選考終了")
 MILESTONE_TYPES = (
     "応募", "書類提出", "適性検査", "カジュアル面談", "一次面接", "二次面接",
     "最終面接", "その他の面接・選考", "オファー面談", "条件面談", "回答期限", "その他",
@@ -42,6 +45,10 @@ PREPARATION_THEMES = (
     ("common", "strengths", "強み・弱み・人物面", "長所・短所、価値観やモチベーションを整理します。"),
     ("company", "conditions", "条件・選考状況", "希望条件や選考状況、入社可能時期を整理します。"),
     ("company", "questions", "逆質問・確認事項", "企業理解を深める質問や確認事項を準備します。"),
+)
+GLOBAL_PREPARATION_THEMES = tuple(
+    row for row in PREPARATION_THEMES
+    if row[1] in {"self_intro", "career_reason", "career_plan", "achievement", "strengths"}
 )
 TERMINAL_CATEGORIES = {"内定", "終了"}
 MILESTONE_STATUS_PENDING = "pending"
@@ -115,6 +122,128 @@ def phase_category(phase: str) -> str:
     return "応募準備"
 
 
+def _stage_from_milestone(milestone_type: str) -> str:
+    return {"書類提出": "書類選考"}.get(
+        milestone_type, milestone_type if milestone_type in SELECTION_STAGES else ""
+    )
+
+
+def _scheduled_phase(stage: str) -> str:
+    if stage == "書類選考": return "書類選考中"
+    if stage == "条件面談": return "条件確認中"
+    candidate = f"{stage}予定"
+    return candidate if candidate in PHASE_OPTIONS else "次回選考調整中"
+
+
+def _waiting_phase(stage: str) -> str:
+    candidate = f"{stage}結果待ち"
+    if candidate in PHASE_OPTIONS: return candidate
+    return "書類選考中" if stage == "書類選考" else "条件確認中"
+
+
+def _adjusting_phase(stage: str) -> str:
+    candidate = f"{stage}調整中"
+    return candidate if candidate in PHASE_OPTIONS else "次回選考調整中"
+
+
+def _apply_automatic_phase(application_id: int, phase: str, stage: str = "") -> None:
+    application = get_application(get_current_user_id(), application_id)
+    if not application:
+        raise ApplicationManagementError("応募情報が見つかりません。")
+    application.current_phase = phase
+    if stage:
+        application.selection_stage = stage
+    update_application_data(application)
+
+
+def _upsert_next_selection_milestone(
+    application_id: int,
+    next_selection_stage: str,
+    next_selection_date: str = "",
+    next_selection_start_time: str = "",
+    next_selection_end_time: str = "",
+) -> int:
+    """次回選考の未完了予定を重複させずに作成・更新する。"""
+    if next_selection_stage not in SELECTION_STAGES:
+        raise ApplicationManagementError("次回選考を正しく指定してください。")
+    if next_selection_date:
+        _parse_scheduled_date(next_selection_date)
+
+    milestone_type = "書類提出" if next_selection_stage == "書類選考" else next_selection_stage
+    existing = next((
+        milestone for milestone in get_milestones(application_id)
+        if milestone.status == MILESTONE_STATUS_PENDING
+        and milestone.milestone_type == milestone_type
+    ), None)
+    if existing:
+        if next_selection_date and (
+            existing.scheduled_date != next_selection_date
+            or existing.start_time != next_selection_start_time
+            or existing.end_time != next_selection_end_time
+        ):
+            previous_date = existing.scheduled_date or "日程未定"
+            existing.scheduled_date = next_selection_date
+            existing.start_time = next_selection_start_time
+            existing.end_time = next_selection_end_time
+            save_milestone(existing)
+            save_activity(ApplicationActivity(
+                application_id=application_id,
+                activity_type="milestone_scheduled",
+                occurred_at=datetime.now().isoformat(timespec="minutes"),
+                title="次回選考の日程を登録",
+                detail=f"{next_selection_stage}を{previous_date}から{next_selection_date}へ更新しました。",
+                is_automatic=True,
+            ))
+        return existing.id
+
+    return add_milestone_data(ApplicationMilestone(
+        application_id=application_id,
+        milestone_type=milestone_type,
+        title=next_selection_stage,
+        schedule_kind="event",
+        scheduled_date=next_selection_date or None,
+        start_time=next_selection_start_time,
+        end_time=next_selection_end_time,
+        status=MILESTONE_STATUS_PENDING,
+    ))
+
+
+def register_selection_result(application_id: int, selection_stage: str, result: str,
+                              next_selection_stage: str = "",
+                              next_selection_date: str = "",
+                              next_selection_start_time: str = "",
+                              next_selection_end_time: str = "") -> None:
+    """対象選考と結果を保存し、現在フェーズと次回選考予定を自動更新する。"""
+    if selection_stage not in SELECTION_STAGES or result not in RESULT_OPTIONS:
+        raise ApplicationManagementError("対象選考と結果を正しく指定してください。")
+    application = get_application(get_current_user_id(), application_id)
+    if not application:
+        raise ApplicationManagementError("応募情報が見つかりません。")
+    application.selection_stage = selection_stage
+    application.selection_result = result
+    if result == "通過":
+        if next_selection_stage:
+            application.current_phase = (
+                _scheduled_phase(next_selection_stage)
+                if next_selection_date else _adjusting_phase(next_selection_stage)
+            )
+        else:
+            application.current_phase = "次回選考調整中"
+    elif result in {"不合格", "辞退", "内定", "保留", "選考終了"}:
+        application.current_phase = result
+    else:
+        application.current_phase = _waiting_phase(selection_stage)
+    update_application_data(application)
+    if result == "通過" and next_selection_stage:
+        _upsert_next_selection_milestone(
+            application_id,
+            next_selection_stage,
+            next_selection_date,
+            next_selection_start_time,
+            next_selection_end_time,
+        )
+
+
 def _default_route(job_id: int) -> str:
     sources = load_job_sources(job_id)
     if sources:
@@ -157,7 +286,8 @@ def ensure_application_from_decision(job_id: int, decision_status: str, next_act
         occurred_at=datetime.now().isoformat(timespec="minutes"), title="応募管理へ追加",
         detail=f"応募判断「{decision_status}」から応募管理へ追加しました。", is_automatic=True,
     ))
-    if next_action or action_deadline:
+    # 期限のない「次のアクション」は応募判断上のメモとして保持する。
+    if action_deadline:
         add_milestone_data(ApplicationMilestone(
             application_id=application_id, milestone_type="その他",
             title=next_action or "次のアクション", schedule_kind="deadline",
@@ -206,8 +336,8 @@ def update_application_data(application: ApplicationRecord) -> None:
 
     phase_changed = (
         not previous
-        or (previous.current_phase, previous.selection_result)
-        != (application.current_phase, application.selection_result)
+        or (previous.current_phase, previous.selection_stage, previous.selection_result)
+        != (application.current_phase, application.selection_stage, application.selection_result)
     )
     if phase_changed:
         add_phase_history(
@@ -217,6 +347,7 @@ def update_application_data(application: ApplicationRecord) -> None:
             application.selection_result,
         )
         previous_phase = previous.current_phase if previous else "未設定"
+        previous_stage = previous.selection_stage if previous else "未設定"
         previous_result = previous.selection_result if previous else "未設定"
         save_activity(ApplicationActivity(
             application_id=application.id,
@@ -225,7 +356,9 @@ def update_application_data(application: ApplicationRecord) -> None:
             title="選考状況を更新",
             detail=(
                 f"現在フェーズを「{previous_phase}」から"
-                f"「{application.current_phase}」へ、選考結果を"
+                f"「{application.current_phase}」へ、対象選考を"
+                f"「{previous_stage or '未設定'}」から"
+                f"「{application.selection_stage or '未設定'}」へ、選考結果を"
                 f"「{previous_result or '未確定'}」から"
                 f"「{application.selection_result or '未確定'}」へ更新しました。"
             ),
@@ -262,6 +395,10 @@ def add_milestone_data(milestone: ApplicationMilestone) -> int:
         detail=f"{milestone.title or milestone.milestone_type}{date_text}を追加しました。",
         is_automatic=True,
     ))
+    stage = _stage_from_milestone(milestone.milestone_type)
+    if stage:
+        phase = _scheduled_phase(stage) if milestone.scheduled_date else _adjusting_phase(stage)
+        _apply_automatic_phase(milestone.application_id, phase, stage)
     return milestone_id
 
 
@@ -278,6 +415,49 @@ def complete_milestone(milestone: ApplicationMilestone) -> None:
         title="予定を完了",
         detail=f"{milestone.title or milestone.milestone_type}を完了しました。",
         is_automatic=True,
+    ))
+    stage = _stage_from_milestone(milestone.milestone_type)
+    if stage:
+        _apply_automatic_phase(milestone.application_id, _waiting_phase(stage), stage)
+
+
+def update_milestone_schedule(
+    milestone: ApplicationMilestone,
+    scheduled_date: str,
+    start_time: str = "",
+    end_time: str = "",
+) -> None:
+    """予定の状態を変えずに、登録済みの日付・時刻を修正する。"""
+
+    _parse_scheduled_date(scheduled_date)
+    if start_time and end_time and end_time <= start_time:
+        raise ApplicationManagementError("終了時刻は開始時刻より後に設定してください。")
+
+    before_date = milestone.scheduled_date or "日付未設定"
+    before_time = milestone.start_time or ""
+    if milestone.end_time:
+        before_time = f"{before_time}〜{milestone.end_time}" if before_time else milestone.end_time
+
+    milestone.scheduled_date = scheduled_date
+    milestone.start_time = start_time
+    milestone.end_time = end_time
+    save_milestone(milestone)
+
+    after_time = start_time
+    if end_time:
+        after_time = f"{after_time}〜{end_time}" if after_time else end_time
+    before_text = f"{before_date} {before_time}".strip()
+    after_text = f"{scheduled_date} {after_time}".strip()
+    save_activity(ApplicationActivity(
+        application_id=milestone.application_id,
+        activity_type="milestone_schedule_updated",
+        occurred_at=datetime.now().isoformat(timespec="minutes"),
+        title="予定日時を修正",
+        detail=(
+            f"{milestone.title or milestone.milestone_type}の日時を"
+            f"{before_text}から{after_text}へ修正しました。"
+        ),
+        is_automatic=False,
     ))
 
 
@@ -326,6 +506,9 @@ def postpone_milestone(
         ),
         is_automatic=True,
     ))
+    stage = _stage_from_milestone(milestone.milestone_type)
+    if stage:
+        _apply_automatic_phase(milestone.application_id, _scheduled_phase(stage), stage)
     return replacement_id
 
 
@@ -350,21 +533,18 @@ def cancel_milestone(milestone: ApplicationMilestone, reason: str = "") -> None:
     ))
 
 
+    stage = _stage_from_milestone(milestone.milestone_type)
+    if stage:
+        _apply_automatic_phase(milestone.application_id, _adjusting_phase(stage), stage)
+
+
 def delete_milestone_data(milestone: ApplicationMilestone) -> None:
     """誤登録した予定を表示対象から削除する。"""
 
     if milestone.id <= 0:
         raise ApplicationManagementError("削除する予定が正しく指定されていません。")
-    if not soft_delete_milestone(milestone.id):
+    if not delete_milestone(milestone.id):
         raise ApplicationManagementError("予定が見つからないか、すでに削除されています。")
-    save_activity(ApplicationActivity(
-        application_id=milestone.application_id,
-        activity_type="milestone_deleted",
-        occurred_at=datetime.now().isoformat(timespec="minutes"),
-        title="予定を削除",
-        detail=f"{milestone.title or milestone.milestone_type}を予定一覧から削除しました。",
-        is_automatic=True,
-    ))
 
 
 def add_manual_activity(application_id: int, title: str, detail: str, occurred_at: str) -> None:
@@ -374,14 +554,68 @@ def add_manual_activity(application_id: int, title: str, detail: str, occurred_a
 
 def load_preparation_items(application_id: int, selection_type: str) -> list[ApplicationPreparation]:
     existing = get_preparations(application_id)
-    existing_keys = {(item.scope, item.theme_key) for item in existing}
+    existing_keys = {(item.scope, item.selection_type, item.theme_key) for item in existing}
     for order, (scope, key, title, description) in enumerate(PREPARATION_THEMES):
-        if (scope, key) not in existing_keys:
+        if scope == "common":
+            continue
+        item_selection_type = selection_type if scope == "selection" else ""
+        if (scope, item_selection_type, key) not in existing_keys:
             save_preparation(ApplicationPreparation(
-                application_id=application_id, scope=scope, selection_type=selection_type,
+                application_id=application_id, scope=scope, selection_type=item_selection_type,
                 theme_key=key, title=title, description=description, sort_order=order,
             ))
     return get_preparations(application_id)
+
+
+def load_global_preparation_templates() -> list[UserPreparationTemplate]:
+    user_id = get_current_user_id()
+    existing = get_user_preparation_templates(user_id)
+    keys = {item.theme_key for item in existing}
+    for order, (_, key, title, description) in enumerate(GLOBAL_PREPARATION_THEMES):
+        if key not in keys:
+            save_user_preparation_template(UserPreparationTemplate(
+                user_id=user_id, theme_key=key, title=title,
+                description=description, sort_order=order,
+            ))
+    return get_user_preparation_templates(user_id)
+
+
+def save_global_preparation_template(item: UserPreparationTemplate) -> None:
+    item.is_completed = bool(item.is_completed or item.content.strip())
+    save_user_preparation_template(item)
+
+
+def copy_global_preparations_to_application(application_id: int) -> int:
+    existing = {(item.scope, item.selection_type, item.theme_key) for item in get_preparations(application_id)}
+    copied = 0
+    for item in load_global_preparation_templates():
+        if ("company", "", item.theme_key) in existing:
+            continue
+        save_preparation(ApplicationPreparation(
+            application_id=application_id, scope="company", selection_type="",
+            theme_key=item.theme_key, title=item.title, description=item.description,
+            content=item.content, is_completed=item.is_completed, is_custom=item.is_custom,
+            sort_order=item.sort_order,
+        ))
+        copied += 1
+    return copied
+
+
+def copy_application_preparations_to_selection(application_id: int, selection_type: str) -> int:
+    items = get_preparations(application_id)
+    existing = {(item.scope, item.selection_type, item.theme_key) for item in items}
+    copied = 0
+    for item in (row for row in items if row.scope == "company"):
+        if ("selection", selection_type, item.theme_key) in existing:
+            continue
+        save_preparation(ApplicationPreparation(
+            application_id=application_id, scope="selection", selection_type=selection_type,
+            theme_key=item.theme_key, title=item.title, description=item.description,
+            content=item.content, is_completed=item.is_completed, is_custom=item.is_custom,
+            sort_order=item.sort_order,
+        ))
+        copied += 1
+    return copied
 
 
 def save_preparation_item(item: ApplicationPreparation) -> None:
@@ -447,6 +681,35 @@ def operational_summary(views: list[dict]) -> dict:
                 attention.append(item)
             elif is_milestone_upcoming(milestone, today):
                 upcoming.append(item)
+
+    # 応募は選考終了まで続く一つのプロジェクトとして扱う。進行中にもかかわらず
+    # 次の予定も結果待ち状態もない応募は、管理対象が途切れた状態として通知する。
+    attention_application_ids = {
+        item["view"]["application"].id for item in attention
+    }
+    for view in current_views:
+        application = view["application"]
+        if application.id in attention_application_ids:
+            continue
+        if application.phase_category == "応募準備":
+            continue
+        if view.get("next_milestone") is not None:
+            continue
+        if "結果待ち" in (application.current_phase or ""):
+            continue
+        gap_milestone = ApplicationMilestone(
+            application_id=application.id,
+            milestone_type="その他",
+            title="次の選考・対応を登録",
+            scheduled_date=today.isoformat(),
+            status=MILESTONE_STATUS_PENDING,
+        )
+        attention.append({
+            "view": view,
+            "milestone": gap_milestone,
+            "date": today,
+            "reason": "progress_gap",
+        })
 
     preparation = [
         view for view in current_views

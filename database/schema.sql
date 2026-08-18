@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS user_jobs (
     external_partners TEXT NOT NULL DEFAULT '',
     goals_kpi TEXT NOT NULL DEFAULT '',
     expected_results TEXT NOT NULL DEFAULT '',
+    organizational_culture TEXT NOT NULL DEFAULT '',
 
     -- 勤務条件
     employment_type TEXT NOT NULL DEFAULT '',
@@ -388,6 +389,16 @@ CREATE TABLE IF NOT EXISTS user_job_match_evaluations (
     is_provisional INTEGER NOT NULL DEFAULT 1,
     is_stale INTEGER NOT NULL DEFAULT 0,
     stale_reason TEXT NOT NULL DEFAULT '',
+    rule_version TEXT NOT NULL DEFAULT '',
+    prompt_version TEXT NOT NULL DEFAULT '',
+    model_name TEXT NOT NULL DEFAULT '',
+    evaluation_result_json TEXT NOT NULL DEFAULT '',
+    evaluation_status TEXT NOT NULL DEFAULT 'ready',
+    failure_reason TEXT NOT NULL DEFAULT '',
+    failed_at TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    result_notice_pending INTEGER NOT NULL DEFAULT 0,
+    status_updated_at TEXT,
 
     matching_points TEXT NOT NULL DEFAULT '',
     concern_points TEXT NOT NULL DEFAULT '',
@@ -475,6 +486,7 @@ CREATE TABLE IF NOT EXISTS user_applications (
     actual_route TEXT NOT NULL DEFAULT '',
     current_phase TEXT NOT NULL DEFAULT '応募準備',
     phase_category TEXT NOT NULL DEFAULT '応募準備',
+    selection_stage TEXT NOT NULL DEFAULT '',
     selection_result TEXT NOT NULL DEFAULT '',
     application_date TEXT,
     status TEXT NOT NULL DEFAULT 'active',
@@ -549,9 +561,39 @@ CREATE TABLE IF NOT EXISTS application_preparations (
     UNIQUE (application_id, scope, selection_type, theme_key)
 );
 
+CREATE TABLE IF NOT EXISTS user_preparation_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    theme_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    is_completed INTEGER NOT NULL DEFAULT 0,
+    is_custom INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    UNIQUE (user_id, theme_key)
+);
+
+CREATE TABLE IF NOT EXISTS user_general_activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    activity_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    target_page TEXT NOT NULL DEFAULT 'home',
+    target_id INTEGER,
+    icon_name TEXT NOT NULL DEFAULT 'user.svg',
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_applications_user_status ON user_applications (user_id, status);
 CREATE INDEX IF NOT EXISTS idx_milestones_date ON application_milestones (scheduled_date, status);
 CREATE INDEX IF NOT EXISTS idx_activities_application_date ON application_activities (application_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_preparations_application ON application_preparations (application_id, scope, selection_type);
+CREATE INDEX IF NOT EXISTS idx_preparation_templates_user ON user_preparation_templates (user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_general_activities_user_date ON user_general_activities (user_id, occurred_at);
 INSERT OR IGNORE INTO users (id)
 VALUES (1);

@@ -8,6 +8,7 @@ from database.repositories.job_hunting_axis_repository import (
     get_job_hunting_axes,
     save_job_hunting_axes,
 )
+from database.repositories.home_activity_repository import save_general_activity
 from models import JobHuntingAxis
 from services.current_user_service import get_current_user_id
 from services.job_matching_cache_service import (
@@ -50,7 +51,6 @@ def validate_job_hunting_axes(
             errors.append(
                 f"{index}件目の軸の名称を入力してください。"
             )
-            continue
 
         if len(axis_title) > MAX_AXIS_TITLE_LENGTH:
             errors.append(
@@ -150,6 +150,13 @@ def save_job_hunting_axis_data(
     )
 
     if saved_axes != validated_axes:
+        save_general_activity(
+            user_id,
+            "job_hunting_axis_updated",
+            "就活の軸を更新しました",
+            target_page="job_hunting_axis",
+            icon_name="user.svg",
+        )
         invalidate_current_user_job_evaluations(
             reason="就活の軸が変更されました。",
         )

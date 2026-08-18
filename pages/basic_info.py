@@ -1,6 +1,7 @@
 """基本情報画面の表示と入力チェックを担当するモジュール。"""
 
 from datetime import date
+from html import escape
 import streamlit as st
 
 from data.master_data import GENDER_LABELS, PREFECTURES
@@ -264,16 +265,58 @@ def render_error_summary(
     if not errors:
         return
 
-    error_lines = [
-        "入力内容を確認してください",
-        "",
-        *[
-            f"- {message}"
-            for message in errors.values()
-        ],
-    ]
+    error_items = "".join(
+        f"<li>{escape(message)}</li>"
+        for message in dict.fromkeys(errors.values())
+    )
+    st.markdown(
+        '<div class="metea-basic-error-summary" role="alert">'
+        '<span class="metea-basic-error-icon">!</span>'
+        '<div><strong>入力内容を確認してください</strong>'
+        f'<ul>{error_items}</ul></div></div>',
+        unsafe_allow_html=True,
+    )
 
-    st.error("\n".join(error_lines))
+
+def render_error_field_styles(errors: dict[str, str]) -> None:
+    """エラーがある入力欄だけを赤枠で強調する。"""
+
+    error_to_widget_keys = {
+        FAMILY_NAME_ERROR_KEY: (FAMILY_NAME_KEY,),
+        GIVEN_NAME_ERROR_KEY: (GIVEN_NAME_KEY,),
+        GENDER_ERROR_KEY: (GENDER_KEY,),
+        BIRTH_YEAR_ERROR_KEY: (BIRTH_YEAR_KEY,),
+        BIRTH_MONTH_ERROR_KEY: (BIRTH_MONTH_KEY,),
+        BIRTH_DAY_ERROR_KEY: (BIRTH_DAY_KEY,),
+        BIRTH_DATE_ERROR_KEY: (BIRTH_YEAR_KEY, BIRTH_MONTH_KEY, BIRTH_DAY_KEY),
+        PREFECTURE_ERROR_KEY: (PREFECTURE_KEY,),
+        MUNICIPALITY_ERROR_KEY: (MUNICIPALITY_KEY,),
+        NEAREST_STATION_ERROR_KEY: (STATION_SEARCH_QUERY_KEY,),
+    }
+    widget_keys = {
+        widget_key
+        for error_key, mapped_widget_keys in error_to_widget_keys.items()
+        if error_key in errors
+        for widget_key in mapped_widget_keys
+    }
+    if not widget_keys:
+        return
+
+    selectors = []
+    for widget_key in sorted(widget_keys):
+        selectors.extend((
+            f'.st-key-{widget_key} input',
+            f'.st-key-{widget_key} [data-baseweb="select"] > div',
+        ))
+    st.markdown(
+        "<style>"
+        + ",".join(selectors)
+        + "{border:1.5px solid #ef4b55 !important;"
+          "background:#fffafa !important;"
+          "box-shadow:0 0 0 2px rgba(239,75,85,.08) !important;}"
+          "</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_field_error(
@@ -289,7 +332,10 @@ def render_field_error(
     message = errors.get(error_key)
 
     if message:
-        st.markdown(f":red[{message}]")
+        st.markdown(
+            f'<p class="metea-basic-field-error">{escape(message)}</p>',
+            unsafe_allow_html=True,
+        )
 
 
 def format_station_candidate(
@@ -336,6 +382,208 @@ def render_basic_info_page() -> None:
 
     apply_self_discovery_theme(current_step=1)
 
+    st.markdown(
+        """
+        <span class="metea-basic-page-marker" aria-hidden="true"></span>
+        <style>
+        /* 基本情報は1画面で主要入力と「次へ」を見渡せる密度に整える。 */
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker),
+        section.main > div.block-container:has(.metea-basic-page-marker) {
+            box-sizing: border-box;
+            width: calc(100vw - 272px);
+            max-width: none;
+            height: calc(100dvh - 84px);
+            min-height: 620px;
+            margin: 66px 28px 18px 244px;
+            padding: 12px 34px 14px;
+            overflow-x: hidden;
+            overflow-y: auto;
+            scrollbar-gutter: stable;
+            overscroll-behavior: contain;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker) h1 {
+            margin-top: 0;
+            margin-bottom: 0;
+            font-size: clamp(1.9rem, 2.3vw, 2.35rem);
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        > [data-testid="stVerticalBlock"],
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        > div > [data-testid="stVerticalBlock"] {
+            gap: 0.45rem;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker) [data-testid="stProgress"] {
+            margin: 2px 0 7px;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker) [data-testid="stForm"] {
+            padding: 8px 14px 10px;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+            gap: 0.26rem;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stTextInput"] input,
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-baseweb="select"] > div {
+            min-height: 36px;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stFormSubmitButton"] > button {
+            min-height: 36px;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stWidgetLabel"] p,
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stForm"] > div p {
+            line-height: 1.25;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stCaptionContainer"] {
+            font-size: 0.8rem !important;
+            line-height: 1.35;
+        }
+
+        [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+        [data-testid="stButton"] > button {
+            min-height: 36px;
+        }
+
+        .metea-basic-error-summary {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin: 4px 0 10px;
+            padding: 13px 16px;
+            border: 1.5px solid #ffb8bd;
+            border-radius: 11px;
+            background: #fff7f7;
+            color: #d92d3a;
+        }
+
+        .metea-basic-error-icon {
+            display: grid;
+            place-items: center;
+            flex: 0 0 25px;
+            width: 25px;
+            height: 25px;
+            border: 2px solid #ef3f4c;
+            border-radius: 7px 7px 9px 9px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .metea-basic-error-summary strong { font-size: 0.95rem; }
+        .metea-basic-error-summary ul { margin: 5px 0 0; padding-left: 1.15rem; }
+        .metea-basic-error-summary li { margin: 2px 0; font-size: 0.88rem; }
+        .metea-basic-field-error {
+            display: block;
+            min-height: 18px;
+            margin: 1px 0 4px !important;
+            color: #dc3545 !important;
+            font-size: 0.84rem !important;
+            font-weight: 650;
+            line-height: 1.35 !important;
+        }
+
+        [data-testid="stElementContainer"]:has(.metea-basic-field-error) {
+            min-height: 23px;
+            margin-bottom: 2px;
+            overflow: visible;
+        }
+
+        /* Streamlitのバージョン差に依存せず「次へ」だけを主要ボタンにする。 */
+        [data-testid="stElementContainer"]:has(.metea-basic-next-marker)
+        + [data-testid="stElementContainer"] button,
+        div:has(> [data-testid="stMarkdownContainer"] .metea-basic-next-marker)
+        + div button,
+        [class*="st-key-basic_next"] button {
+            border-color: var(--metea-blue) !important;
+            background: linear-gradient(180deg, #2878ff, #0862f1) !important;
+            color: #ffffff !important;
+            box-shadow: 0 7px 16px rgba(20, 108, 255, 0.22) !important;
+        }
+
+        [data-testid="stElementContainer"]:has(.metea-basic-next-marker)
+        + [data-testid="stElementContainer"] button p,
+        div:has(> [data-testid="stMarkdownContainer"] .metea-basic-next-marker)
+        + div button p,
+        [class*="st-key-basic_next"] button p {
+            color: #ffffff !important;
+        }
+
+        [data-testid="stElementContainer"]:has(.metea-basic-next-marker)
+        + [data-testid="stElementContainer"] button:hover,
+        div:has(> [data-testid="stMarkdownContainer"] .metea-basic-next-marker)
+        + div button:hover,
+        [class*="st-key-basic_next"] button:hover {
+            border-color: var(--metea-blue-dark) !important;
+            background: linear-gradient(180deg, #1e70f5, #0759df) !important;
+        }
+
+        @media (max-height: 820px) and (min-width: 1101px) {
+            [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker),
+            section.main > div.block-container:has(.metea-basic-page-marker) {
+                width: calc(100vw - 264px);
+                height: calc(100dvh - 58px);
+                min-height: 0;
+                margin: 48px 20px 10px 244px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+            }
+            [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+            [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+                gap: 0.2rem;
+            }
+        }
+
+        /* ステッパーを畳む幅では、利用可能な横幅いっぱいにカードを広げる。 */
+        @media (max-width: 1100px) {
+            [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker),
+            section.main > div.block-container:has(.metea-basic-page-marker) {
+                width: calc(100vw - 36px);
+                max-width: none;
+                height: calc(100dvh - 36px);
+                min-height: 0;
+                margin: 18px;
+                padding: 22px 28px 28px;
+            }
+        }
+
+        /* スマホはカード内スクロールを使わず、画面全体を自然に縦スクロールする。 */
+        @media (max-width: 700px) {
+            [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker),
+            section.main > div.block-container:has(.metea-basic-page-marker) {
+                width: 100%;
+                height: auto;
+                min-height: 100dvh;
+                margin: 0;
+                padding: 20px 16px 32px;
+                overflow: visible;
+                border-left: 0;
+                border-right: 0;
+                border-radius: 0;
+            }
+
+            [data-testid="stMainBlockContainer"]:has(.metea-basic-page-marker)
+            [data-testid="stForm"] {
+                padding: 12px;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     initialize_basic_info_state()
 
     errors=st.session_state[ERRORS_KEY]
@@ -354,6 +602,7 @@ def render_basic_info_page() -> None:
     )
 
     render_error_summary(errors)
+    render_error_field_styles(errors)
 
     selected_station_place_id_in_form = (
         st.session_state.get(
@@ -570,10 +819,16 @@ def render_basic_info_page() -> None:
             NEAREST_STATION_KEY,
         )
 
+        st.markdown(
+            '<span class="metea-basic-next-marker" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+
         submitted = st.form_submit_button(
             "次へ →",
             type="primary",
             use_container_width=True,
+            key="basic_next",
         )
 
 

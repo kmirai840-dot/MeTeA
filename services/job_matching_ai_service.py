@@ -22,14 +22,14 @@ from services.job_matching_rule_service import (
 )
 
 
-PROMPT_VERSION = "job-matching-v6"
+PROMPT_VERSION = "job-matching-v9"
 DEFAULT_AI_MODEL = "gpt-5.4-mini"
 
-MAX_AI_ITEMS = 20
+MAX_AI_ITEMS = 40
 MAX_ITEM_NAME_LENGTH = 100
 MAX_REASON_LENGTH = 240
 MAX_EVIDENCE_LENGTH = 240
-MAX_AI_OUTPUT_TOKENS = 4000
+MAX_AI_OUTPUT_TOKENS = 5000
 
 ALLOWED_CATEGORIES = {
     "hope_condition",
@@ -63,6 +63,14 @@ class OpenAIMatchItem(BaseModel):
         "career_skill",
         "required_condition",
     ]
+    evaluation_group: Literal[
+        "",
+        "confirmed_axis",
+        "work_style",
+        "direct_experience",
+        "portable_skill",
+        "achievement_reproducibility",
+    ] = ""
     item_name: str = Field(
         min_length=1,
         max_length=MAX_ITEM_NAME_LENGTH,
@@ -161,6 +169,35 @@ def parse_ai_item(
         raise JobMatchingAIResultError(
             f"items[{item_index}].categoryの"
             f"「{category}」は未対応です"
+        )
+
+    evaluation_group = require_text(
+        raw_item.get("evaluation_group", ""),
+        f"items[{item_index}].evaluation_group",
+        50,
+        allow_empty=True,
+    )
+
+    if category == "work_value":
+        if evaluation_group not in {"confirmed_axis", "work_style"}:
+            raise JobMatchingAIResultError(
+                f"items[{item_index}]のwork_valueには"
+                "evaluation_groupが必要です"
+            )
+    elif category == "career_skill":
+        if evaluation_group not in {
+            "direct_experience",
+            "portable_skill",
+            "achievement_reproducibility",
+        }:
+            raise JobMatchingAIResultError(
+                f"items[{item_index}]のcareer_skillには"
+                "evaluation_groupが必要です"
+            )
+    elif evaluation_group:
+        raise JobMatchingAIResultError(
+            f"items[{item_index}]の{category}には"
+            "evaluation_groupを設定できません"
         )
 
     item_name = require_text(
@@ -309,6 +346,7 @@ def parse_ai_item(
 
     return AISemanticMatchItem(
         category=category,
+        evaluation_group=evaluation_group,
         item_name=item_name,
         judgment=judgment,
         reason=reason,
@@ -430,8 +468,9 @@ def filter_unavailable_categories(
             "hope_condition"
         )
 
-    if user_information.get(
-        "job_hunting_axes"
+    if (
+        user_information.get("job_hunting_axes")
+        or user_information.get("work_style_answers")
     ):
         allowed_categories.add(
             "work_value"
@@ -463,10 +502,14 @@ def filter_unavailable_categories(
             and item.get("category")
             in allowed_categories
             and not (
-                item.get("category")
-                == "career_skill"
-                and item.get("judgment")
-                == NEEDS_CONFIRMATION
+                item.get("category") == "work_value"
+                and item.get("evaluation_group") == "confirmed_axis"
+                and not user_information.get("job_hunting_axes")
+            )
+            and not (
+                item.get("category") == "work_value"
+                and item.get("evaluation_group") == "work_style"
+                and not user_information.get("work_style_answers")
             )
         )
     ]

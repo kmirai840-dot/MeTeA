@@ -42,5 +42,6 @@ uvicorn==0.51.0
 watchdog==6.0.0
 websockets==16.1.1
 python-docx
+pypdf
 openai
 python-dotenv

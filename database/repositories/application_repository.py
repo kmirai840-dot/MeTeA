@@ -1,7 +1,8 @@
 """応募後管理に関するSQLite Repository。"""
 
 from database.connection import get_connection
-from models import ApplicationActivity, ApplicationMilestone, ApplicationPreparation, ApplicationRecord
+from models import (ApplicationActivity, ApplicationMilestone, ApplicationPreparation,
+                    ApplicationRecord, UserPreparationTemplate)
 
 
 def get_applications(user_id: int, include_closed: bool = True) -> list[ApplicationRecord]:
@@ -52,10 +53,10 @@ def save_application(application: ApplicationRecord) -> int:
         if application.id:
             connection.execute(
                 """UPDATE user_applications SET actual_route = ?, current_phase = ?,
-                   phase_category = ?, selection_result = ?, application_date = ?, status = ?,
+                   phase_category = ?, selection_stage = ?, selection_result = ?, application_date = ?, status = ?,
                    notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?""",
                 (application.actual_route, application.current_phase, application.phase_category,
-                 application.selection_result, application.application_date, application.status,
+                 application.selection_stage, application.selection_result, application.application_date, application.status,
                  application.notes, application.id, application.user_id),
             )
             application_id = application.id
@@ -63,12 +64,12 @@ def save_application(application: ApplicationRecord) -> int:
             cursor = connection.execute(
                 """INSERT INTO user_applications
                    (user_id, job_id, actual_route, current_phase, phase_category,
-                    selection_result, application_date, status, notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    selection_stage, selection_result, application_date, status, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id, job_id, actual_route) DO UPDATE SET
                     updated_at = CURRENT_TIMESTAMP, deleted_at = NULL""",
                 (application.user_id, application.job_id, application.actual_route,
-                 application.current_phase, application.phase_category,
+                 application.current_phase, application.phase_category, application.selection_stage,
                  application.selection_result, application.application_date,
                  application.status, application.notes),
             )
@@ -161,18 +162,16 @@ def save_milestone(milestone: ApplicationMilestone) -> int:
         connection.close()
 
 
-def soft_delete_milestone(milestone_id: int) -> bool:
-    """予定を論理削除し、通常の取得対象から除外する。"""
+def delete_milestone(milestone_id: int) -> bool:
+    """誤登録の予定を物理削除する。延期先からの参照は先に解除する。"""
 
     connection = get_connection()
     try:
-        cursor = connection.execute(
-            """UPDATE application_milestones
-               SET deleted_at = CURRENT_TIMESTAMP,
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE id = ? AND deleted_at IS NULL""",
+        connection.execute(
+            "UPDATE application_milestones SET rescheduled_from_id = NULL WHERE rescheduled_from_id = ?",
             (milestone_id,),
         )
+        cursor = connection.execute("DELETE FROM application_milestones WHERE id = ?", (milestone_id,))
         connection.commit()
         return cursor.rowcount > 0
     except Exception:
@@ -261,10 +260,48 @@ def save_preparation(item: ApplicationPreparation) -> int:
         connection.close()
 
 
+def get_user_preparation_templates(user_id: int) -> list[UserPreparationTemplate]:
+    connection = get_connection()
+    try:
+        rows = connection.execute(
+            "SELECT * FROM user_preparation_templates WHERE user_id = ? ORDER BY sort_order, id",
+            (user_id,),
+        ).fetchall()
+    finally:
+        connection.close()
+    return [_row_to_user_preparation_template(row) for row in rows]
+
+
+def save_user_preparation_template(item: UserPreparationTemplate) -> int:
+    connection = get_connection()
+    try:
+        cursor = connection.execute(
+            """INSERT INTO user_preparation_templates
+               (user_id, theme_key, title, description, content, is_completed, is_custom, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, theme_key) DO UPDATE SET
+                 title=excluded.title, description=excluded.description, content=excluded.content,
+                 is_completed=excluded.is_completed, is_custom=excluded.is_custom,
+                 sort_order=excluded.sort_order, updated_at=CURRENT_TIMESTAMP""",
+            (item.user_id, item.theme_key, item.title, item.description, item.content,
+             int(item.is_completed), int(item.is_custom), item.sort_order),
+        )
+        connection.commit()
+        if cursor.lastrowid:
+            return int(cursor.lastrowid)
+        row = connection.execute(
+            "SELECT id FROM user_preparation_templates WHERE user_id=? AND theme_key=?",
+            (item.user_id, item.theme_key),
+        ).fetchone()
+        return int(row["id"])
+    finally:
+        connection.close()
+
+
 def _row_to_application(row) -> ApplicationRecord:
     return ApplicationRecord(**{key: row[key] for key in (
         "id", "user_id", "job_id", "actual_route", "current_phase", "phase_category",
-        "selection_result", "application_date", "status", "notes", "created_at", "updated_at")})
+        "selection_stage", "selection_result", "application_date", "status", "notes", "created_at", "updated_at")})
 
 
 def _row_to_milestone(row) -> ApplicationMilestone:
@@ -289,3 +326,12 @@ def _row_to_preparation(row) -> ApplicationPreparation:
     values["is_completed"] = bool(row["is_completed"])
     values["is_custom"] = bool(row["is_custom"])
     return ApplicationPreparation(**values)
+
+
+def _row_to_user_preparation_template(row) -> UserPreparationTemplate:
+    values = {key: row[key] for key in (
+        "id", "user_id", "theme_key", "title", "description", "content", "sort_order",
+        "created_at", "updated_at")}
+    values["is_completed"] = bool(row["is_completed"])
+    values["is_custom"] = bool(row["is_custom"])
+    return UserPreparationTemplate(**values)

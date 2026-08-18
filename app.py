@@ -1,11 +1,16 @@
 from pathlib import Path
 from dataclasses import dataclass
+from datetime import date, datetime
 from html import escape
 import base64
+import importlib
 
 import streamlit as st
 
 from database.initialize import initialize_database
+from database.repositories.home_activity_repository import get_home_activities
+from services.application_management_service import load_application_views, operational_summary
+from services.current_user_service import get_current_user_id
 from pages.basic_info import render_basic_info_page
 from pages.hope_conditions import render_hope_conditions_page
 
@@ -20,6 +25,9 @@ from pages.work_values import (
 from pages.career import (
     show_page as render_career_page,
 )
+from pages.profile_review import show_page as render_profile_review_page
+from pages.self_discovery_hub import show_page as render_self_discovery_hub_page
+from pages.job_layout import render_job_navigation
 
 from pages.job_registration import (
     show_page as render_job_registration_page,
@@ -62,6 +70,19 @@ st.set_page_config(
 initialize_database()
 
 
+def render_reloaded_page(
+    module_name: str,
+    function_name: str,
+    *args,
+    **kwargs,
+):
+    """開発中の画面修正を、サーバー再起動なしで確実に反映する。"""
+    importlib.invalidate_caches()
+    module = importlib.import_module(module_name)
+    module = importlib.reload(module)
+    return getattr(module, function_name)(*args, **kwargs)
+
+
 
 # ========================================
 # 表示画面の判定
@@ -82,6 +103,8 @@ valid_pages = {
     "job_hunting_axis",
     "work_values",
     "career",
+    "profile_review",
+    "self_discovery",
     "job_change_reason",
     "job_registration",
     "job_list",
@@ -101,27 +124,35 @@ if current_page not in valid_pages:
     st.rerun()
 
 if current_page == "basic_info":
-    render_basic_info_page()
+    render_reloaded_page("pages.basic_info", "render_basic_info_page")
     st.stop()
 
 elif current_page == "hope_conditions":
-    render_hope_conditions_page()
+    render_reloaded_page("pages.hope_conditions", "render_hope_conditions_page")
     st.stop()
 
 elif current_page == "job_hunting_axis":
-    render_job_hunting_axis_page()
+    render_reloaded_page("pages.job_hunting_axis", "render_job_hunting_axis_page")
     st.stop()    
 
 elif current_page == "work_values":
-    render_work_values_page()
+    render_reloaded_page("pages.work_values", "show_page")
     st.stop()
 
 elif current_page == "career":
-    render_career_page()
+    render_reloaded_page("pages.career", "show_page")
+    st.stop()
+
+elif current_page == "profile_review":
+    render_reloaded_page("pages.profile_review", "show_page")
+    st.stop()
+
+elif current_page == "self_discovery":
+    render_reloaded_page("pages.self_discovery_hub", "show_page")
     st.stop()
 
 elif current_page == "job_registration":
-    render_job_registration_page()
+    render_reloaded_page("pages.job_registration", "show_page")
     st.stop()
 
 elif current_page == "job_change_reason":
@@ -130,42 +161,43 @@ elif current_page == "job_change_reason":
     st.rerun()
 
 elif current_page == "job_list":
-    render_job_list_page()
+    render_reloaded_page("pages.job_list", "show_page")
     st.stop()
 
 elif current_page == "job_detail":
-    render_job_detail_page()
+    render_reloaded_page("pages.job_detail", "show_page")
     st.stop()
 
 elif current_page == "job_comparison":
-    render_job_comparison_page()
+    render_reloaded_page("pages.job_comparison", "show_page")
     st.stop()
 
 elif current_page == "application_list":
-    render_application_list_page()
+    render_reloaded_page("pages.application_management", "render_application_list_page")
     st.stop()
 
 elif current_page == "milestones":
-    render_application_list_page(focus="milestones")
+    render_reloaded_page("pages.application_management", "render_application_list_page", focus="milestones")
     st.stop()
 
 elif current_page == "activity_history":
-    render_application_list_page(focus="activity_history")
+    render_reloaded_page("pages.application_management", "render_application_list_page", focus="activity_history")
     st.stop()
 
 elif current_page == "application_dashboard":
-    render_application_dashboard_page()
+    render_reloaded_page("pages.application_management", "render_application_dashboard_page")
     st.stop()
 
 elif current_page == "application_detail":
-    render_application_detail_page()
+    render_reloaded_page("pages.application_management", "render_application_detail_page")
     st.stop()
 
 elif current_page == "selection_preparation":
-    render_selection_preparation_page()
+    render_reloaded_page("pages.application_management", "render_selection_preparation_page")
     st.stop()
 
 elif current_page == "settings":
+    render_job_navigation("settings")
     st.title("設定")
 
     st.write(
@@ -179,6 +211,7 @@ elif current_page == "settings":
     st.stop()
 
 elif current_page == "help":
+    render_job_navigation("help")
     st.title("使い方")
 
     st.write(
@@ -238,6 +271,7 @@ class TaskItem:
     task: str
     remaining: str
     deadline_class: str
+    href: str
 
 
 @dataclass(frozen=True)
@@ -246,6 +280,7 @@ class ActivityItem:
     time: str
     icon: str
     color_class: str
+    href: str
 
 # ========================================
 # ヘッダーメニュー
@@ -281,7 +316,7 @@ ACTION_CARDS = [
         description="あなたの情報や価値観を整理しましょう",
         icon="user.svg",
         color_class="metea-bubble-blue",
-        href="?page=basic_info",
+        href="?page=self_discovery",
         
     ),
     ActionCard(
@@ -299,11 +334,11 @@ ACTION_CARDS = [
         href="?page=application_list",
     ),
     ActionCard(
-        title="設定",
-        description="アカウント情報や各種設定を行います",
-        icon="settings.svg",
+        title="④ 活動を振り返る",
+        description="応募数や選考状況から、活動の進み方を確認しましょう",
+        icon="analytics.svg",
         color_class="metea-bubble-purple",
-        href="?page=settings",
+        href="?page=application_dashboard",
     ),
 ]
 
@@ -312,58 +347,73 @@ ACTION_CARDS = [
 # ========================================
 
 
-TASK_ITEMS = [
-    TaskItem(
-        dot_class="metea-dot-red",
-        date="7/24（水）",
-        company="A社",
-        task="履歴書を提出",
-        remaining="あと1日",
-        deadline_class="metea-deadline-red",
-    ),
-    TaskItem(
-        dot_class="metea-dot-orange",
-        date="7/25（金）",
-        company="B社",
-        task="面接準備",
-        remaining="あと2日",
-        deadline_class="metea-deadline-orange",
-    ),
-    TaskItem(
-        dot_class="metea-dot-amber",
-        date="7/26（土）",
-        company="C社",
-        task="企業研究を深める",
-        remaining="あと3日",
-        deadline_class="metea-deadline-amber",
-    ),
-]
+def _home_task_items() -> list[TaskItem]:
+    summary = operational_summary(load_application_views(False))
+    candidates = sorted(
+        [*summary["attention_items"], *summary["upcoming_items"]],
+        key=lambda item: item["date"],
+    )[:3]
+    items = []
+    weekdays = "月火水木金土日"
+    for item in candidates:
+        application = item["view"]["application"]
+        job = item["view"]["job"]
+        milestone = item["milestone"]
+        scheduled = item["date"]
+        days = (scheduled - date.today()).days
+        if days < 0:
+            remaining, dot_class, deadline_class = "期限超過", "metea-dot-red", "metea-deadline-red"
+        elif days == 0:
+            remaining, dot_class, deadline_class = "今日", "metea-dot-red", "metea-deadline-red"
+        elif days <= 2:
+            remaining, dot_class, deadline_class = f"あと{days}日", "metea-dot-orange", "metea-deadline-orange"
+        else:
+            remaining, dot_class, deadline_class = f"あと{days}日", "metea-dot-amber", "metea-deadline-amber"
+        items.append(TaskItem(
+            dot_class=dot_class,
+            date=f"{scheduled.month}/{scheduled.day}（{weekdays[scheduled.weekday()]}）",
+            company=job.company_name,
+            task=milestone.title or milestone.detail_name or milestone.milestone_type,
+            remaining=remaining,
+            deadline_class=deadline_class,
+            href=f"?page=application_list&application_id={application.id}",
+        ))
+    return items
+
+
+TASK_ITEMS = _home_task_items()
 
 # ========================================
 # 最近の活動
 # ========================================
 
 
-ACTIVITY_ITEMS = [
-    ActivityItem(
-        text="プロフィールを更新しました",
-        time="7/22 14:30",
-        icon="user.svg",
-        color_class="metea-activity-blue",
-    ),
-    ActivityItem(
-        text="A社の求人を登録しました",
-        time="7/22 10:15",
-        icon="compare.svg",
-        color_class="metea-activity-green",
-    ),
-    ActivityItem(
-        text="比較結果を保存しました",
-        time="7/21 16:45",
-        icon="compare.svg",
-        color_class="metea-activity-green",
-    ),
-]
+def _home_activity_items() -> list[ActivityItem]:
+    items = []
+    for activity in get_home_activities(get_current_user_id(), limit=3):
+        occurred_at = activity["occurred_at"]
+        try:
+            parsed = datetime.fromisoformat(occurred_at)
+            time_text = f"{parsed.month}/{parsed.day} {parsed:%H:%M}"
+        except (TypeError, ValueError):
+            time_text = occurred_at
+        items.append(ActivityItem(
+            text=activity["title"],
+            time=time_text,
+            icon=activity["icon_name"],
+            color_class={
+                "user.svg": "metea-activity-blue",
+                "compare.svg": "metea-activity-green",
+                "flag.svg": "metea-activity-orange",
+            }.get(activity["icon_name"], "metea-activity-blue"),
+            href=(f'?page={"application_list" if activity["target_page"] == "application_detail" else activity["target_page"]}' +
+                  (f'&{("application_id" if activity["target_page"] == "application_detail" else "job_id")}={activity["target_id"]}'
+                   if activity["target_id"] is not None else "")),
+        ))
+    return items
+
+
+ACTIVITY_ITEMS = _home_activity_items()
 
 # ========================================
 # SVG読み込み
@@ -463,7 +513,7 @@ def render_action_cards():
 
 def render_task_item(item):
     return f"""
-    <div class="metea-task-row">
+    <a class="metea-task-row" href="{escape(item.href)}">
         <i class="
             metea-dot
             {escape(item.dot_class)}
@@ -480,7 +530,7 @@ def render_task_item(item):
             {escape(item.remaining)}
         </span>
 
-    </div>
+    </a>
     """
 
 
@@ -488,7 +538,7 @@ def render_task_items():
     return "".join(
         render_task_item(item)
         for item in TASK_ITEMS
-    )
+    ) or '<div class="metea-empty-row">期限が近いタスクはありません。</div>'
 
 # ========================================
 # 最近の活動HTML生成
@@ -499,7 +549,7 @@ def render_activity_item(item):
     icon = svg_data_uri(item.icon)
 
     return f"""
-    <div class="metea-activity-row">
+    <a class="metea-activity-row" href="{escape(item.href)}">
         <span class="
             metea-activity-icon
             {escape(item.color_class)}
@@ -515,7 +565,7 @@ def render_activity_item(item):
         <time class="metea-activity-time">
             {escape(item.time)}
         </time>
-    </div>
+    </a>
     """
 
 
@@ -523,7 +573,7 @@ def render_activity_items():
     return "".join(
         render_activity_item(item)
         for item in ACTIVITY_ITEMS
-    )
+    ) or '<div class="metea-empty-row">最近の活動はありません。</div>'
 
 # ========================================
 # 各ブロックのHTMLを生成
@@ -695,7 +745,9 @@ page = """
     grid-template-columns: 78px 1fr 28px;
     align-items: center;
     gap: 25px;
+    text-decoration: none;
   }
+
 
   .metea-icon-bubble {
     width: 72px;
@@ -828,15 +880,26 @@ page = """
   }
 
   .metea-task-row {
-    min-height: 43px;
+    min-height: 52px;
     display: grid;
-    grid-template-columns: 17px 82px 53px 1fr 69px;
+    grid-template-columns: 14px 78px minmax(120px, 155px) minmax(0, 1fr) 76px;
     align-items: center;
-    gap: 9px;
+    gap: 12px;
+    padding: 4px 2px;
     border-top: 1px solid #edf0f5;
     color: var(--ink);
     font-size: 13px;
+    border-radius: 8px;
+    transition: background .16s ease, transform .16s ease;
   }
+
+  .metea-task-row:hover { background:#f7faff; transform:translateX(2px); }
+  .metea-task-row > span:nth-of-type(1) { white-space:nowrap; color:#52627a; }
+  .metea-task-row > span:nth-of-type(2),
+  .metea-task-row > span:nth-of-type(3) {
+    min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .metea-task-row > span:nth-of-type(2) { font-weight:800; }
 
   .metea-dot {
     width: 12px;
@@ -867,14 +930,20 @@ page = """
   }
 
   .metea-activity-row {
-    min-height: 42px;
+    min-height: 50px;
     display: grid;
-    grid-template-columns: 38px 1fr auto;
+    grid-template-columns: 38px minmax(0,1fr) auto;
     align-items: center;
+    gap: 10px;
+    padding: 4px 2px;
     border-top: 1px solid #edf0f5;
     color: var(--ink);
     font-size: 14px;
+    border-radius:8px;
+    transition:background .16s ease,transform .16s ease;
   }
+  .metea-activity-row:hover { background:#f7faff; transform:translateX(2px); }
+  .metea-activity-row > span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   .metea-activity-icon {
     width: 34px;
@@ -891,12 +960,16 @@ page = """
 
   .metea-activity-blue { background: #edf4ff; }
   .metea-activity-green { background: #eaf9f4; }
+  .metea-activity-orange { background: #fff3e8; }
 
   .metea-activity-time {
     color: #8997ad;
     font-size: 13px;
     font-weight: 500;
+    white-space:nowrap;
   }
+
+  .metea-empty-row { padding:18px 2px; border-top:1px solid #edf0f5; color:#8997ad; font-size:13px; }
 
   .metea-quote-panel {
     min-height: 108px;
@@ -998,6 +1071,7 @@ page = """
       padding-left: 12px;
     }
 
+
     .metea-icon-bubble {
       width: 58px;
       height: 58px;
@@ -1082,7 +1156,6 @@ page = """
       <article class="metea-panel metea-activity-panel">
         <div class="metea-panel-head">
           <h2>最近の活動</h2>
-          <a href="?page=activity_history">すべて見る</a>
         </div>
 
         __ACTIVITY_ITEMS_HTML__

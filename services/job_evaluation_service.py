@@ -13,6 +13,10 @@ from models import (
 from services.current_user_service import (
     get_current_user_id,
 )
+from services.job_matching_ai_service import PROMPT_VERSION
+from services.job_matching_rule_service import EVALUATION_RULE_VERSION
+from database.repositories.job_evaluation_repository import mark_job_match_evaluation_stale
+from database.repositories.job_evaluation_repository import mark_job_match_evaluation_result_seen
 
 
 APPLICATION_DECISION_OPTIONS = (
@@ -24,6 +28,21 @@ APPLICATION_DECISION_OPTIONS = (
 )
 
 
+def is_job_match_evaluation_ready(
+    evaluation: JobMatchEvaluation | None,
+) -> bool:
+    """利用者向けのAIマッチング詳細を表示できる完了状態か判定する。"""
+
+    return bool(
+        evaluation is not None
+        # 現行のバックグラウンド評価は completed を保存する。
+        # ready は旧データとの互換性のため、完了状態として引き続き扱う。
+        and evaluation.evaluation_status in {"completed", "ready"}
+        and not evaluation.is_stale
+        and evaluation.overall_score is not None
+    )
+
+
 # ========================================
 # AIマッチング評価
 # ========================================
@@ -31,9 +50,26 @@ def load_job_match_evaluations(
 ) -> dict[int, JobMatchEvaluation]:
     """現在の利用者に紐づくAI評価を取得する。"""
 
-    return get_job_match_evaluations(
-        get_current_user_id()
-    )
+    user_id = get_current_user_id()
+    evaluations = get_job_match_evaluations(user_id)
+    version_mismatch_found = False
+    for evaluation in evaluations.values():
+        if (
+            evaluation.rule_version != EVALUATION_RULE_VERSION
+            or evaluation.prompt_version != PROMPT_VERSION
+        ):
+            mark_job_match_evaluation_stale(
+                user_id=user_id,
+                job_id=evaluation.job_id,
+                stale_reason=(
+                    "AI評価ルールまたは判定基準が更新されました。"
+                ),
+            )
+            version_mismatch_found = True
+
+    if version_mismatch_found:
+        return get_job_match_evaluations(user_id)
+    return evaluations
 
 
 def save_job_match_evaluation_data(
@@ -130,3 +166,9 @@ def save_job_application_decision_data(
             action_deadline=decision.action_deadline,
         )
     return []
+
+
+def acknowledge_job_match_evaluation_result(job_id: int) -> None:
+    """AI評価完了通知を確認済みにする。"""
+
+    mark_job_match_evaluation_result_seen(get_current_user_id(), job_id)

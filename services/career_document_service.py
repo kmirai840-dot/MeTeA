@@ -7,6 +7,7 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from dotenv import load_dotenv
 from openai import OpenAI
+from pypdf import PdfReader
 
 
 load_dotenv()
@@ -67,6 +68,18 @@ def extract_text_from_docx(
                     if text:
                         text_parts.append(text)
 
+    return "\n".join(text_parts)
+
+
+def extract_text_from_pdf(file) -> str:
+    """テキスト形式のPDFからページ順に文字列を取り出す。"""
+
+    reader = PdfReader(file)
+    text_parts: list[str] = []
+    for page in reader.pages:
+        text = (page.extract_text() or "").strip()
+        if text:
+            text_parts.append(text)
     return "\n".join(text_parts)
 
 

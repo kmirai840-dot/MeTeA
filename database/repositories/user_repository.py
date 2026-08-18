@@ -4,6 +4,19 @@ from database.connection import get_connection
 from models import BasicInfo
 
 
+def get_user_profile_updated_at(user_id: int) -> str | None:
+    """基本情報の最終更新日時を取得する。"""
+    connection = get_connection()
+    try:
+        row = connection.execute(
+            "SELECT updated_at FROM user_profiles WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    return None if row is None else str(row["updated_at"])
+
+
 def save_user_profile(
     user_id: int,
     basic_info: BasicInfo,

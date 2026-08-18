@@ -9,6 +9,7 @@ from database.repositories.hope_condition_repository import (
     get_hope_condition_items,
     save_hope_conditions,
 )
+from database.repositories.home_activity_repository import save_general_activity
 from models import HopeCondition, HopeConditionItem
 from services.current_user_service import get_current_user_id
 from services.job_matching_cache_service import (
@@ -66,6 +67,13 @@ def save_hope_conditions_data(
         saved_hope_condition != hope_condition
         or saved_items != items
     ):
+        save_general_activity(
+            user_id,
+            "hope_conditions_updated",
+            "希望条件を更新しました",
+            target_page="hope_conditions",
+            icon_name="user.svg",
+        )
         invalidate_current_user_job_evaluations(
             reason="希望条件が変更されました。",
         )

@@ -4,6 +4,8 @@ from html import escape
 
 import streamlit as st
 
+from database.repositories.home_activity_repository import save_general_activity
+
 from pages.job_registration import (
     JOB_FORM_RETURN_PAGE_KEY,
     load_job_for_edit,
@@ -16,18 +18,22 @@ from services.job_service import (
 )
 from services.job_evaluation_service import (
     APPLICATION_DECISION_OPTIONS,
+    is_job_match_evaluation_ready,
     load_job_application_decisions,
     load_job_match_evaluations,
 )
 from services.job_matching_auto_evaluation_service import (
-    automatically_refresh_stale_job_evaluations,
+    enqueue_job_evaluation,
+    enqueue_stale_job_evaluations,
 )
 from services.job_matching_cache_service import (
     load_current_user_stale_job_ids,
 )
+from services.current_user_service import get_current_user_id
 
 from pages.job_layout import (
     render_job_navigation,
+    svg_data_uri,
 )
 
 JOB_DELETE_CONFIRM_KEY = (
@@ -250,10 +256,13 @@ def render_job_card(
 
     evaluation_coverage_text = ""
 
-    if (
-        evaluation is not None
-        and evaluation.is_stale
-    ):
+    if evaluation is not None and evaluation.evaluation_status in {"queued", "running"}:
+        evaluation_text = "AI評価中"
+        evaluation_class = "is-pending"
+    elif evaluation is not None and evaluation.evaluation_status == "failed":
+        evaluation_text = "評価に失敗"
+        evaluation_class = "is-pending"
+    elif evaluation is not None and evaluation.is_stale:
         evaluation_text = "再評価待ち"
         evaluation_class = "is-pending"
 
@@ -383,16 +392,29 @@ def render_job_card(
                 "比較対象に選択",
                 key=f"compare_job_{job_id}",
                 label_visibility="collapsed",
+                disabled=not is_job_match_evaluation_ready(evaluation),
             )
 
         with job_col:
+            if is_job_match_evaluation_ready(evaluation):
+                company_html = (
+                    '<a class="job-row-company-link" '
+                    f'href="?page=job_detail&job_id={job_id}" '
+                    'target="_self">'
+                    f'{escape(str(company_name))}'
+                    '</a>'
+                )
+            else:
+                company_html = (
+                    '<span class="job-row-company-link is-disabled" '
+                    'aria-disabled="true">'
+                    f'{escape(str(company_name))}'
+                    '</span>'
+                )
+
             job_html = (
-                '<a class="job-row-company-link" '
-                f'href="?page=job_detail&job_id={job_id}" '
-                'target="_self">'
-                f'{escape(str(company_name))}'
-                '</a>'
-                '<p class="job-row-job-name">'
+                company_html
+                + '<p class="job-row-job-name">'
                 f'{escape(str(job_name))}'
                 '</p>'
             )
@@ -648,6 +670,8 @@ def render_recommendation_candidate(
         f"?page=job_detail&job_id={job_id}"
     )
 
+    info_icon_uri = svg_data_uri("info.svg")
+
     card_html = (
         '<div class="job-recommendation-card">'
         '<div class="job-recommendation-header">'
@@ -686,8 +710,11 @@ def render_recommendation_candidate(
         '</div>'
         '<div class="job-recommendation-coverage">'
         '<p class="job-recommendation-coverage-title">'
-        'ⓘ 評価できた情報 '
+        '<img class="job-inline-info-icon" '
+        f'src="{info_icon_uri}" alt="">'
+        '<span>評価できた情報 '
         f'{coverage}%'
+        '</span>'
         '</p>'
         '<p class="'
         'job-recommendation-coverage-description'
@@ -712,6 +739,13 @@ def show_page() -> None:
     render_job_navigation(
         "job_list"
     )
+
+    info_icon_uri = svg_data_uri("info.svg")
+    guide_icon_uri = svg_data_uri("guide.svg")
+    notification_icon_uri = svg_data_uri("notification.svg")
+    plus_icon_uri = svg_data_uri("plus.svg")
+    chevron_left_uri = svg_data_uri("chevron-left.svg")
+    chevron_right_uri = svg_data_uri("chevron-right.svg")
 
     if (
         JOB_DELETE_CONFIRM_KEY
@@ -760,35 +794,11 @@ def show_page() -> None:
             JOB_STALE_REFRESH_SIGNATURE_KEY
         ] = stale_signature
 
-        with st.spinner(
-            "更新された利用者情報をもとに、"
-            "求人のAI評価を更新しています..."
-        ):
-            (
-                refreshed_count,
-                remaining_count,
-                failed_job_ids,
-            ) = (
-                automatically_refresh_stale_job_evaluations()
-            )
-
-        if refreshed_count > 0:
-            st.toast(
-                f"{refreshed_count}件のAI評価を"
-                "更新しました。"
-            )
-
-        if remaining_count > 0:
+        queued_count = enqueue_stale_job_evaluations()
+        if queued_count > 0:
             st.info(
-                f"残り{remaining_count}件の求人は、"
-                "続けて自動更新されます。"
-            )
-
-        if failed_job_ids:
-            st.warning(
-                "一部の求人についてAI評価を"
-                "更新できませんでした。"
-                "求人情報は保存されています。"
+                f"{queued_count}件の求人についてAIがマッチ度を確認しています。"
+                "ほかの操作を続けられます。"
             )
 
     if not stale_job_ids:
@@ -801,6 +811,22 @@ def show_page() -> None:
     evaluations = (
         load_job_match_evaluations()
     )
+
+    for evaluated_job_id, current_evaluation in evaluations.items():
+        if current_evaluation.evaluation_status == "failed":
+            retry_col, retry_button_col = st.columns([5, 1.4], vertical_alignment="center")
+            with retry_col:
+                st.warning(
+                    "AI評価を完了できませんでした。求人情報は保存されています。"
+                )
+            with retry_button_col:
+                if st.button(
+                    "再試行",
+                    key=f"retry_ai_result_{evaluated_job_id}",
+                    use_container_width=True,
+                ):
+                    enqueue_job_evaluation(evaluated_job_id, retry=True)
+                    st.rerun()
 
     decisions = (
         load_job_application_decisions()
@@ -912,9 +938,10 @@ def show_page() -> None:
 
         .stApp {
             font-family:
-                "Noto Sans JP",
-                "Yu Gothic UI",
                 "Yu Gothic",
+                "YuGothic",
+                "Hiragino Kaku Gothic ProN",
+                "Hiragino Sans",
                 "Meiryo",
                 sans-serif;
             color: #10213d;
@@ -978,10 +1005,10 @@ def show_page() -> None:
             align-items: center;
             min-height: 24px;
             padding: 2px 9px;
-            background: #fff7e6;
-            border: 1px solid #ffd991;
+            background: #eef5ff;
+            border: 1px solid #cfe1ff;
             border-radius: 999px;
-            color: #a95b00;
+            color: #356697;
             font-size: 11px;
             font-weight: 700;
         }
@@ -1105,10 +1132,20 @@ def show_page() -> None:
         }
 
         .job-recommendation-coverage-title {
+            display: flex;
+            align-items: center;
+            gap: 5px;
             margin: 0 0 3px;
             color: #1268f3;
             font-size: 12px;
             font-weight: 700;
+        }
+
+        .job-inline-info-icon {
+            display: block;
+            flex: 0 0 16px;
+            width: 16px;
+            height: 16px;
         }
 
         .job-recommendation-coverage-description {
@@ -1417,6 +1454,13 @@ def show_page() -> None:
             text-decoration: underline !important;
         }
 
+        .job-row-company-link.is-disabled,
+        .job-row-company-link.is-disabled:hover {
+            color: #6f7c90 !important;
+            cursor: default;
+            text-decoration: none !important;
+        }
+
         .job-row-job-name {
             display: -webkit-box;
             margin: 0;
@@ -1501,9 +1545,9 @@ def show_page() -> None:
         }
 
         .job-row-decision.is-positive {
-            background: #e8f8ef;
-            border-color: #bee8ce;
-            color: #138847;
+            background: #eef5ff;
+            border-color: #cfe1ff;
+            color: #285f9b;
         }
 
         .job-row-decision.is-negative {
@@ -2374,6 +2418,103 @@ def show_page() -> None:
             font-weight: 700;
             line-height: 1;
         }
+
+        /* Streamlitが見出しへ自動追加するリンク記号は表示しない */
+        [data-testid="stHeaderActionElements"],
+        .stApp h1 a,
+        .stApp h2 a,
+        .stApp h3 a {
+            display: none !important;
+        }
+
+        .job-list-usage-guide-icon img,
+        .job-pending-notice-icon img {
+            display: block;
+            width: 26px;
+            height: 26px;
+        }
+
+        .job-list-decision-help-icon img {
+            display: block;
+            width: 16px;
+            height: 16px;
+        }
+
+        .job-list-back-home {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            min-height: 38px;
+            padding: 0 15px;
+            color: #1268f3 !important;
+            background: #ffffff;
+            border: 1px solid #8db7ff;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+            text-decoration: none !important;
+            transition: background-color 0.18s ease, border-color 0.18s ease;
+        }
+
+        .job-list-back-home:hover {
+            color: #0759d9 !important;
+            background: #f5f9ff;
+            border-color: #6fa3ff;
+            text-decoration: none !important;
+        }
+
+        .job-list-back-home img {
+            display: block;
+            width: 17px;
+            height: 17px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <style>
+        .st-key-job_list_registration button::before,
+        .st-key-job_list_previous_page button::before,
+        .st-key-job_list_next_page button::after,
+        .st-key-job_list_back_home button::before {{
+            content: "";
+            display: inline-block;
+            flex: 0 0 17px;
+            width: 17px;
+            height: 17px;
+            background-color: currentColor;
+            mask-position: center;
+            mask-repeat: no-repeat;
+            mask-size: contain;
+        }}
+
+        .st-key-job_list_registration button::before {{
+            mask-image: url("{plus_icon_uri}");
+        }}
+
+        .st-key-job_list_previous_page button::before,
+        .st-key-job_list_back_home button::before {{
+            mask-image: url("{chevron_left_uri}");
+        }}
+
+        .st-key-job_list_next_page button::after {{
+            mask-image: url("{chevron_right_uri}");
+        }}
+
+        .st-key-job_list_registration button,
+        .st-key-job_list_previous_page button,
+        .st-key-job_list_next_page button,
+        .st-key-job_list_back_home button {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2388,12 +2529,12 @@ def show_page() -> None:
 
         st.caption(
             "登録した求人を管理し、"
-            "AIのおすすめや比較結果を確認できます。"
+            "AIマッチ度や比較結果を確認できます。"
         )
 
     with register_col:
         if st.button(
-            "＋ 求人を登録",
+            "求人を登録する",
             key="job_list_registration",
             type="primary",
             width="stretch",
@@ -2420,7 +2561,7 @@ def show_page() -> None:
         '<div class="job-pending-notice-main">'
         '<div class="job-pending-notice-icon" '
         'aria-hidden="true">'
-        '🔔'
+        f'<img src="{notification_icon_uri}" alt="">'
         '</div>'
         '<div>'
         '<p class="job-pending-notice-title">'
@@ -2447,13 +2588,13 @@ def show_page() -> None:
         )
 
     st.markdown(
-        """
+        f"""
         <div class="job-list-usage-guide">
             <div
                 class="job-list-usage-guide-icon"
                 aria-hidden="true"
             >
-                💡
+                <img src="{guide_icon_uri}" alt="">
             </div>
             <div class="job-list-usage-guide-body">
                 <p class="job-list-usage-guide-title">
@@ -2471,7 +2612,7 @@ def show_page() -> None:
         unsafe_allow_html=True,
     )
 
-    st.subheader("AIおすすめ求人 TOP3")
+    st.subheader("AIマッチ度の高い求人")
 
     st.caption(
         "AI評価が完了している求人から、"
@@ -2490,9 +2631,7 @@ def show_page() -> None:
             in evaluations.items()
             if (
                 job_id in jobs_by_id
-                and not evaluation.is_stale
-                and evaluation.overall_score
-                is not None
+                and is_job_match_evaluation_ready(evaluation)
             )
         ),
         key=lambda evaluation: (
@@ -2548,9 +2687,10 @@ def show_page() -> None:
         filter_col1,
         filter_col2,
         filter_col3,
+        filter_col4,
         decision_filter_col,
         sort_col,
-    ) = st.columns(5)
+    ) = st.columns(6)
 
     prefectures = sorted(
         {
@@ -2577,21 +2717,49 @@ def show_page() -> None:
         }
     )
 
+    selected_prefecture_value = st.session_state.get(
+        "job_list_filter_prefecture",
+        "すべて",
+    )
+    municipalities = sorted(
+        {
+            job.municipality
+            for _, job in jobs
+            if job.municipality
+            and (
+                selected_prefecture_value == "すべて"
+                or job.prefecture == selected_prefecture_value
+            )
+        }
+    )
+    if st.session_state.get("job_list_filter_municipality", "すべて") not in [
+        "すべて",
+        *municipalities,
+    ]:
+        st.session_state["job_list_filter_municipality"] = "すべて"
+
     with filter_col1:
         selected_prefecture = st.selectbox(
-            "勤務地",
+            "都道府県",
             ["すべて"] + prefectures,
             key="job_list_filter_prefecture",
         )
 
     with filter_col2:
+        selected_municipality = st.selectbox(
+            "市区町村",
+            ["すべて"] + municipalities,
+            key="job_list_filter_municipality",
+        )
+
+    with filter_col3:
         selected_industry = st.selectbox(
             "業種",
             ["すべて"] + industries,
             key="job_list_filter_industry",
         )
 
-    with filter_col3:
+    with filter_col4:
         selected_source_name = st.selectbox(
             "紹介元",
             ["すべて"] + source_names,
@@ -2613,7 +2781,7 @@ def show_page() -> None:
         selected_sort = st.selectbox(
             "並び替え",
             [
-                "AIおすすめ順",
+                "AIマッチ度順",
                 "未対応・登録が古い順",
                 "登録が新しい順",
                 "登録が古い順",
@@ -2648,11 +2816,28 @@ def show_page() -> None:
             if job.prefecture == selected_prefecture
         ]
 
+    if selected_municipality != "すべて":
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if job.municipality == selected_municipality
+        ]
+
     if selected_industry != "すべて":
         filtered_jobs = [
             (job_id, job)
             for job_id, job in filtered_jobs
             if job.industry == selected_industry
+        ]
+
+    if selected_source_name != "すべて":
+        filtered_jobs = [
+            (job_id, job)
+            for job_id, job in filtered_jobs
+            if any(
+                source.source_name == selected_source_name
+                for _, source in load_job_sources(job_id)
+            )
         ]
 
     if selected_decision == "未対応":
@@ -2699,7 +2884,7 @@ def show_page() -> None:
             reversed(filtered_jobs)
         )
 
-    elif selected_sort == "AIおすすめ順":
+    elif selected_sort == "AIマッチ度順":
         filtered_jobs = sorted(
             filtered_jobs,
             key=lambda item: (
@@ -2747,13 +2932,13 @@ def show_page() -> None:
     st.subheader("求人一覧")
 
     st.markdown(
-        """
+        f"""
         <div class="job-list-decision-help">
             <span
                 class="job-list-decision-help-icon"
                 aria-hidden="true"
             >
-                ⓘ
+                <img src="{info_icon_uri}" alt="">
             </span>
             <span>
                 応募判断を変更する場合は、会社名を押して
@@ -2854,7 +3039,7 @@ def show_page() -> None:
 
             with previous_col:
                 if st.button(
-                    "← 前へ",
+                    "前へ",
                     key="job_list_previous_page",
                     width="stretch",
                     disabled=(
@@ -2885,7 +3070,7 @@ def show_page() -> None:
 
             with next_col:
                 if st.button(
-                    "次へ →",
+                    "次へ",
                     key="job_list_next_page",
                     width="stretch",
                     disabled=(
@@ -2904,9 +3089,14 @@ def show_page() -> None:
     selected_job_ids = [
         job_id
         for job_id, _ in jobs
-        if st.session_state.get(
-            f"compare_job_{job_id}",
-            False,
+        if (
+            st.session_state.get(
+                f"compare_job_{job_id}",
+                False,
+            )
+            and is_job_match_evaluation_ready(
+                evaluations.get(job_id)
+            )
         )
     ]
 
@@ -2962,6 +3152,13 @@ def show_page() -> None:
                     width="stretch",
                     disabled=compare_disabled,
                 ):
+                    save_general_activity(
+                        get_current_user_id(),
+                        "job_comparison",
+                        f"{len(selected_job_ids)}件の求人を比較しました",
+                        target_page="job_list",
+                        icon_name="compare.svg",
+                    )
                     st.session_state[
                         JOB_COMPARE_SELECTED_KEY
                     ] = selected_job_ids
@@ -2987,8 +3184,12 @@ def show_page() -> None:
 
     st.divider()
 
-    if st.button(
-        "トップへ戻る",
-        key="job_list_back_home",
-    ):
-        move_to_page(None)
+    st.markdown(
+        f"""
+        <a class="job-list-back-home" href="?" target="_self">
+            <img src="{chevron_left_uri}" alt="">
+            <span>トップへ戻る</span>
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )

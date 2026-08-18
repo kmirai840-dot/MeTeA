@@ -57,6 +57,7 @@ JOB_FIELDS = (
     "external_partners",
     "goals_kpi",
     "expected_results",
+    "organizational_culture",
     "employment_type",
     "probation_period_status",
     "probation_period_months",

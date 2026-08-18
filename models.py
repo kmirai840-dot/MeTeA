@@ -210,6 +210,7 @@ class Job:
     desired_personality: list[str] = field(
         default_factory=list
     )
+    organizational_culture: str = ""
 
     # ------------------------------------
     # 勤務条件
@@ -333,6 +334,7 @@ class AISemanticMatchItem:
     item_name: str
     judgment: str
     reason: str
+    evaluation_group: str = ""
     weight: int = 1
     hope_group: str = ""
     evidence: str = ""
@@ -372,6 +374,15 @@ class JobMatchEvaluation:
     is_provisional: bool = True
     is_stale: bool = False
     stale_reason: str = ""
+    rule_version: str = ""
+    prompt_version: str = ""
+    model_name: str = ""
+    evaluation_result_json: str = ""
+    evaluation_status: str = "ready"
+    failure_reason: str = ""
+    failed_at: str | None = None
+    retry_count: int = 0
+    result_notice_pending: bool = False
 
 
 # ========================================
@@ -396,6 +407,7 @@ class ApplicationRecord:
     actual_route: str = ""
     current_phase: str = "応募準備"
     phase_category: str = "応募準備"
+    selection_stage: str = ""
     selection_result: str = ""
     application_date: str | None = None
     status: str = "active"
@@ -445,6 +457,22 @@ class ApplicationPreparation:
     application_id: int = 0
     scope: str = "selection"
     selection_type: str = ""
+    theme_key: str = ""
+    title: str = ""
+    description: str = ""
+    content: str = ""
+    is_completed: bool = False
+    is_custom: bool = False
+    sort_order: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class UserPreparationTemplate:
+    """利用者全体で再利用する選考準備の原稿。応募へのコピー後は独立する。"""
+    id: int = 0
+    user_id: int = 1
     theme_key: str = ""
     title: str = ""
     description: str = ""

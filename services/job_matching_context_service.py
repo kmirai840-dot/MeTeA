@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from constants.work_values import WORK_STYLE_QUESTIONS, WORK_STYLE_SCORE_LABELS
+
 from models import (
     Career,
     CareerHistory,
@@ -120,6 +122,11 @@ def build_job_context(
                 job.desired_personality
             ),
         },
+        "organizational_culture": {
+            "explicit_culture": (
+                job.organizational_culture
+            ),
+        },
         "work_environment": {
             "employment_type": (
                 job.employment_type
@@ -222,6 +229,34 @@ def build_work_value_context(
             "answer_score": (
                 answer.answer_score
             ),
+            "answer_label": WORK_STYLE_SCORE_LABELS.get(
+                answer.answer_score,
+                "",
+            ),
+            "question_title": next(
+                (
+                    question["title"]
+                    for question in WORK_STYLE_QUESTIONS
+                    if question["question_type"] == answer.question_type
+                ),
+                "",
+            ),
+            "left_text": next(
+                (
+                    question["left_text"]
+                    for question in WORK_STYLE_QUESTIONS
+                    if question["question_type"] == answer.question_type
+                ),
+                "",
+            ),
+            "right_text": next(
+                (
+                    question["right_text"]
+                    for question in WORK_STYLE_QUESTIONS
+                    if question["question_type"] == answer.question_type
+                ),
+                "",
+            ),
         }
         for answer in work_style_answers
     ]
@@ -278,6 +313,10 @@ def build_career_context(
                 "department": history.department,
                 "position": history.position,
                 "occupation": history.occupation,
+                "start_year": history.start_year,
+                "start_month": history.start_month,
+                "end_year": history.end_year,
+                "end_month": history.end_month,
                 "job_description": (
                     history.job_description
                 ),
@@ -341,9 +380,15 @@ def build_ai_matching_context(
                         hope_items=hope_items,
                     )
                 ),
-                # 価値観の回答は軸候補の作成にだけ使う。
-                # AI採点には、利用者が確認・確定した軸だけを渡す。
-                "work_values": {},
+                # 順位回答と自由記述は軸候補の材料に限定する。
+                # 仕事の進め方10問だけは、確定軸と分けてAI採点する。
+                "work_style_answers": (
+                    build_work_value_context(
+                        rankings=[],
+                        details=[],
+                        work_style_answers=work_style_answers,
+                    ).get("work_style_answers", [])
+                ),
                 "job_hunting_axes": (
                     build_job_hunting_axis_context(
                         job_hunting_axes

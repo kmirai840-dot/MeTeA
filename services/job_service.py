@@ -80,6 +80,7 @@ JOB_FIELD_LABELS = {
     "external_partners": "社外の関係者",
     "goals_kpi": "目標・KPI",
     "expected_results": "期待される成果",
+    "organizational_culture": "組織風土・企業文化",
     "required_experience": "必須経験",
     "required_skills": "必須スキル",
     "required_qualifications": "必須資格",
