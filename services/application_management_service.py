@@ -152,6 +152,8 @@ def _apply_automatic_phase(application_id: int, phase: str, stage: str = "") -> 
         raise ApplicationManagementError("応募情報が見つかりません。")
     application.current_phase = phase
     if stage:
+        if stage != application.selection_stage:
+            application.selection_result = "未確定"
         application.selection_stage = stage
     update_application_data(application)
 

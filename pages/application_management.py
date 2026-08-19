@@ -52,6 +52,13 @@ from services.selection_preparation_ai_service import (
 BLUE = "#1268f3"
 PHASE_CATEGORIES = ("応募準備", "書類選考", "適性検査", "面接", "オファー・条件確認", "内定", "保留", "終了")
 SELECTION_RESULT_NOTICE_KEY_PREFIX = "selection_result_notice_"
+SELECTION_RESULT_GUIDANCE_KEY_PREFIX = "selection_result_guidance_"
+SELECTION_MILESTONE_TYPES = {
+    "書類提出", "適性検査", "カジュアル面談", "一次面接",
+    "二次面接", "最終面接", "オファー面談", "条件面談",
+    "その他の面接・選考",
+}
+CLOSING_SELECTION_RESULTS = {"不合格", "辞退", "選考終了"}
 
 
 def _svg_data_uri(filename: str) -> str:
@@ -789,6 +796,8 @@ def _inject_css() -> None:
           color:#e63f4b;font-weight:900}.detail-subtitle{margin:11px 0 3px;color:#10284a;font-size:15px;font-weight:850}
         .detail-subcopy{margin:0 0 10px;color:#6f7f94;font-size:12px}
         .detail-empty{padding:17px;border:1px dashed #cdd9ea;border-radius:10px;background:#f8fbff;color:#687a92;text-align:center;font-size:13px}
+        .detail-closed{padding:16px 18px;border:1px solid #c8d5e6;border-radius:10px;background:#f4f7fb;color:#43556f;font-size:13px;line-height:1.75}
+        .detail-closed b{display:block;color:#102b4e;font-size:15px;margin-bottom:2px}
         [class*="st-key-detail_milestone_"]{background:#fff;border:1px solid #dbe3ef;border-radius:10px;padding:8px 11px!important;
           margin:6px 0;box-shadow:0 2px 8px rgba(36,62,101,.03)}
         [class*="st-key-detail_milestone_pending_"]{border-left:3px solid #4b8df8}
@@ -2399,6 +2408,8 @@ def render_application_detail_page(
         return
     app, job = detail["application"], detail["job"]
     phase_confirmation_key = f"show_phase_confirmation_{app.id}"
+    result_guidance_key = f"{SELECTION_RESULT_GUIDANCE_KEY_PREFIX}{app.id}"
+    show_result_guidance = bool(st.session_state.pop(result_guidance_key, False))
     pending = [m for m in detail["milestones"] if m.status == "pending"]
     overdue = [m for m in pending if is_milestone_overdue(m, date.today())]
     if not embedded:
@@ -2466,13 +2477,24 @@ def render_application_detail_page(
     result_notice = st.session_state.pop(result_notice_key, "")
     if result_notice:
         st.success(result_notice, icon="✅")
+    if show_result_guidance:
+        st.info(
+            "選考を完了しました。次に、届いた選考結果を登録してください。",
+            icon="➡️",
+        )
 
     with st.container(border=True):
         upcoming_milestones = [m for m in detail["milestones"] if m.status == "pending"]
         st.markdown('<div class="detail-subtitle">次にすべきこと</div>', unsafe_allow_html=True)
         st.markdown('<p class="detail-subcopy">次に予定されている内容を、ここで確認・更新できます。</p>', unsafe_allow_html=True)
         if not upcoming_milestones:
-            if "結果待ち" in (app.current_phase or ""):
+            if app.status == "closed":
+                st.markdown(
+                    '<div class="detail-closed"><b>この企業の選考管理はクローズしました。</b>'
+                    '選考結果と活動履歴は保持されます。必要な場合は「選考の現在地」から修正できます。</div>',
+                    unsafe_allow_html=True,
+                )
+            elif "結果待ち" in (app.current_phase or ""):
                 st.markdown('<div class="detail-empty">現在は選考結果を待っている状態です。結果が届いたら、下から登録してください。</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="detail-attention"><span class="detail-attention-mark">!</span><div><b>次の予定が登録されていません。</b><br>選考を継続する場合は、下の入力欄から次の予定を登録してください。</div></div>', unsafe_allow_html=True)
@@ -2502,6 +2524,8 @@ def render_application_detail_page(
                 if action.button("完了にする", key=f"unified_complete_{milestone.id}", use_container_width=True):
                     complete_milestone(milestone)
                     st.session_state[phase_confirmation_key] = True
+                    if milestone.milestone_type in SELECTION_MILESTONE_TYPES:
+                        st.session_state[result_guidance_key] = True
                     _rerun_application_detail(embedded=embedded)
                 with st.expander("予定を編集"):
                     try:
@@ -2584,7 +2608,10 @@ def render_application_detail_page(
                             delete_milestone_data(milestone)
                             _rerun_application_detail(embedded=embedded)
 
-    with st.expander("＋ 選考結果を登録する", expanded=False):
+    with st.expander(
+        "＋ 選考結果を登録する",
+        expanded=show_result_guidance,
+    ):
         st.caption("結果と次回選考を登録すると、次の予定と現在フェーズへ反映されます。")
         r1, r2, r3 = st.columns(3)
         stage_index = SELECTION_STAGES.index(app.selection_stage) if app.selection_stage in SELECTION_STAGES else 0
@@ -2602,7 +2629,23 @@ def render_application_detail_page(
                 next_start_value = nd2.time_input("開始時刻", value=None, key=f"next_selection_start_{app.id}")
                 next_end_value = nd3.time_input("終了時刻（任意）", value=None, key=f"next_selection_end_{app.id}")
         st.caption(f"画面上では「{stage}{result}」として扱います。現在フェーズと次回選考の予定は登録内容から自動更新されます。")
-        if st.button("結果を登録", type="primary", use_container_width=True):
+        closes_application = result in CLOSING_SELECTION_RESULTS
+        if closes_application:
+            st.warning(
+                "この結果を登録すると、この企業の選考管理をクローズします。"
+                "登録済みの結果と活動履歴は保持されます。",
+                icon="⚠️",
+            )
+        submit_result_label = (
+            "結果を登録してクローズ"
+            if closes_application
+            else "結果を登録"
+        )
+        if st.button(
+            submit_result_label,
+            type="primary",
+            use_container_width=True,
+        ):
             try:
                 register_selection_result(
                     app.id, stage, result,
@@ -2637,18 +2680,19 @@ def render_application_detail_page(
                 st.session_state[phase_confirmation_key] = True
                 _rerun_application_detail(embedded=embedded)
 
-    with st.expander("＋ 次の予定を登録する", expanded=not upcoming_milestones):
-        a, b = st.columns([1, 2])
-        kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
-        title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
-        d1, d2, d3 = st.columns(3)
-        scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
-        start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
-        end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
-        if st.button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
-            add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
-            st.session_state[phase_confirmation_key] = True
-            _rerun_application_detail(embedded=embedded)
+    if app.status != "closed":
+        with st.expander("＋ 次の予定を登録する", expanded=not upcoming_milestones):
+            a, b = st.columns([1, 2])
+            kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
+            title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
+            d1, d2, d3 = st.columns(3)
+            scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
+            start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
+            end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
+            if st.button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
+                add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
+                st.session_state[phase_confirmation_key] = True
+                _rerun_application_detail(embedded=embedded)
 
     if not st.session_state.get(phase_confirmation_key, False):
         if st.button(
