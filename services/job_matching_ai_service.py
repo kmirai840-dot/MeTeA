@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
+from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,9 @@ from services.job_matching_rule_service import (
     NEEDS_CONFIRMATION,
     PARTIAL_MATCH,
 )
+
+
+load_dotenv()
 
 
 PROMPT_VERSION = "job-matching-v9"
