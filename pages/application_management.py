@@ -1,8 +1,10 @@
 """応募管理・就職活動ダッシュボード画面（カード内編集対応）。"""
 
 import calendar
+import base64
 from datetime import date, datetime, timedelta
 from html import escape
+from pathlib import Path
 
 import streamlit as st
 
@@ -43,6 +45,16 @@ from services.application_management_service import (
 
 BLUE = "#1268f3"
 PHASE_CATEGORIES = ("応募準備", "書類選考", "適性検査", "面接", "オファー・条件確認", "内定", "保留", "終了")
+
+
+def _svg_data_uri(filename: str) -> str:
+    asset_path = Path(__file__).resolve().parents[1] / "assets" / filename
+    encoded = base64.b64encode(asset_path.read_bytes()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+TIMELINE_COMPLETE_ICON = _svg_data_uri("timeline_complete.svg")
+TIMELINE_WARNING_ICON = _svg_data_uri("timeline_warning.svg")
 PHASE_COLORS = {
     "応募準備": "#4f7df3", "応募": "#269ee8", "書類選考": "#16a3a6",
     "適性検査": "#56b7b2", "面接": "#6e819d", "オファー・条件確認": "#f2a52b",
@@ -59,10 +71,10 @@ def _inject_css() -> None:
         .stApp, .stApp button, .stApp input, .stApp textarea, .stApp select {
           font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif!important;
         }
-        .application-page-head { margin:2px 0 12px; padding-bottom:0; }
-        .application-page-head h1 { margin:0; color:#071a36; font-size:clamp(1.9rem,2.3vw,2.35rem); line-height:1.3;
-          letter-spacing:.015em; font-weight:700; }
-        .application-page-head p { margin:6px 0 0; color:#66768d; font-size:14px; line-height:1.6; }
+        .application-page-head { margin:2px 0 14px; padding-bottom:0; }
+        .application-page-head h1 { margin:0; color:#071a36; font-size:clamp(2rem,2.15vw,2.3rem); line-height:1.28;
+          letter-spacing:.01em; font-weight:750; }
+        .application-page-head p { margin:7px 0 0; color:#66768d; font-size:13.5px; line-height:1.65; }
         .app-tabs { display:flex; gap:8px; margin:4px 0 22px; }
         .app-tabs a { padding:10px 18px; border-radius:9px; color:#52647d;
           text-decoration:none!important; font-weight:700; border:1px solid #dbe3ef; background:#fff; }
@@ -217,10 +229,10 @@ def _inject_css() -> None:
           stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
         .schedule-empty { padding:12px; border:1px dashed #cdd8e8; border-radius:10px;
           color:#718096; background:#f8faff; text-align:center; }
-        [class*="st-key-application_overview"] { margin:10px 0 13px; padding:13px 15px 14px;
+        [class*="st-key-application_overview"] { margin:8px 0 14px; padding:13px 15px 14px;
           background:#fff; border:1px solid #dbe3ef; border-radius:14px;
           box-shadow:0 6px 18px rgba(31,65,115,.045); }
-        .application-overview-heading { margin:0 0 2px; color:#0d2548; font-size:17px; font-weight:850; }
+        .application-overview-heading { margin:0 0 5px; color:#0d2548; font-size:16px; line-height:1.45; font-weight:850; }
         [class*="st-key-application_overview"] .summary-card { background:#f8faff; box-shadow:none; }
         [class*="st-key-application_status_"] [data-testid="stButton"] { margin:0; }
         [class*="st-key-application_status_"] [data-testid="stButton"] button {
@@ -335,62 +347,49 @@ def _inject_css() -> None:
         [class*="st-key-application_filters"] [data-baseweb="select"] > div {
           min-height:36px; background:#f8faff; border-color:#dbe3ef; }
         [class*="st-key-application_filters"] [data-testid="stCheckbox"] { padding-bottom:5px; }
-        [class*="st-key-notification_schedule_filter_context"],
-        [class*="st-key-application_manual_filter_context"] { margin:7px 0 9px; padding:8px 10px;
+        [class*="st-key-notification_schedule_filter_context"] { margin:7px 0 9px; padding:8px 10px;
           border:1px solid #c8dcff; border-radius:10px; background:#f3f7ff; }
-        [class*="st-key-notification_schedule_filter_context"] [data-testid="stHorizontalBlock"],
-        [class*="st-key-application_manual_filter_context"] [data-testid="stHorizontalBlock"] {
+        [class*="st-key-notification_schedule_filter_context"] [data-testid="stHorizontalBlock"] {
           align-items:center; gap:10px; }
         .schedule-filter-context { display:flex; align-items:center; gap:12px; min-height:31px;
           color:#53647b; font-size:12px; line-height:1.45; }
         .schedule-filter-context strong { color:#0d2548; font-size:13px; font-weight:850; }
-        [class*="st-key-notification_schedule_filter_context"] [data-testid="stButton"] button,
-        [class*="st-key-application_manual_filter_context"] [data-testid="stButton"] button {
+        [class*="st-key-notification_schedule_filter_context"] [data-testid="stButton"] button {
           min-height:31px; border:1px solid #a9c7fb; border-radius:8px; background:#fff;
           color:#1268f3; font-size:11px; font-weight:800; }
-        [class*="st-key-application_schedule_section"] { margin-top:4px; padding:13px 13px 11px;
-          background:#fff; border:1px solid #dbe3ef; border-radius:14px;
-          box-shadow:0 6px 18px rgba(31,65,115,.045); }
-        [class*="st-key-application_list_header_filters"] { margin:0; padding:0;
-          background:#f8faff; border:1px solid #dbe3ef; border-bottom:0;
-          border-radius:10px 10px 0 0; box-shadow:none; }
-        .schedule-update-guide { display:grid;
-          grid-template-columns:150px 145px 105px 118px 82px 504px;
-          align-items:center; min-width:1104px; min-height:28px; padding-top:5px;
-          border-bottom:1px solid #edf1f6; background:#fff; }
-        .schedule-update-guide-tag { grid-column:2; justify-self:start; display:inline-flex;
-          align-items:center; min-height:20px; margin-left:8px; padding:3px 8px;
-          border:1px solid #c8dcff; border-radius:999px; background:#edf5ff;
-          color:#1268f3; font-size:9.5px; line-height:1.3; font-weight:800;
-          white-space:nowrap; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stHorizontalBlock"] {
-          align-items:stretch; gap:0; min-width:1104px; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stColumn"] {
-          min-width:0; border-right:1px solid #e6ebf2; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stColumn"]:last-child {
-          border-right:0; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stPopover"] button {
-          min-height:42px; padding:8px 9px; justify-content:flex-start; border:0;
-          border-radius:0; background:transparent; color:#465a75; box-shadow:none;
-          font-size:11px; font-weight:850; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stPopover"] button:hover {
-          background:#eef4ff; color:#1268f3; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stButton"] button {
-          min-height:42px; padding:7px 9px; border:0; border-radius:0;
-          background:transparent; color:#1268f3; font-size:11px; font-weight:850; box-shadow:none; }
-        [class*="st-key-application_list_header_filters"] [data-testid="stButton"] button:hover {
-          background:#eef4ff; }
-        .application-header-empty { min-height:42px; }
+        [class*="st-key-application_schedule_section"] { width:calc(100% + 144px) !important; max-width:none !important; margin-top:12px;
+          margin-left:-72px; margin-right:-72px; padding:22px 20px 18px;
+          background:#fff; border:1px solid #d8e3f1; border-radius:18px;
+          box-shadow:0 12px 34px rgba(31,65,115,.07); }
         .application-filter-state { display:flex; align-items:center; gap:8px; min-height:34px;
           color:#66768d; font-size:11px; }
         .application-filter-state strong { color:#1268f3; font-size:12px; }
         .application-list-head { display:flex; align-items:center; justify-content:space-between;
-          gap:16px; margin:2px 0 6px; }
-        .application-list-title { display:flex; align-items:center; gap:8px; margin:0;
-          color:#0d2548; font-size:18px; line-height:1.4; font-weight:800; }
-        .application-list-info { display:inline-grid; place-items:center; width:20px; height:20px;
+          gap:16px; margin:0 0 8px; }
+        @media(max-width:1500px) {
+          [class*="st-key-application_schedule_section"] { width:calc(100% + 64px) !important; margin-left:-32px; margin-right:-32px; }
+        }
+        @media(max-width:1100px) {
+          [class*="st-key-application_schedule_section"] { width:100% !important; margin-left:0; margin-right:0; }
+        }
+        .application-list-title-wrap { display:flex; align-items:center; gap:12px; min-width:0; }
+        .application-list-title-icon { flex:0 0 auto; display:grid; place-items:center; width:38px; height:38px;
+          border:1px solid #d5e4fb; border-radius:11px; background:linear-gradient(145deg,#f4f8ff,#e8f1ff);
+          color:#1268f3; box-shadow:0 4px 10px rgba(18,104,243,.07); }
+        .application-list-title-icon svg { width:20px; height:20px; fill:none; stroke:currentColor;
+          stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+        .application-list-title-copy { min-width:0; }
+        .application-list-eyebrow { display:block; margin-bottom:1px; color:#1268f3;
+          font-size:9.5px; line-height:1.3; font-weight:850; letter-spacing:.08em; }
+        .application-list-title { display:flex; align-items:center; gap:8px; margin:0 !important;
+          color:#0d2548; font-size:23px !important; line-height:1.3 !important; letter-spacing:.005em; font-weight:800 !important; }
+        .application-list-caption { margin:3px 0 0; color:#718096; font-size:11px; line-height:1.5; }
+        .application-list-count { display:inline-flex; align-items:center; justify-content:center;
+          min-height:22px; padding:2px 8px; border:1px solid #d5e4fb; border-radius:999px;
+          background:#f1f6ff; color:#1268f3; font-size:11px; font-weight:800; white-space:nowrap; }
+        .application-list-info { display:inline-grid; place-items:center; width:18px; height:18px;
           color:#1268f3; }
-        .application-list-info svg { width:20px; height:20px; fill:none; stroke:currentColor;
+        .application-list-info svg { width:18px; height:18px; fill:none; stroke:currentColor;
           stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
         [class*="st-key-application_list_heading"] [data-testid="stHorizontalBlock"] {
           align-items:center; margin:2px 0 6px; }
@@ -405,68 +404,335 @@ def _inject_css() -> None:
           color:#52647d; font-size:12px; font-weight:800; transition:background .15s ease,color .15s ease; }
         [class*="st-key-wbs_view_control"] [data-testid="stRadioOption"][data-selected="true"] {
           background:#1268f3; color:#fff; box-shadow:0 2px 6px rgba(18,104,243,.18); }
+        [class*="st-key-wbs_view_control"] [data-testid="stRadioOption"][data-selected="true"] *,
+        [class*="st-key-wbs_view_control"] [data-testid="stRadioOption"][aria-checked="true"] * {
+          color:#fff !important; }
         [class*="st-key-wbs_view_control"] [data-testid="stRadioOption"] > div > div > div:first-child {
           display:none; }
         [class*="st-key-wbs_view_control"] [data-testid="stMarkdownContainer"] p { font-size:12px; }
-        .application-table-wrap { overflow-x:auto; margin:0 0 0; background:#fff;
-          border:1px solid #dbe3ef; border-radius:0 0 10px 10px; box-shadow:none; }
-        .application-table { width:max-content; min-width:100%; border-collapse:separate;
+        .application-table-wrap { overflow-x:auto; margin:14px 0 0; background:#fff;
+          border:1px solid #d9e3f0; border-radius:14px;
+          box-shadow:0 10px 28px rgba(31,65,115,.055); scrollbar-color:#b9c9df #f3f6fa;
+          scrollbar-width:thin; position:relative; isolation:isolate; overscroll-behavior-inline:contain; }
+        .application-table-wrap:focus-visible { outline:3px solid rgba(18,104,243,.22); outline-offset:3px; }
+        .schedule-period-bar { display:flex;align-items:center;justify-content:space-between;gap:12px;
+          padding:8px 10px;border-left:1px solid #cfdbeb;border-right:1px solid #cfdbeb;
+          background:#fff;color:#53647b;font-size:11px; }
+        .schedule-period-label { color:#0d2548;font-size:12px;font-weight:850;letter-spacing:.01em; }
+        .schedule-scroll-hint { display:none;color:#718096;font-size:10px;white-space:nowrap; }
+        .schedule-period-actions { display:flex;align-items:center;gap:6px; }
+        .schedule-period-button { min-width:30px;min-height:28px;padding:4px 9px;border:1px solid #c8d7ec;
+          border-radius:7px;background:#fff;color:#315273;font-size:11px;font-weight:800;cursor:pointer; }
+        .schedule-period-button:hover { border-color:#8db4f7;background:#f1f6ff;color:#1268f3; }
+        .schedule-period-button:focus-visible,.next-cell-action:focus-visible,.schedule-prep-link:focus-visible {
+          outline:3px solid rgba(18,104,243,.25);outline-offset:2px; }
+        [class*="st-key-application_schedule_period_control"] { margin:0;padding:8px 12px;border-left:1px solid #cfdbeb;
+          border-right:1px solid #cfdbeb;border-top:0;border-bottom:1px solid #dbe5f2;background:#fbfcfe; }
+        [class*="st-key-application_schedule_period_control"] [data-testid="stHorizontalBlock"] { align-items:center;gap:6px; }
+        [class*="st-key-application_schedule_period_control"] [data-testid="stButton"] button {
+          min-height:29px;padding:4px 8px;border:1px solid #c8d7ec;border-radius:7px;background:#fff;
+          color:#315273;font-size:10px;font-weight:800;box-shadow:none; }
+        [class*="st-key-application_schedule_period_control"] [data-testid="stButton"] button:hover {
+          border-color:#8db4f7;background:#f1f6ff;color:#1268f3; }
+          .application-table { --company-width:150px; --next-width:120px; --prep-width:126px;
+          --route-width:88px; --phase-width:95px; --status-width:75px; --timeline-width:128px;
+          --management-width:calc(var(--company-width) + var(--next-width) + var(--route-width) + var(--phase-width) + var(--status-width) + var(--prep-width));
+          width:calc(var(--management-width) + var(--timeline-total-width));
+          min-width:calc(var(--management-width) + var(--timeline-total-width));
+          max-width:none; border-collapse:separate;
           border-spacing:0; table-layout:fixed; }
-        .application-table th { padding:9px 9px; background:#f8faff; border-bottom:1px solid #dbe3ef;
-          border-right:1px solid #e6ebf2; color:#465a75; font-size:11px; line-height:1.35;
+        .application-table col.company-col { width:var(--company-width); }
+        .application-table col.next-col { width:var(--next-width); }
+        .application-table col.route-col { width:var(--route-width); }
+        .application-table col.phase-col { width:var(--phase-width); }
+        .application-table col.status-col { width:var(--status-width); }
+        .application-table col.prep-col { width:var(--prep-width); }
+        .application-table col.timeline-col { width:var(--timeline-width); }
+        .application-table.two_weeks { --timeline-width:64px; }
+        .application-table.month { --timeline-width:32px; }
+        .application-table th { position:sticky;top:0;z-index:4;padding:10px 9px; background:#f8fafd;
+          border-bottom:1px solid #dce5f0; border-right:1px solid #edf1f6;
+          color:#40546f; font-size:10.5px; line-height:1.35;
           text-align:left; font-weight:800; }
+        .application-table .schedule-group-head th { position:static;padding:9px 12px;background:#fff;
+          border-right:0;color:#718097;font-size:9.5px;letter-spacing:.04em; }
+        .application-table .schedule-group-head .timeline-group { border-left:1px solid #d8e3f1;
+          color:#1268f3;background:#f8fbff; }
+        .application-table .schedule-column-head th { top:0; }
         .application-table th:last-child { border-right:0; }
-        .application-table td { padding:10px 9px; border-bottom:1px solid #e6ebf2;
-          border-right:1px solid #edf1f6; color:#263a58; font-size:12px; line-height:1.5;
-          vertical-align:middle; }
+        .application-table td { padding:10px 9px; border-bottom:1px solid #e6edf5;
+          border-right:1px solid #f1f4f8; color:#263a58; font-size:11.5px; line-height:1.45;
+          vertical-align:middle; background:#fff; transition:background .16s ease; }
+        .application-table tbody tr { position:relative; }
+        .application-table tbody tr:nth-child(even) td { background:#fbfcfe; }
+        .application-table tbody tr:hover td,
+        .application-table tbody tr:focus-within td { background:#f7faff; }
         .application-table tr:last-child td { border-bottom:0; }
         .application-table td:last-child { border-right:0; }
-        .application-table .company-cell { width:150px; }
+        .application-table .company-cell { width:var(--company-width);min-width:var(--company-width);
+          max-width:var(--company-width);box-sizing:border-box; }
+        .application-table tbody .company-cell { box-shadow:inset 3px 0 0 #e0eafb; }
         .schedule-company-actions{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
-        .schedule-prep-link{display:inline-flex;align-items:center;gap:4px;color:#1268f3 !important;
-          font-size:11px;font-weight:750;text-decoration:none !important;line-height:1.35}
-        .schedule-prep-link:hover{text-decoration:underline !important}
-        .application-table .phase-cell { width:118px; }
-        .application-table .route-cell { width:105px; }
-        .application-table .next-cell { position:relative; width:145px; }
-        .application-table .status-cell { width:82px; }
-        .application-table .wbs-day { width:72px; padding:9px 4px; text-align:center; }
-        .application-table.month .wbs-day { width:54px; }
-        .wbs-date-head { display:block; color:#40526b; font-size:10px; white-space:nowrap; }
-        .wbs-date-head.today { color:#1268f3; font-weight:900; }
-        .wbs-event { display:block; position:relative; min-height:42px; padding-top:18px;
-          color:#52647d; font-size:9px; line-height:1.25; overflow-wrap:anywhere; }
-        .wbs-event::before { content:''; position:absolute; top:4px; left:50%; width:8px; height:8px;
-          transform:translateX(-50%); border:3px solid #1268f3; border-radius:50%; background:#fff; }
-        .wbs-event.done::before { border-color:#18a36f; background:#18a36f; }
-        .wbs-event.overdue { color:#d7353b; font-weight:700; }
-        .wbs-event.overdue::before { border-color:#e5484d; }
-        .wbs-event.inactive::before { border-color:#b9c5d6; background:#eef2f7; }
-        .wbs-event small { display:block; margin-top:2px; color:#8090a5; font-size:8px; font-weight:700; }
-        .wbs-event.done small { color:#16885f; }
-        .wbs-empty-day { display:block; min-height:42px; }
-        .wbs-legend { display:flex; align-items:center; gap:18px; padding:10px 14px;
-          border-top:1px solid #e6ebf2; color:#66768d; font-size:10px; }
-        .wbs-legend span { display:inline-flex; align-items:center; gap:6px; }
+        .schedule-prep-link{display:inline-flex;align-items:center;justify-content:center;min-height:29px;
+          width:100%;padding:4px 5px;box-sizing:border-box;border:0;border-radius:7px;background:transparent;
+          color:#1268f3 !important;font-size:9.5px;font-weight:800;text-decoration:none !important;line-height:1.35}
+        .schedule-prep-link:hover{background:#edf4ff;text-decoration:none !important}
+        .application-table .phase-cell { width:var(--phase-width);min-width:var(--phase-width);
+          max-width:var(--phase-width);box-sizing:border-box; }
+        .application-table .route-cell { width:var(--route-width);min-width:var(--route-width);
+          max-width:var(--route-width);box-sizing:border-box; }
+        .application-table .next-cell { position:relative;width:var(--next-width);min-width:var(--next-width);
+          max-width:var(--next-width);box-sizing:border-box; }
+        .application-table .prep-cell { width:var(--prep-width);min-width:var(--prep-width);
+          max-width:var(--prep-width);box-sizing:border-box; }
+        .schedule-row-actions { display:flex;flex-direction:column;gap:6px;width:100%; }
+        .schedule-row-action { display:inline-flex;align-items:center;justify-content:center;width:100%;
+          min-height:30px;padding:5px 7px;box-sizing:border-box;border:1px solid #b9d1f8;
+          border-radius:8px;background:#fff;color:#1268f3!important;font-size:9.5px;font-weight:850;
+          line-height:1.3;text-decoration:none!important;cursor:pointer;transition:.15s ease; }
+        .schedule-row-action.primary { border-color:#1268f3;background:#1268f3;color:#fff!important;
+          box-shadow:0 4px 10px rgba(18,104,243,.16); }
+        .schedule-row-action:hover { border-color:#72a5f7;background:#edf5ff;text-decoration:none!important; }
+        .schedule-row-action.primary:hover { border-color:#075ad9;background:#075ad9; }
+        .application-table .wbs-day { width:128px; padding:8px 5px; text-align:center; position:relative; }
+        .application-table th.wbs-day,
+        .application-table td.wbs-day { border-right:0; }
+        .application-table tbody td.wbs-day::after { content:'';position:absolute;left:0;right:0;top:50%;
+          height:2px;background:#e3eaf4;z-index:0; }
+        .application-table tbody td.wbs-day:first-of-type::after { left:10px; }
+        .application-table tbody td.wbs-day:last-child::after { right:10px; }
+        .application-table .prep-cell { border-right:1px solid #c9d6e7; }
+        .application-table.two_weeks .wbs-day { width:64px; }
+        .application-table.month .wbs-day { width:32px; }
+        .wbs-date-head { display:block; color:#40526b; font-size:10px; white-space:nowrap; text-align:center; }
+        .wbs-date-head.today { margin:-4px -3px;padding:4px 3px;border-radius:6px;
+          background:#eaf2ff;color:#1268f3;font-weight:900; }
+        .wbs-events { position:relative;z-index:1;display:flex; flex-direction:column; align-items:center;
+          justify-content:center; gap:7px; min-height:48px; }
+        .wbs-event { display:flex; position:relative; flex-direction:column;align-items:center;justify-content:center;gap:4px;
+          min-height:42px;width:calc(100% - 6px);margin:0;padding:4px 3px 3px;box-sizing:border-box;
+          border:0;border-radius:8px;background:transparent;color:#52647d;font-size:8.5px;font-weight:700;
+          line-height:1.22;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;text-align:center;
+          transition:background .14s ease,transform .14s ease; }
+        .wbs-event:hover { background:#f4f8ff;transform:translateY(-1px); }
+        .timeline-state-icon { display:block;width:21px;height:21px;flex:0 0 21px;object-fit:contain; }
+        .timeline-dot { display:block;width:14px;height:14px;flex:0 0 14px;border:3px solid #1268f3;
+          border-radius:50%;background:#fff;box-sizing:border-box;box-shadow:0 0 0 3px #fff; }
+        .timeline-event-label { color:#334155;font:inherit;font-weight:750;line-height:1.22; }
+        .wbs-event.done .timeline-event-label { color:#334155; }
+        .wbs-event.overdue { color:#d7353b; font-weight:850;background:#fff7f7; }
+        .wbs-event.overdue .timeline-event-label { color:#d7353b; }
+        .wbs-event.urgent { color:#0d55a5;font-weight:850;background:#f3f8ff; }
+        .wbs-event.urgent .timeline-dot { width:16px;height:16px;flex-basis:16px;border-color:#1268f3;
+          box-shadow:0 0 0 3px #fff,0 0 0 5px #dceaff; }
+        .wbs-event.inactive { color:#8a97a8; }
+        .wbs-event.inactive .timeline-dot { border-color:#b9c5d6;background:#eef2f7; }
+        .wbs-event.personal .timeline-dot { border-color:#7185a3; }
+        .wbs-event.agent .timeline-dot { border-color:#e39a34; }
+        .wbs-event.company .timeline-dot { border-color:#1268f3; }
+        .application-table.two_weeks .wbs-event { min-height:39px;padding:3px 2px 2px;
+          font-size:7.5px;white-space:normal;overflow:hidden;display:flex; }
+        .application-table.month .wbs-events { min-height:28px;align-items:center;justify-content:center;
+          flex-direction:row;flex-wrap:wrap;gap:3px; }
+        .application-table.month .wbs-event { width:14px;height:14px;min-height:14px;padding:0;border:0;
+          background:transparent;font-size:0;overflow:hidden; }
+        .application-table.month .timeline-state-icon { width:14px;height:14px;flex-basis:14px; }
+        .application-table.month .timeline-dot { width:10px;height:10px;flex-basis:10px;border-width:2px;box-shadow:none; }
+        .application-table.month .timeline-event-label { display:none; }
+        .wbs-more { display:inline-flex;align-items:center;justify-content:center;min-height:20px;padding:2px 5px;
+          border-radius:999px;background:#eef3fa;color:#52647d;font-size:8px;font-weight:850;white-space:nowrap; }
+        .application-table.month .wbs-more { min-width:18px;min-height:18px;padding:1px 4px; }
+        .wbs-empty-day { display:block; min-height:34px; }
+        .wbs-period-empty { display:flex;align-items:center;justify-content:center;min-height:34px;
+          color:#9aa7b9;font-size:9px;font-weight:700;white-space:nowrap; }
+        .wbs-legend { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; padding:11px 15px;
+          border-top:1px solid #e6edf5;background:#fbfcfe;color:#66768d;font-size:9.5px; }
+        .wbs-legend span { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+        .legend-dot.personal { border-color:#7185a3; }
+        .legend-dot.agent { border-color:#e39a34; background:#fff7e8; }
+        .legend-dot.company { border-color:#1268f3; background:#edf5ff; }
         .legend-dot { width:9px; height:9px; border:3px solid #1268f3; border-radius:50%; background:#fff; }
-        .legend-dot.done { border-color:#18a36f; background:#18a36f; }
-        .legend-dot.overdue { border-color:#e5484d; }
-        .table-company { display:block; color:#0d2548!important; font-size:14px; font-weight:850;
-          text-decoration:none!important; }
+        .legend-state-icon { display:block;width:15px;height:15px;object-fit:contain; }
+        .ended-applications { margin-top:14px; }
+        .ended-application-list { display:grid; gap:8px; padding:4px 0 2px; }
+        .ended-application-row { display:grid; grid-template-columns:minmax(180px,1.6fr) minmax(110px,.8fr) minmax(100px,.7fr);
+          align-items:center; gap:14px; min-height:46px; padding:8px 14px; border:1px solid #e1e8f2;
+          border-radius:10px; background:#fff; color:#334155; }
+        .ended-application-row strong { color:#0d2548; font-size:12px; }
+        .ended-application-row span { color:#66768d; font-size:10.5px; }
+        .ended-application-result { justify-self:start; display:inline-flex; align-items:center;
+          min-height:24px; padding:3px 9px; border-radius:999px; background:#f1f4f8;
+          color:#52647d!important; font-weight:800; }
+        .table-company { display:block; color:#0d2548!important; font-size:12px; font-weight:850;
+          line-height:1.4;text-decoration:none!important;display:-webkit-box;-webkit-line-clamp:3;
+          -webkit-box-orient:vertical;overflow:hidden; }
+        .table-company:hover { color:#1268f3!important; }
         .table-job { display:block; margin-top:2px; color:#708097; font-size:10px; }
-        .table-phase { display:inline-block; padding:5px 8px; border-radius:7px;
-          background:#eaf2ff; color:#1268f3; font-weight:800; }
-        .table-next { font-weight:750; }
-        .next-cell-action { position:absolute; inset:0; display:flex; width:100%; height:100%;
+        .route-cell,.next-cell { overflow:hidden; text-overflow:ellipsis; overflow-wrap:anywhere; }
+        .table-phase { display:inline-flex;align-items:center;padding:5px 8px;border:1px solid #c9dcfb;
+          border-radius:999px;background:#eef5ff;color:#1268f3;font-size:9.5px;font-weight:800; }
+        .table-status { display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;
+          background:#f1f4f8;color:#607087;font-size:9.5px;font-weight:800;white-space:nowrap; }
+        .table-status.attention { background:#fff0f1;color:#d7353b; }
+        .table-status.upcoming { background:#f0edff;color:#6655d9; }
+        .table-status.normal { background:#f3f5f8;color:#6f7e91; }
+        .table-next { color:#0d2548;font-weight:800;line-height:1.4; }
+        .next-cell-action { position:absolute; inset:4px; display:flex; width:calc(100% - 8px); height:calc(100% - 8px);
           min-height:100%; margin:0; padding:10px 9px; box-sizing:border-box;
           flex-direction:column; justify-content:center; color:#0d2548 !important;
-          background:#fff !important; text-decoration:none !important; border-radius:0;
+          background:transparent !important; text-decoration:none !important; border-radius:8px;
           transition:background .16s ease, box-shadow .16s ease; }
-        .next-cell-action:hover { background:#f5f8ff !important;
-          box-shadow:inset 0 0 0 1px #b9d1ff; }
+        .next-cell-action:hover { background:#f2f7ff !important;
+          box-shadow:inset 0 0 0 1.5px #9fc0fb; }
         .next-cell-action small { display:block; margin-top:5px; color:#1268f3; font-size:11px;
             font-weight:750; }
         .next-cell-action { border:0; cursor:pointer; text-align:left; font:inherit; }
+        .application-table td[data-schedule-application] { cursor:pointer; }
+        .application-table td[data-schedule-application]:hover { background:#edf5ff !important; }
+        .application-table th.company-cell,.application-table td.company-cell,
+        .application-table th.next-cell,.application-table td.next-cell,
+        .application-table th.prep-cell,.application-table td.prep-cell,
+        .application-table th.route-cell,.application-table td.route-cell,
+        .application-table th.phase-cell,.application-table td.phase-cell,
+        .application-table th.status-cell,.application-table td.status-cell { position:sticky;z-index:3; }
+        .application-table th.company-cell,.application-table td.company-cell { left:0; }
+        .application-table th.next-cell,.application-table td.next-cell { left:var(--company-width); }
+        .application-table th.route-cell,.application-table td.route-cell {
+          left:calc(var(--company-width) + var(--next-width)); }
+        .application-table th.phase-cell,.application-table td.phase-cell {
+          left:calc(var(--company-width) + var(--next-width) + var(--route-width)); }
+        .application-table th.status-cell,.application-table td.status-cell {
+          left:calc(var(--company-width) + var(--next-width) + var(--route-width) + var(--phase-width)); }
+        .application-table th.prep-cell,.application-table td.prep-cell {
+          left:calc(var(--company-width) + var(--next-width) + var(--route-width) + var(--phase-width) + var(--status-width));
+          box-shadow:8px 0 14px rgba(31,65,115,.10); }
+        .application-table thead .schedule-column-head th.company-cell,
+        .application-table thead .schedule-column-head th.next-cell,
+        .application-table thead .schedule-column-head th.prep-cell,
+        .application-table thead .schedule-column-head th.route-cell,
+        .application-table thead .schedule-column-head th.phase-cell,
+        .application-table thead .schedule-column-head th.status-cell { z-index:7;background:#f8fafd; }
+        .application-table td.company-cell,.application-table td.next-cell,
+        .application-table td.prep-cell,
+        .application-table td.route-cell,
+        .application-table td.phase-cell,.application-table td.status-cell { background:#fff; }
+        .application-table td.company-cell { box-shadow:inset 3px 0 0 #d9e7fb; }
+        .application-table tbody tr:nth-child(even) td.company-cell,
+        .application-table tbody tr:nth-child(even) td.next-cell,
+        .application-table tbody tr:nth-child(even) td.prep-cell,
+        .application-table tbody tr:nth-child(even) td.route-cell,
+        .application-table tbody tr:nth-child(even) td.phase-cell,
+        .application-table tbody tr:nth-child(even) td.status-cell { background:#fbfcfe; }
+        .application-table tbody tr:hover td.company-cell,
+        .application-table tbody tr:hover td.next-cell,
+        .application-table tbody tr:hover td.prep-cell,
+        .application-table tbody tr:hover td.route-cell,
+        .application-table tbody tr:hover td.phase-cell,
+        .application-table tbody tr:hover td.status-cell { background:#f6f9fe; }
+        .application-table .schedule-group-head .management-group { position:sticky;left:0;z-index:8;
+          width:var(--management-width);min-width:var(--management-width);max-width:var(--management-width);
+          box-sizing:border-box;background:#fff;box-shadow:8px 0 14px rgba(31,65,115,.10); }
+        .application-table .weekend .wbs-date-head { color:#7b6ab7; }
+        .application-table .today-column { background:#fbfdff; }
+        .application-table.month td { height:54px; }
+        .application-table.two_weeks td { height:62px; }
+        .schedule-empty-state { display:flex;align-items:flex-start;gap:11px;margin:0;padding:18px;
+          border:1px solid #cfdbeb;border-top:0;border-radius:0 0 12px 12px;background:#fff;color:#53647b; }
+        .schedule-empty-state strong { display:block;margin-bottom:3px;color:#0d2548;font-size:13px; }
+        .schedule-empty-state span { display:block;font-size:11px;line-height:1.55; }
+        .schedule-empty-state-icon { display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;
+          border-radius:9px;background:#edf5ff;color:#1268f3;font-size:17px;font-weight:900; }
+        [class*="st-key-application_list_header_filters"] { margin:10px 0 0;padding:12px 14px 8px;
+          border:1px solid #d8e3f1;border-radius:12px;background:#f8fafd; }
+        [class*="st-key-application_list_header_filters"] [data-testid="stHorizontalBlock"] { gap:8px;align-items:end; }
+        [class*="st-key-application_list_header_filters"] label p { color:#52647d;font-size:10px;font-weight:800; }
+        [class*="st-key-application_list_header_filters"] [data-baseweb="input"] > div,
+        [class*="st-key-application_list_header_filters"] [data-baseweb="select"] > div {
+          min-height:36px;background:#fff;border-color:#d4deec;border-radius:8px; }
+        [class*="st-key-application_list_header_filters"] [data-testid="stButton"] button {
+          min-height:36px;border-radius:8px;font-size:10px;font-weight:800; }
+        [class*="st-key-application_list_header_filters"] [data-testid="stCheckbox"] { margin-top:4px; }
+        .schedule-toolbar-title { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px; }
+        .schedule-toolbar-title > div { display:flex;align-items:baseline;gap:8px;min-width:0; }
+        .schedule-toolbar-title strong { color:#0d2548;font-size:12px; }
+        .schedule-toolbar-title span:not(.schedule-filter-state) { color:#7a899d;font-size:10px; }
+        .schedule-filter-state { flex:0 0 auto;padding:4px 8px;border-radius:999px;background:#eaf2ff;
+          color:#1268f3;font-size:9px;font-weight:850; }
+        .schedule-toolbar-spacer { height:18px; }
+        .schedule-action-list { margin:12px 0 0; border:1px solid #d9e3f0; border-radius:14px;
+          background:#fff; overflow:hidden; box-shadow:0 8px 22px rgba(31,65,115,.055); }
+        .schedule-list-topline { display:flex; align-items:center; justify-content:flex-end; min-height:30px;
+          padding:6px 14px 5px; background:#fff; }
+        .schedule-list-topline .wbs-legend { justify-content:flex-end;padding:0;border:0;background:transparent; }
+        .schedule-action-head,.schedule-action-row { display:grid;
+          grid-template-columns:minmax(160px,1.35fr) minmax(135px,.95fr) minmax(165px,1.2fr)
+          minmax(210px,1.55fr) 210px; align-items:center; column-gap:12px; }
+        .schedule-action-head { min-height:38px; padding:0 14px; background:#f7faff;
+          border-bottom:1px solid #dfe8f3; color:#52657f; font-size:10px; font-weight:850; }
+        .schedule-action-row { min-height:64px; padding:8px 14px; border-bottom:1px solid #e7edf5;
+          transition:background .15s ease,box-shadow .15s ease; }
+        .schedule-action-row:last-of-type { border-bottom:0; }
+        .schedule-action-row:hover { background:#fbfdff; box-shadow:inset 3px 0 0 #87b4ff; }
+        .schedule-list-company { min-width:0; }
+        .schedule-list-company .table-company { display:block; overflow:hidden; text-overflow:ellipsis;
+          white-space:nowrap; color:#0d2548; font-size:13px; font-weight:850; text-decoration:none; }
+        .schedule-list-sub { display:block; margin-top:3px; overflow:hidden; text-overflow:ellipsis;
+          white-space:nowrap; color:#8290a4; font-size:10px; line-height:1.35; }
+        .schedule-list-state { display:flex; align-items:center; flex-wrap:wrap; gap:5px; min-width:0; }
+        .schedule-list-state .table-phase,.schedule-list-state .table-status { max-width:100%;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .schedule-list-next { display:flex; align-items:center; justify-content:space-between; gap:8px;
+          width:100%; min-width:0; padding:8px 10px; border:1px solid #c9dcfb; border-radius:9px;
+          background:#f5f9ff; color:#0d4f9a; cursor:pointer; text-align:left; }
+        .schedule-list-next:hover { border-color:#82aff5; background:#edf5ff; }
+        .schedule-list-next strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+          font-size:11px; font-weight:850; }
+        .schedule-list-next small { display:block; margin-top:2px; color:#6f829d; font-size:9px; }
+        .schedule-list-next svg { flex:0 0 auto; width:15px; height:15px; fill:none; stroke:currentColor;
+          stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+        .schedule-list-events { display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden; }
+        .schedule-list-event { display:inline-flex; flex:0 0 58px; flex-direction:column; align-items:center;
+          justify-content:center; min-width:0; max-width:58px; padding:1px 2px; color:#51637b;
+          font-size:8px; font-weight:750; line-height:1.2; white-space:nowrap; text-align:center; }
+        .schedule-list-event::before { content:""; width:17px; height:17px; margin-bottom:4px;
+          border:3px solid #1268f3; border-radius:50%; background:#fff; box-sizing:border-box;
+          box-shadow:0 0 0 3px #edf4ff; }
+        .schedule-list-event > span { display:block; width:100%; overflow:hidden; text-overflow:ellipsis; }
+        .schedule-list-event time { margin-right:2px; color:#718096; font-size:7px; font-weight:800; }
+        .schedule-list-event.done::before { border-color:#18a978; background:#18a978;
+          box-shadow:0 0 0 3px #e5f8f1; }
+        .schedule-list-event.agent::before { border-color:#e3951d; box-shadow:0 0 0 3px #fff3de; }
+        .schedule-list-event.personal::before { border-color:#8394ab; box-shadow:0 0 0 3px #eef2f7; }
+        .schedule-list-event.overdue::before { border-color:#e2444b; box-shadow:0 0 0 3px #fff0f0; }
+        .schedule-list-no-event { color:#94a0b1; font-size:10px; }
+        .schedule-list-actions { display:flex; align-items:center; justify-content:flex-end; gap:6px; }
+        .schedule-list-update,.schedule-list-prep { display:inline-flex; align-items:center; justify-content:center;
+          min-height:32px; padding:6px 10px; border-radius:8px; font-size:10px; font-weight:850;
+          white-space:nowrap; text-decoration:none !important; cursor:pointer; }
+        .schedule-list-update { border:1px solid #1268f3; background:#1268f3; color:#fff; }
+        .schedule-list-update:hover { background:#075ad9; }
+        .schedule-list-prep { border:1px solid #bdd3f5; background:#fff; color:#1268f3; }
+        .schedule-list-prep:hover { background:#f2f7ff; }
+        .schedule-list-legend { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap;
+          gap:5px 12px; color:#718096; font-size:8px; }
+        @media (max-width:1280px) {
+          .schedule-action-head,.schedule-action-row { grid-template-columns:minmax(145px,1.25fr) minmax(120px,.9fr)
+            minmax(150px,1.15fr) minmax(170px,1.3fr) 190px; column-gap:8px; }
+        }
+        @media(max-width:1100px) {
+          .schedule-scroll-hint { display:inline; }
+          .application-table th,.application-table td { font-size:11px; }
+          .application-table { --company-width:110px; --next-width:105px;
+            --prep-width:86px; --route-width:78px; --phase-width:86px; --status-width:70px; }
+        }
+        @media(max-width:760px) {
+          [class*="st-key-application_schedule_section"] { padding:12px 8px; }
+          .application-list-title { font-size:18px; }
+          .application-list-title-icon { width:34px;height:34px; }
+          [class*="st-key-application_list_heading"] [data-testid="stHorizontalBlock"] { flex-wrap:wrap; }
+          [class*="st-key-wbs_view_control"] { justify-content:flex-start; }
+          [class*="st-key-wbs_view_control"] [data-testid="stRadioOption"] { min-width:66px;padding:6px 9px; }
+        }
         .st-key-schedule_modal_triggers { display:none !important; }
         .table-detail-link { display:block; margin-top:5px; color:#1268f3!important;
           font-size:10px; font-weight:800; text-decoration:none!important; }
@@ -502,22 +768,22 @@ def _inject_css() -> None:
         .detail-hero {display:grid;grid-template-columns:minmax(0,1.7fr) repeat(3,minmax(135px,.72fr));
           background:#fff;border:1px solid #dbe3ef;border-radius:14px;margin:14px 0 22px;overflow:hidden;
           box-shadow:0 6px 20px rgba(36,62,101,.045)}
-        .detail-hero>div{padding:18px 20px;border-right:1px solid #e6ebf2;min-width:0}.detail-hero>div:last-child{border:0}
+        .detail-hero>div{padding:12px 15px;border-right:1px solid #e6ebf2;min-width:0}.detail-hero>div:last-child{border:0}
         .company-row{display:flex;align-items:center}.detail-company{font-size:20px;font-weight:850;line-height:1.45}
         .detail-role{margin-top:5px;color:#52647d;font-size:13px;line-height:1.55}.detail-label{font-size:11px;color:#75849a;font-weight:750}
         .detail-value{margin-top:7px;font-weight:800;font-size:14px;line-height:1.5}.phase-pill{display:inline-flex;padding:6px 11px;
           border:1px solid #b8d0fa;border-radius:8px;background:#f1f6ff;color:#1268f3;font-weight:800;font-size:12px}
-        .detail-section-title{display:flex;align-items:center;gap:10px;margin:26px 0 6px;color:#08264d;font-size:20px;font-weight:850}
+        .detail-section-title{display:flex;align-items:center;gap:9px;margin:17px 0 5px;color:#08264d;font-size:18px;font-weight:850}
         .detail-section-title:before{content:'';width:4px;height:22px;border-radius:99px;background:#1268f3}
-        .detail-section-copy{margin:0 0 14px;color:#65758d;font-size:13px}
+        .detail-section-copy{margin:0 0 9px;color:#65758d;font-size:12px}
         .detail-attention{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;margin:4px 0 18px;border:1px solid #ffc9ce;
           border-radius:11px;background:#fff7f7;color:#9f2730;font-size:13px;line-height:1.6}
         .detail-attention-mark{display:grid;place-items:center;flex:0 0 22px;height:22px;border:1px solid #ef5964;border-radius:50%;
-          color:#e63f4b;font-weight:900}.detail-subtitle{margin:18px 0 4px;color:#10284a;font-size:16px;font-weight:850}
+          color:#e63f4b;font-weight:900}.detail-subtitle{margin:11px 0 3px;color:#10284a;font-size:15px;font-weight:850}
         .detail-subcopy{margin:0 0 10px;color:#6f7f94;font-size:12px}
         .detail-empty{padding:17px;border:1px dashed #cdd9ea;border-radius:10px;background:#f8fbff;color:#687a92;text-align:center;font-size:13px}
-        [class*="st-key-detail_milestone_"]{background:#fff;border:1px solid #dbe3ef;border-radius:11px;padding:12px 14px!important;
-          margin:9px 0;box-shadow:0 2px 8px rgba(36,62,101,.03)}
+        [class*="st-key-detail_milestone_"]{background:#fff;border:1px solid #dbe3ef;border-radius:10px;padding:8px 11px!important;
+          margin:6px 0;box-shadow:0 2px 8px rgba(36,62,101,.03)}
         [class*="st-key-detail_milestone_pending_"]{border-left:3px solid #4b8df8}
         [class*="st-key-detail_milestone_overdue_"]{border-color:#ffc9ce;border-left:3px solid #ef5964;background:#fffafa}
         .milestone-name{font-size:14px;font-weight:850;color:#10284a}.milestone-meta{margin-top:4px;color:#66768d;font-size:12px}
@@ -699,7 +965,6 @@ def _clear_application_list_filters() -> None:
         "app_route": "すべて",
         "app_response_status": "すべて",
         "app_sort_order": "対応が必要な順",
-        "app_include_closed": False,
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -717,69 +982,101 @@ def _close_schedule_dialog_for_filter_change() -> None:
 def _render_application_list_header_filters(
     phase_filters: list[str], routes: list[str], filters_active: bool,
 ) -> None:
-    """一覧表のカラム見出しと一体化した検索・絞り込み操作を表示する。"""
+    """選考表の前に、検索・絞り込みを一か所へまとめて表示する。"""
 
     with st.container(key="application_list_header_filters"):
         st.markdown(
-            '<div class="schedule-update-guide">'
-            '<span class="schedule-update-guide-tag">ここからスケジュールを更新します</span>'
+            '<div class="schedule-toolbar-title">'
+            '<div><strong>表示する応募を絞り込む</strong>'
+            '<span>条件を組み合わせて、確認したい企業だけを表示できます。</span></div>'
+            f'<span class="schedule-filter-state">{"絞り込み中" if filters_active else "すべて表示"}</span>'
             '</div>',
             unsafe_allow_html=True,
         )
-        # 表本体と同じピクセル比を使い、各操作を対応カラムの真上へ置く。
-        # 最後の空白列は週表示の日付7列（72px × 7日）に対応する。
-        company_col, next_col, route_col, phase_col, response_col, schedule_col = st.columns(
-            [150, 145, 105, 118, 82, 504],
+        company_col, phase_col, route_col, response_col, sort_col, clear_col = st.columns(
+            [1.45, 1, 1, 1, 1.15, 0.7],
         )
         with company_col:
-            with st.popover("会社名", use_container_width=True):
-                st.text_input(
-                    "会社名で検索",
-                    key="app_query",
-                    placeholder="会社名を入力",
-                    on_change=_close_schedule_dialog_for_filter_change,
-                )
-                if filters_active:
-                    st.button(
-                        "すべての条件をクリア",
-                        key="clear_application_list_filters",
-                        on_click=_clear_application_list_filters,
-                        use_container_width=True,
-                    )
-        with next_col:
-            with st.popover("次の予定・期限", use_container_width=True):
-                st.selectbox(
-                    "表示順",
-                    ["対応が必要な順", "次回予定が近い順", "最終更新が新しい順",
-                     "最終更新が古い順", "会社名順", "現在フェーズ順"],
-                    key="app_sort_order",
-                    on_change=_close_schedule_dialog_for_filter_change,
-                )
-        with route_col:
-            with st.popover("応募経路", use_container_width=True):
-                st.selectbox(
-                    "応募経路", ["すべて", *routes], key="app_route",
-                    on_change=_close_schedule_dialog_for_filter_change,
-                )
+            st.text_input(
+                "会社名",
+                key="app_query",
+                placeholder="会社名で検索",
+                on_change=_close_schedule_dialog_for_filter_change,
+            )
         with phase_col:
-            with st.popover("現在フェーズ", use_container_width=True):
-                st.selectbox(
-                    "現在フェーズ", ["すべて", *phase_filters], key="app_phase",
-                    on_change=_close_schedule_dialog_for_filter_change,
-                )
+            st.selectbox(
+                "現在フェーズ", ["すべて", *phase_filters], key="app_phase",
+                on_change=_close_schedule_dialog_for_filter_change,
+            )
+        with route_col:
+            st.selectbox(
+                "応募経路", ["すべて", *routes], key="app_route",
+                on_change=_close_schedule_dialog_for_filter_change,
+            )
         with response_col:
-            with st.popover("対応状態", use_container_width=True):
-                st.selectbox(
-                    "対応状態", ["すべて", "対応が必要", "近日予定", "通常"],
-                    key="app_response_status",
-                    on_change=_close_schedule_dialog_for_filter_change,
+            st.selectbox(
+                "対応状態", ["すべて", "対応が必要", "近日予定", "通常"],
+                key="app_response_status",
+                on_change=_close_schedule_dialog_for_filter_change,
+            )
+        with sort_col:
+            st.selectbox(
+                "並び替え",
+                ["対応が必要な順", "次回予定が近い順", "最終更新が新しい順",
+                 "最終更新が古い順", "会社名順", "現在フェーズ順"],
+                key="app_sort_order",
+                on_change=_close_schedule_dialog_for_filter_change,
+            )
+        with clear_col:
+            st.markdown('<div class="schedule-toolbar-spacer" aria-hidden="true"></div>', unsafe_allow_html=True)
+            st.button(
+                "条件をクリア" if filters_active else "条件なし",
+                key="clear_application_list_filters",
+                on_click=_clear_application_list_filters,
+                use_container_width=True,
+                disabled=not filters_active,
+            )
+
+
+def _is_ended_application(view: dict) -> bool:
+    """Return True when an application has ended by withdrawal or rejection."""
+
+    application = view["application"]
+    ended_results = {"辞退", "不合格"}
+    return bool(
+        application.status != "active"
+        or application.selection_result in ended_results
+        or application.current_phase in ended_results
+    )
+
+
+def _render_ended_applications(views: list[dict]) -> None:
+    """Render ended applications separately from the active selection schedule."""
+
+    with st.container(key="ended_applications_section"):
+        with st.expander(f"終了済み企業一覧（{len(views)}社）", expanded=False):
+            if not views:
+                st.caption("終了済みの企業はありません。")
+                return
+            rows = []
+            for view in views:
+                application, job = view["application"], view["job"]
+                result = (
+                    application.selection_result
+                    if application.selection_result in {"辞退", "不合格"}
+                    else application.current_phase or "終了"
                 )
-                st.checkbox(
-                    "終了した応募も表示", key="app_include_closed",
-                    on_change=_close_schedule_dialog_for_filter_change,
+                rows.append(
+                    '<div class="ended-application-row">'
+                    f'<strong>{escape(job.company_name)}</strong>'
+                    f'<span>{escape(job.job_title or "求人名未登録")}</span>'
+                    f'<span class="ended-application-result">{escape(result)}</span>'
+                    '</div>'
                 )
-        with schedule_col:
-            st.markdown('<div class="application-header-empty"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="ended-application-list">{"".join(rows)}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _display_milestone_date(value: str) -> str:
@@ -795,6 +1092,37 @@ def _display_milestone_date(value: str) -> str:
 
 def _milestone_title(milestone: ApplicationMilestone) -> str:
     return milestone.title or milestone.detail_name or milestone.milestone_type
+
+
+def _milestone_visual_category(milestone: ApplicationMilestone) -> str:
+    """予定を、利用者が直感的に判別できる3つの行動主体へ分類する。"""
+
+    searchable = " ".join(
+        filter(
+            None,
+            (
+                milestone.milestone_type,
+                milestone.title,
+                milestone.detail_name,
+                milestone.memo,
+            ),
+        )
+    )
+    if milestone.milestone_type == "応募" or _milestone_title(milestone).strip() == "応募":
+        return "personal"
+    if any(keyword in searchable for keyword in ("エージェント", "紹介会社", "キャリアアドバイザー")):
+        return "agent"
+    if (
+        milestone.milestone_type
+        in {
+            "応募", "書類提出", "適性検査", "カジュアル面談", "一次面接",
+            "二次面接", "最終面接", "その他の面接・選考", "オファー面談",
+            "条件面談", "回答期限",
+        }
+        or any(keyword in searchable for keyword in ("企業", "採用担当", "面接", "面談", "選考"))
+    ):
+        return "company"
+    return "personal"
 
 
 def _render_attention_panel(items: list[dict]) -> None:
@@ -1173,16 +1501,20 @@ def render_application_list_page(focus: str = "") -> None:
     route_filter = str(st.session_state.get("app_route", "すべて"))
     response_filter = str(st.session_state.get("app_response_status", "すべて"))
     sort_order = str(st.session_state.get("app_sort_order", "対応が必要な順"))
-    include_closed = bool(st.session_state.get("app_include_closed", False))
+    ended_views = sorted(
+        [view for view in all_views if _is_ended_application(view)],
+        key=lambda view: view["job"].company_name,
+    )
 
     views = []
     for view in all_views:
         app, job = view["application"], view["job"]
+        if _is_ended_application(view):
+            continue
         if notification_schedule_application_id:
             if app.id == notification_schedule_application_id:
                 views.append(view)
             continue
-        if not include_closed and app.status != "active": continue
         if query and query.lower() not in job.company_name.lower(): continue
         if phase_filter != "すべて":
             if phase_filter in PHASE_CATEGORIES and app.phase_category != phase_filter: continue
@@ -1199,7 +1531,6 @@ def render_application_list_page(focus: str = "") -> None:
         or route_filter != "すべて"
         or response_filter != "すべて"
         or sort_order != "対応が必要な順"
-        or include_closed
     )
     with st.container(key="application_schedule_section"):
         st.markdown(
@@ -1207,7 +1538,10 @@ def render_application_list_page(focus: str = "") -> None:
             unsafe_allow_html=True,
         )
         requested_wbs_view = str(st.query_params.get("wbs_view", "week"))
-        initial_wbs_label = "月表示" if requested_wbs_view == "month" else "週表示"
+        initial_wbs_label = {
+            "two_weeks": "2週間表示",
+            "month": "1か月表示",
+        }.get(requested_wbs_view, "週表示")
         with st.container(key="application_list_heading"):
             heading_col, switch_col = st.columns([1, 0.32])
             with heading_col:
@@ -1217,45 +1551,89 @@ def render_application_list_page(focus: str = "") -> None:
                     '<path d="M12 7.25h.01"/>'
                     '</svg>'
                 )
+                schedule_icon = (
+                    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+                    '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/>'
+                    '<path d="M7.5 3.5v4M16.5 3.5v4M3.5 10h17"/>'
+                    '<path d="m8 15 2.1 2.1L16 12.5"/>'
+                    '</svg>'
+                )
                 st.markdown(
-                    '<div class="application-list-head"><h2 class="application-list-title">'
-                    f'選考スケジュール（{len(views)}社）<span class="application-list-info">{info_icon}</span>'
-                    '</h2></div>', unsafe_allow_html=True,
+                    '<div class="application-list-head"><div class="application-list-title-wrap">'
+                    f'<span class="application-list-title-icon">{schedule_icon}</span>'
+                    '<div class="application-list-title-copy">'
+                    '<span class="application-list-eyebrow">選考管理</span>'
+                    '<h2 class="application-list-title">選考スケジュール'
+                    f'<span class="application-list-count">{len(views)}社</span>'
+                    f'<span class="application-list-info">{info_icon}</span></h2>'
+                    '<p class="application-list-caption">予定と選考の進み具合を、企業ごとに確認できます。</p>'
+                    '</div></div></div>', unsafe_allow_html=True,
                 )
             with switch_col:
                 selected_wbs_label = st.radio(
-                    "WBS表示期間", ["週表示", "月表示"],
-                    index=0 if initial_wbs_label == "週表示" else 1,
+                    "WBS表示期間", ["週表示", "2週間表示", "1か月表示"],
+                    index=["週表示", "2週間表示", "1か月表示"].index(initial_wbs_label),
                     horizontal=True, label_visibility="collapsed", key="wbs_view_control",
                     on_change=_close_schedule_dialog_for_filter_change,
                 )
-        wbs_view = "month" if selected_wbs_label == "月表示" else "week"
+        wbs_view = {
+            "2週間表示": "two_weeks",
+            "1か月表示": "month",
+        }.get(selected_wbs_label, "week")
+        if st.session_state.get("application_schedule_last_view") != wbs_view:
+            st.session_state["application_schedule_last_view"] = wbs_view
+            st.session_state["application_schedule_period_offset"] = 0
         _render_application_list_header_filters(phase_filters, routes, filters_active)
-        if filters_active and not notification_schedule_application_id:
-            with st.container(key="application_manual_filter_context"):
-                filter_text_col, filter_clear_col = st.columns([5, 1])
-                filter_text_col.markdown(
-                    '<div class="schedule-filter-context"><strong>表示条件で絞り込み中</strong>'
-                    '<span>選択した条件に合う応募のみ表示しています。</span></div>',
-                    unsafe_allow_html=True,
-                )
-                filter_clear_col.button(
-                    "絞り込みを解除",
-                    key="clear_manual_application_filters",
-                    on_click=_clear_application_list_filters,
-                    use_container_width=True,
-                )
         if not views:
-            st.info("条件に一致する応募企業はありません。求人確認画面で「応募する」を保存すると、ここへ自動追加されます。")
+            st.markdown(
+                '<div class="schedule-empty-state" role="status">'
+                '<div class="schedule-empty-state-icon" aria-hidden="true">i</div>'
+                '<div><strong>条件に一致する応募企業はありません</strong>'
+                '<span>表示条件を変更するか、求人確認画面で応募判断を保存してください。</span></div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
         else:
             _render_application_table(views, wbs_view)
+        _render_ended_applications(ended_views)
 
-def _wbs_period(view_mode: str, today: date) -> list[date]:
+def _oldest_overdue_milestone_date(views: list[dict], today: date) -> date | None:
+    """Return the oldest overdue date among the applications currently displayed."""
+    overdue_dates: list[date] = []
+    for view in views:
+        for milestone in view["milestones"]:
+            if not milestone.scheduled_date or not is_milestone_overdue(milestone, today):
+                continue
+            try:
+                overdue_dates.append(date.fromisoformat(milestone.scheduled_date))
+            except ValueError:
+                continue
+    return min(overdue_dates, default=None)
+
+
+def _wbs_period(
+    view_mode: str,
+    today: date,
+    offset: int = 0,
+    oldest_overdue_date: date | None = None,
+) -> list[date]:
     if view_mode == "month":
-        last_day = calendar.monthrange(today.year, today.month)[1]
-        return [date(today.year, today.month, day) for day in range(1, last_day + 1)]
-    monday = today - timedelta(days=today.weekday())
-    return [monday + timedelta(days=offset) for offset in range(7)]
+        day_count = calendar.monthrange(today.year, today.month)[1]
+    else:
+        day_count = 14 if view_mode == "two_weeks" else 7
+    default_start = today - timedelta(days=1)
+
+    # 「今日」の期間では期限超過を見落とさないよう、最も古い期限超過日まで
+    # 左端を自動で広げる。未来側は従来の表示範囲を維持する。
+    if offset == 0 and oldest_overdue_date and oldest_overdue_date < default_start:
+        period_start = oldest_overdue_date
+        period_end = default_start + timedelta(days=day_count - 1)
+        visible_day_count = (period_end - period_start).days + 1
+    else:
+        period_start = default_start + timedelta(days=offset * day_count)
+        visible_day_count = day_count
+
+    return [period_start + timedelta(days=day_offset) for day_offset in range(visible_day_count)]
 
 
 def _application_response_status(view: dict) -> str:
@@ -1310,23 +1688,52 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
                 st.session_state["schedule_dialog_application_id"] = application_id
 
     today = date.today()
-    period = _wbs_period(view_mode, today)
+    oldest_overdue_date = _oldest_overdue_milestone_date(views, today)
+    offset_key = "application_schedule_period_offset"
+    offset = int(st.session_state.get(offset_key, 0) or 0)
+    with st.container(key="application_schedule_period_control"):
+        label_col, hint_col, previous_col, today_col, next_col = st.columns([3.3, 2.2, 0.55, 0.7, 0.55])
+        if previous_col.button("←", key=f"schedule_previous_{view_mode}", help="前の期間へ"):
+            offset -= 1
+            st.session_state[offset_key] = offset
+        if today_col.button("今日", key=f"schedule_today_{view_mode}", help="現在の期間へ戻る"):
+            offset = 0
+            st.session_state[offset_key] = 0
+        if next_col.button("→", key=f"schedule_next_{view_mode}", help="次の期間へ"):
+            offset += 1
+            st.session_state[offset_key] = offset
+        period = _wbs_period(view_mode, today, offset, oldest_overdue_date)
+        label_col.markdown(
+            f'<div class="schedule-period-label">{period[0].year}年{period[0].month}月{period[0].day}日'
+            f'〜{period[-1].year}年{period[-1].month}月{period[-1].day}日</div>',
+            unsafe_allow_html=True,
+        )
+        hint_col.markdown(
+            '<div class="schedule-scroll-hint">横にスクロールして期間全体を確認できます</div>',
+            unsafe_allow_html=True,
+        )
     weekdays = "月火水木金土日"
     date_headers = "".join(
-        '<th class="wbs-day"><span class="wbs-date-head '
+        '<th class="wbs-day '
+        f'{"weekend" if day.weekday() >= 5 else ""} '
+        f'{"today-column" if day == today else ""}">'
+        '<span class="wbs-date-head '
         f'{"today" if day == today else ""}">{day.month}/{day.day} {weekdays[day.weekday()]}</span></th>'
         for day in period
     )
     rows = []
     for view in views:
         app, job = view["application"], view["job"]
+        response_status = _application_response_status(view)
+        response_class = {
+            "対応が必要": "attention",
+            "近日予定": "upcoming",
+        }.get(response_status, "normal")
         next_m = view["next_milestone"]
-        if next_m:
-            next_text = f'{_display_milestone_date(next_m.scheduled_date)}<br>{escape(_milestone_title(next_m))}'
-        else:
-            next_text = "未登録"
+        next_text = escape(_milestone_title(next_m)) if next_m else "次の予定を登録"
 
-        events_by_date: dict[date, list[str]] = {}
+        events_by_date: dict[date, list[dict[str, str]]] = {}
+        rendered_events: set[tuple[date, str, str]] = set()
         for milestone in view["milestones"]:
             if not milestone.scheduled_date:
                 continue
@@ -1340,45 +1747,107 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
                 css_class = "overdue"
             else:
                 css_class = ""
+            visual_category = _milestone_visual_category(milestone)
             title = escape(_milestone_title(milestone))
-            planned_html = f'<span class="wbs-event {css_class}">{title}<small>予定</small></span>'
-            events_by_date.setdefault(scheduled, []).append(planned_html)
             if milestone.status == "completed" and milestone.completed_at:
                 try:
                     completed_date = datetime.fromisoformat(milestone.completed_at).date()
                 except ValueError:
                     completed_date = scheduled
-                actual_html = f'<span class="wbs-event done">{title}<small>実績</small></span>'
-                events_by_date.setdefault(completed_date, []).append(actual_html)
-        timeline_cells = "".join(
-            f'<td class="wbs-day">{"".join(events_by_date.get(day, [])) or "<span class=\"wbs-empty-day\"></span>"}</td>'
-            for day in period
-        )
+                event_key = (completed_date, title, "completed")
+                if event_key not in rendered_events:
+                    events_by_date.setdefault(completed_date, []).append({
+                        "title": title, "category": visual_category, "state": "done", "label": "実績",
+                    })
+                    rendered_events.add(event_key)
+            else:
+                event_key = (scheduled, title, milestone.status)
+                if event_key not in rendered_events:
+                    events_by_date.setdefault(scheduled, []).append({
+                        "title": title, "category": visual_category, "state": css_class, "label": "予定",
+                    })
+                    rendered_events.add(event_key)
+
+        timeline_cells = []
+        for day in period:
+            day_events = events_by_date.get(day, [])
+            rendered = []
+            for event in day_events[:3]:
+                state_class = event["state"]
+                if not state_class and 0 <= (day - today).days <= 2:
+                    state_class = "urgent"
+                event_class = f'{event["category"]} {state_class}'.strip()
+                accessible = escape(f'{day.month}/{day.day} {event["title"]}（{event["label"]}）')
+                if event["state"] == "done":
+                    marker = (
+                        f'<img class="timeline-state-icon" src="{TIMELINE_COMPLETE_ICON}" '
+                        'alt="完了">'
+                    )
+                elif event["state"] == "overdue":
+                    marker = (
+                        f'<img class="timeline-state-icon" src="{TIMELINE_WARNING_ICON}" '
+                        'alt="期限超過・要対応">'
+                    )
+                else:
+                    marker = f'<span class="timeline-dot {event["category"]}" aria-hidden="true"></span>'
+                rendered.append(
+                    f'<span class="wbs-event {event_class}" title="{accessible}">'
+                    f'{marker}<span class="timeline-event-label">{event["title"]}</span></span>'
+                )
+            if len(day_events) > 3:
+                rendered.append(f'<span class="wbs-more">ほか{len(day_events) - 3}件</span>')
+            events_html = "".join(rendered)
+            cell_content = events_html or '<span class="wbs-empty-day"></span>'
+            timeline_cells.append(
+                f'<td class="wbs-day {"weekend" if day.weekday() >= 5 else ""} '
+                f'{"today-column" if day == today else ""}">'
+                f'<div class="wbs-events">{cell_content}</div></td>'
+            )
 
         rows.append(
             '<tr>'
             '<td class="company-cell"><div class="schedule-company-actions">'
-            f'<a class="table-company" href="?page=job_detail&amp;job_id={app.job_id}">{escape(job.company_name)}</a>'
-            f'<a class="schedule-prep-link" target="_self" href="?page=selection_preparation&amp;application_id={app.id}">'
-            '選考準備を進める →</a></div></td>'
-            f'<td class="next-cell"><button type="button" class="next-cell-action" '
-            f'data-schedule-application="{app.id}">'
-            f'<span class="table-next">{next_text}</span></button></td>'
+            f'<a class="table-company" title="{escape(job.company_name)}" '
+            f'href="?page=job_detail&amp;job_id={app.job_id}">{escape(job.company_name)}</a></div></td>'
+            f'<td class="next-cell"><span class="table-next">{next_text}</span></td>'
             f'<td class="route-cell">{escape(app.actual_route or "未設定")}</td>'
             f'<td class="phase-cell"><span class="table-phase">{escape(app.current_phase)}</span></td>'
-            f'<td class="status-cell">{escape(_application_response_status(view))}</td>'
-            f'{timeline_cells}'
+            f'<td class="status-cell"><span class="table-status {response_class}">'
+            f'{escape("対応不要" if response_status == "通常" else response_status)}</span></td>'
+            '<td class="prep-cell"><div class="schedule-row-actions">'
+            f'<button type="button" class="schedule-row-action primary" '
+            f'data-schedule-application="{app.id}" '
+            f'aria-label="{escape(job.company_name)}の予定と選考結果を更新">予定・結果を更新</button>'
+            f'<a class="schedule-row-action" target="_self" '
+            f'href="?page=selection_preparation&amp;application_id={app.id}">選考準備</a>'
+            '</div></td>'
+            f'{"".join(timeline_cells)}'
             '</tr>'
         )
 
     st.html(
-        f'<div class="application-table-wrap"><table class="application-table {view_mode}">'
-        '<thead><tr><th class="company-cell" aria-label="会社名"></th>'
-        '<th class="next-cell" aria-label="次の予定・期限"></th><th class="route-cell" aria-label="応募経路"></th>'
-        '<th class="phase-cell" aria-label="現在フェーズ"></th><th class="status-cell" aria-label="対応状態"></th>'
-        f'{date_headers}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
-        '<div class="wbs-legend"><span><i class="legend-dot done"></i>完了（実績）</span>'
-        '<span><i class="legend-dot"></i>予定</span><span><i class="legend-dot overdue"></i>期限超過・要対応</span></div></div>'
+        '<div class="application-table-wrap" role="region" aria-label="選考スケジュール">'
+        '<div class="schedule-list-topline"><div class="wbs-legend">'
+        '<span><i class="legend-dot personal"></i>自分の準備</span>'
+        '<span><i class="legend-dot agent"></i>エージェント連絡</span>'
+        '<span><i class="legend-dot company"></i>企業・選考</span>'
+        f'<span><img class="legend-state-icon" src="{TIMELINE_COMPLETE_ICON}" alt="">完了（実績）</span>'
+        f'<span><img class="legend-state-icon" src="{TIMELINE_WARNING_ICON}" alt="">期限超過・要対応</span>'
+        '</div></div>'
+        f'<table class="application-table {view_mode}" style="--timeline-total-width:{len(period) * (128 if view_mode == "week" else 64 if view_mode == "two_weeks" else 32)}px">'
+        '<colgroup>'
+        '<col class="company-col"><col class="next-col"><col class="route-col">'
+        '<col class="phase-col"><col class="status-col"><col class="prep-col">'
+        f'<col class="timeline-col" span="{len(period)}">'
+        '</colgroup><thead>'
+        '<tr class="schedule-group-head"><th class="management-group" colspan="6">操作・管理</th>'
+        f'<th class="timeline-group" colspan="{len(period)}">確認用タイムライン</th></tr>'
+        '<tr class="schedule-column-head"><th class="company-cell">会社名</th>'
+        '<th class="next-cell">次の予定・期限</th><th class="route-cell">応募経路</th>'
+        '<th class="phase-cell">現在フェーズ</th><th class="status-cell">対応状態</th>'
+        f'<th class="prep-cell">操作</th>{date_headers}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
+        '</div>'
         '<script>'
         'document.querySelectorAll("[data-schedule-application]").forEach(function(cell){'
         'cell.addEventListener("click", function(){'
@@ -1386,6 +1855,9 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         'const trigger=Array.from(document.querySelectorAll("button")).find(function(button){'
         'return button.textContent.trim()===label;});'
         'if(trigger){trigger.click();}'
+        '});'
+        'cell.addEventListener("keydown", function(event){'
+        'if(event.key==="Enter"||event.key===" "){event.preventDefault();cell.click();}'
         '});'
         '});'
         '</script>',
@@ -1672,6 +2144,7 @@ def render_application_detail_page(
         st.error("応募情報が見つかりません。")
         return
     app, job = detail["application"], detail["job"]
+    phase_confirmation_key = f"show_phase_confirmation_{app.id}"
     pending = [m for m in detail["milestones"] if m.status == "pending"]
     next_m = min(pending, key=lambda m: m.scheduled_date or "9999-12-31", default=None)
     overdue = [m for m in pending if is_milestone_overdue(m, date.today())]
@@ -1743,15 +2216,16 @@ def render_application_detail_page(
 
     st.markdown('<div class="detail-section-title">選考予定・結果を登録する</div>', unsafe_allow_html=True)
     st.markdown('<p class="detail-section-copy">選考終了までを一つの流れとして、予定の追加・変更と結果の登録を行います。</p>', unsafe_allow_html=True)
+
     with st.container(border=True):
         upcoming_milestones = [m for m in detail["milestones"] if m.status == "pending"]
-        st.markdown('<div class="detail-subtitle">これからの予定</div>', unsafe_allow_html=True)
-        st.markdown('<p class="detail-subcopy">日付が近い予定から確認・更新できます。</p>', unsafe_allow_html=True)
+        st.markdown('<div class="detail-subtitle">次にすべきこと</div>', unsafe_allow_html=True)
+        st.markdown('<p class="detail-subcopy">次に予定されている内容を、ここで確認・更新できます。</p>', unsafe_allow_html=True)
         if not upcoming_milestones:
             if "結果待ち" in (app.current_phase or ""):
                 st.markdown('<div class="detail-empty">現在は選考結果を待っている状態です。結果が届いたら、下から登録してください。</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="detail-attention"><span class="detail-attention-mark">!</span><div><b>次の予定が登録されていません。</b><br>選考を継続する場合は、下の「次の状態を登録」から予定を追加してください。</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="detail-attention"><span class="detail-attention-mark">!</span><div><b>次の予定が登録されていません。</b><br>選考を継続する場合は、下の入力欄から次の予定を登録してください。</div></div>', unsafe_allow_html=True)
         ordered_milestones = upcoming_milestones
         for milestone in ordered_milestones:
             st.markdown(
@@ -1777,6 +2251,7 @@ def render_application_detail_page(
                 )
                 if action.button("完了にする", key=f"unified_complete_{milestone.id}", use_container_width=True):
                     complete_milestone(milestone)
+                    st.session_state[phase_confirmation_key] = True
                     _rerun_application_detail(embedded=embedded)
                 with st.expander("予定を編集"):
                     try:
@@ -1814,9 +2289,11 @@ def render_application_detail_page(
                     p1, p2 = st.columns(2)
                     if p1.button("日程を変更", key=f"unified_postpone_{milestone.id}"):
                         postpone_milestone(milestone, new_date.isoformat(), reason)
+                        st.session_state[phase_confirmation_key] = True
                         _rerun_application_detail(embedded=embedded)
                     if p2.button("中止", key=f"unified_cancel_{milestone.id}"):
                         cancel_milestone(milestone, reason)
+                        st.session_state[phase_confirmation_key] = True
                         _rerun_application_detail(embedded=embedded)
                     st.markdown("---")
                     st.caption("誤って登録した予定だけを削除してください。削除した予定は元に戻せません。")
@@ -1824,21 +2301,6 @@ def render_application_detail_page(
                     if st.button("物理削除", key=f"unified_delete_{milestone.id}", disabled=not confirm):
                         delete_milestone_data(milestone)
                         _rerun_application_detail(embedded=embedded)
-
-    st.markdown('<div class="detail-subtitle">次に進むための登録</div>', unsafe_allow_html=True)
-    st.markdown('<p class="detail-section-copy">予定や選考結果を登録すると、選考の現在地が自動で更新されます。</p>', unsafe_allow_html=True)
-    with st.expander("＋ 次の予定を登録する", expanded=False):
-        st.caption("面接・適性検査・書類提出など、次に行う予定を登録します。")
-        a, b = st.columns([1, 2])
-        kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
-        title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
-        d1, d2, d3 = st.columns(3)
-        scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
-        start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
-        end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
-        if st.button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
-            add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
-            _rerun_application_detail(embedded=embedded)
 
     with st.expander("＋ 選考結果を登録する", expanded=False):
         st.caption("結果と次回選考を登録すると、次の予定と現在フェーズへ反映されます。")
@@ -1866,25 +2328,48 @@ def render_application_detail_page(
                 next_start_value.strftime("%H:%M") if next_start_value else "",
                 next_end_value.strftime("%H:%M") if next_end_value else "",
             )
+            st.session_state[phase_confirmation_key] = True
             _rerun_application_detail(embedded=embedded)
 
-    st.markdown('<div class="detail-section-title">選考の現在地を確認する</div>', unsafe_allow_html=True)
-    st.markdown('<p class="detail-section-copy">予定・結果の登録内容から自動更新された現在地です。</p>', unsafe_allow_html=True)
-    with st.container(border=True):
-        phase_col, correction_col = st.columns([3.5, 1.5])
-        phase_col.markdown(
-            f'<span class="phase-pill">{escape(app.current_phase)}</span>',
-            unsafe_allow_html=True,
-        )
-        with correction_col.expander("実際と異なる場合は修正"):
-            phase = st.selectbox(
-                "修正後の現在地", PHASE_OPTIONS,
-                index=PHASE_OPTIONS.index(app.current_phase) if app.current_phase in PHASE_OPTIONS else 0,
+    with st.expander("＋ 次の予定を登録する", expanded=not upcoming_milestones):
+        a, b = st.columns([1, 2])
+        kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
+        title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
+        d1, d2, d3 = st.columns(3)
+        scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
+        start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
+        end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
+        if st.button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
+            add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
+            st.session_state[phase_confirmation_key] = True
+            _rerun_application_detail(embedded=embedded)
+
+    if not st.session_state.get(phase_confirmation_key, False):
+        if st.button(
+            "選考の現在地を確認・修正",
+            key=f"reveal_phase_confirmation_{app.id}",
+            use_container_width=False,
+        ):
+            st.session_state[phase_confirmation_key] = True
+            _rerun_application_detail(embedded=embedded)
+    else:
+        st.markdown('<div class="detail-section-title">選考の現在地</div>', unsafe_allow_html=True)
+        st.markdown('<p class="detail-section-copy">予定・結果の登録内容から自動更新された現在地です。</p>', unsafe_allow_html=True)
+        with st.container(border=True):
+            phase_col, correction_col = st.columns([3.5, 1.5])
+            phase_col.markdown(
+                f'<span class="phase-pill">{escape(app.current_phase)}</span>',
+                unsafe_allow_html=True,
             )
-            if st.button("現在地を修正", use_container_width=True):
-                app.current_phase = phase
-                update_application_data(app)
-                _rerun_application_detail(embedded=embedded)
+            with correction_col.expander("実際と異なる場合は修正"):
+                phase = st.selectbox(
+                    "修正後の現在地", PHASE_OPTIONS,
+                    index=PHASE_OPTIONS.index(app.current_phase) if app.current_phase in PHASE_OPTIONS else 0,
+                )
+                if st.button("現在地を修正", use_container_width=True):
+                    app.current_phase = phase
+                    update_application_data(app)
+                    _rerun_application_detail(embedded=embedded)
 
 
 @st.dialog(
@@ -1899,7 +2384,10 @@ def _render_application_detail_dialog(application_id: int, target_milestone_id: 
         <style>
         div[role="dialog"] { max-width:min(1460px, 94vw) !important; }
         div[role="dialog"] > div { max-height:92vh; }
-        div[role="dialog"] [data-testid="stDialogBody"] { padding-top:.25rem; }
+        div[role="dialog"] [data-testid="stDialogBody"] { padding-top:0; }
+        div[role="dialog"] [data-testid="stVerticalBlock"] { gap:.48rem; }
+        div[role="dialog"] [data-testid="stForm"] { padding:.65rem .8rem; }
+        div[role="dialog"] [data-testid="stExpander"] details summary { min-height:38px; }
         </style>
         """,
         unsafe_allow_html=True,
