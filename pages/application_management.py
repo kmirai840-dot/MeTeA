@@ -804,6 +804,10 @@ def _inject_css() -> None:
         .prep-actions{display:flex;justify-content:flex-end;gap:10px;margin:-4px 0 16px}.prep-action{padding:8px 14px;border:1px solid #a9c7fb;border-radius:8px;background:#fff;color:#1268f3!important;text-decoration:none!important;font-size:13px;font-weight:800}
         .prep-tabs{display:flex;gap:38px;border-bottom:1px solid #dce4ef;margin-bottom:24px}.prep-tab{padding:12px 2px;color:#53647b!important;text-decoration:none!important;font-size:14px;font-weight:800;border-bottom:3px solid transparent}
         .prep-tab.active{color:#1268f3!important;border-bottom-color:#1268f3}.prep-layout{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:24px;align-items:start}
+        [class*="st-key-selection_preparation_scope_"] { margin:0 0 24px; padding-bottom:10px; border-bottom:1px solid #dce4ef; }
+        [class*="st-key-selection_preparation_scope_"] [data-testid="stSegmentedControl"] { width:100%; }
+        [class*="st-key-selection_preparation_scope_"] [data-testid="stSegmentedControl"] > div { gap:8px; }
+        [class*="st-key-selection_preparation_scope_"] button { min-height:38px; font-weight:800; }
         .prep-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.prep-section-head h2{margin:0;font-size:18px}.prep-sort{font-size:12px;color:#687a92}
         .prep-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}.prep-card{background:#fff;border:1px solid #dbe3ef;border-radius:12px;padding:16px;min-height:250px;display:flex;flex-direction:column;box-shadow:0 3px 10px rgba(36,62,101,.035)}
         .prep-card.done{border-top:3px solid #1ca978}.prep-card.warn{border-top:3px solid #ef8f34}.prep-card-top{display:flex;justify-content:space-between;align-items:center}.prep-icon{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#1268f3;font-size:23px}
@@ -2419,10 +2423,18 @@ def render_selection_preparation_page() -> None:
     selection_type = app.current_phase.replace("調整中", "").replace("予定", "").replace("結果待ち", "") or "選考"
     items = load_preparation_items(app.id, selection_type)
     global_templates = load_global_preparation_templates()
-    active_tab = str(st.query_params.get("prep_tab", "selection"))
-    if active_tab not in {"selection", "company", "common"}:
-        active_tab = "selection"
     scope_labels = {"selection": "選考別準備", "company": "企業別準備", "common": "共通準備"}
+    requested_scope = str(st.query_params.get("prep_tab", "selection"))
+    if requested_scope not in scope_labels:
+        requested_scope = "selection"
+    tab_state_key = f"selection_preparation_scope_{app.id}"
+    if tab_state_key not in st.session_state:
+        st.session_state[tab_state_key] = scope_labels[requested_scope]
+    selected_scope_label = st.session_state[tab_state_key]
+    active_tab = next(
+        (key for key, label in scope_labels.items() if label == selected_scope_label),
+        "selection",
+    )
     if active_tab == "common":
         visible = global_templates
     elif active_tab == "selection":
@@ -2443,11 +2455,14 @@ def render_selection_preparation_page() -> None:
       <div class="prep-company">{escape(job.company_name)}　/　{escape(job.job_title or "求人名未登録")}</div></div>
       <div class="prep-meta"><div class="progress-track"><div class="progress-fill" style="width:{rate}%"></div></div>
       <b>{rate}%</b><span>{completed} / {len(visible)} 完了</span></div></div>
-      <div class="prep-actions"><a class="prep-action" href="#free-theme">＋ テーマを追加</a></div>
-      <nav class="prep-tabs">''' + ''.join(
-        f'<a class="prep-tab {"active" if key == active_tab else ""}" href="?page=selection_preparation&amp;application_id={app.id}&amp;prep_tab={key}">{label}</a>'
-        for key, label in scope_labels.items()
-      ) + '</nav>', unsafe_allow_html=True)
+      <div class="prep-actions"><a class="prep-action" href="#free-theme">＋ テーマを追加</a></div>''', unsafe_allow_html=True)
+    st.segmented_control(
+        "準備の種類",
+        options=list(scope_labels.values()),
+        key=tab_state_key,
+        label_visibility="collapsed",
+        width="stretch",
+    )
 
     if active_tab == "company":
         if st.button("共通原稿をこの企業へコピー（既存内容は上書きしない）"):
