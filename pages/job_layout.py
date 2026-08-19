@@ -5,6 +5,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from ui.design_system import apply_common_design_system
+
 
 ASSETS_DIR = (
     Path(__file__).resolve().parent.parent
@@ -38,6 +40,8 @@ def render_job_navigation(
 ) -> None:
     """求人関連画面の左ナビゲーションを表示する。"""
 
+    apply_common_design_system()
+
     logo_uri = svg_data_uri(
         "logo.svg"
     )
@@ -53,11 +57,10 @@ def render_job_navigation(
         )),
         ("application_list", "flag.svg", "③ 応募後を管理する", (
             ("application_list", "応募管理"),
-            ("milestones", "予定・マイルストーン"),
-            ("activity_history", "活動履歴"),
+            ("selection_preparation", "選考準備"),
         )),
         ("application_dashboard", "analytics.svg", "④ 活動を振り返る", (
-            ("application_dashboard", "活動分析"),
+        ("application_dashboard", "選考通過率レポート"),
         )),
     )
 
@@ -70,10 +73,10 @@ def render_job_navigation(
         effective_active_page = "job_list"
     if active_page in (
         "application_detail",
-        "selection_preparation",
-        "milestones",
         "activity_history",
     ):
+        effective_active_page = "application_list"
+    if active_page == "milestones":
         effective_active_page = "application_list"
 
 
@@ -102,10 +105,12 @@ def render_job_navigation(
             f'<div class="metea-side-children">{"".join(child_links)}</div></section>'
         )
 
-    home_icon = svg_data_uri("logo.svg")
     settings_icon = svg_data_uri("nav-settings.svg")
     help_icon = svg_data_uri("help.svg")
 
+    home_active = " metea-side-home-active" if effective_active_page == "home" else ""
+    settings_active = " metea-side-utility-active" if effective_active_page == "settings" else ""
+    help_active = " metea-side-utility-active" if effective_active_page == "help" else ""
     navigation_html = (
         '<nav class="metea-side-navigation">'
         '<div class="metea-side-logo-frame">'
@@ -113,11 +118,11 @@ def render_job_navigation(
         f'src="{logo_uri}" '
         f'alt="MeTeA">'
         '</div>'
-        f'<a class="metea-side-home" href="?page=home" target="_self"><span>ホーム</span></a>'
+        f'<a class="metea-side-home{home_active}" href="?page=home" target="_self"><span>ホーム</span></a>'
         + "".join(navigation_groups)
         + '<div class="metea-side-utilities">'
-        + f'<a href="?page=settings" target="_self"><img src="{settings_icon}" alt="">設定</a>'
-        + f'<a href="?page=help" target="_self"><img src="{help_icon}" alt="">ヘルプ</a>'
+        + f'<a class="{settings_active.strip()}" href="?page=settings" target="_self"><img src="{settings_icon}" alt="">設定</a>'
+        + f'<a class="{help_active.strip()}" href="?page=help" target="_self"><img src="{help_icon}" alt="">ヘルプ</a>'
         + '</div>'
         + '</nav>'
     )
@@ -181,7 +186,7 @@ def render_job_navigation(
             display: flex;
             align-items: center;
             text-decoration: none !important;
-            color: #24344d !important;
+            color: var(--metea-ink) !important;
         }
         .metea-side-home { min-height:40px; padding:9px 12px; margin-bottom:10px; border-radius:9px; font-size:13px; font-weight:800; }
         .metea-side-section { margin: 0 0 7px; padding:5px; border-radius:12px; }
@@ -198,6 +203,7 @@ def render_job_navigation(
         .metea-side-group-active .metea-side-parent { color:#0759df !important; }
         .metea-side-child-active { background:#eaf2ff !important; color:#0759df !important; font-weight:800; }
         .metea-side-child-active > span { background:#146cff; }
+        .metea-side-home-active,.metea-side-utility-active { background:#eaf2ff !important; color:#0759df !important; font-weight:800 !important; }
         .metea-side-utilities { margin-top:14px; padding-top:12px; border-top:1px solid #e4eaf2; }
         .metea-side-utilities a { gap:10px; min-height:36px; padding:7px 11px; border-radius:8px; font-size:12px; font-weight:700; }
 

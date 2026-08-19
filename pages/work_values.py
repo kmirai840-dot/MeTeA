@@ -27,6 +27,8 @@ from models import (
     WorkValueDetail,
     WorkValueRanking,
 )
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_save_failure, render_validation_summary
 
 
 VALUE_ICON_ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
@@ -368,20 +370,7 @@ def validate_work_values_form() -> dict[str, str]:
 def render_work_values_error_summary(errors: dict[str, str]) -> None:
     """基本情報・希望条件と同じ形式でエラー一覧を表示する。"""
 
-    if not errors:
-        return
-
-    error_items = "".join(
-        f"<li>{escape(message)}</li>"
-        for message in dict.fromkeys(errors.values())
-    )
-    st.markdown(
-        '<div class="metea-values-error-summary" role="alert">'
-        '<span class="metea-values-error-icon">!</span>'
-        '<div><strong>入力内容を確認してください</strong>'
-        f'<ul>{error_items}</ul></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_validation_summary(errors)
 
 
 def render_work_values_field_error(
@@ -392,10 +381,7 @@ def render_work_values_field_error(
 
     message = errors.get(field_key)
     if message:
-        st.markdown(
-            f'<p class="metea-values-field-error">{escape(message)}</p>',
-            unsafe_allow_html=True,
-        )
+        render_common_field_error(message)
 
 
 def collect_work_values_draft() -> dict[str, object]:
@@ -1439,10 +1425,10 @@ def show_page() -> None:
                     "入力内容を一時保存しました。"
                 )
 
-            except Exception as error:
-                st.error(
-                    "一時保存に失敗しました。"
-                    f"\n\n{error}"
+            except Exception:
+                render_save_failure(
+                    "価値観の一時保存",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
                 )
 
     with action_columns[2]:
@@ -1454,7 +1440,14 @@ def show_page() -> None:
         ):
             # 基本情報・希望条件と同様に、下書き保存後に必須確認を行う。
             draft_data = collect_work_values_draft()
-            save_work_values_draft(draft_data)
+            try:
+                save_work_values_draft(draft_data)
+            except Exception:
+                render_save_failure(
+                    "価値観",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
+                )
+                return
 
             validation_errors = validate_work_values_form()
             st.session_state[WORK_VALUES_ERRORS_KEY] = validation_errors
@@ -1535,15 +1528,24 @@ def show_page() -> None:
                     )
                 )
 
-            save_errors = save_work_values_data(
-                rankings=rankings,
-                details=details,
-                work_style_answers=work_style_answers,
-            )
+            try:
+                save_errors = save_work_values_data(
+                    rankings=rankings,
+                    details=details,
+                    work_style_answers=work_style_answers,
+                )
+            except Exception:
+                render_save_failure(
+                    "価値観",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
+                )
+                return
 
             if save_errors:
-                for error in save_errors:
-                    st.error(error)
+                render_save_failure(
+                    "価値観",
+                    recovery="入力内容を確認して、もう一度「保存して次へ」を押してください。",
+                )
 
             else:
                 st.session_state[WORK_VALUES_ERRORS_KEY] = {}

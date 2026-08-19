@@ -1,7 +1,6 @@
 """基本情報画面の表示と入力チェックを担当するモジュール。"""
 
 from datetime import date
-from html import escape
 import streamlit as st
 
 from data.master_data import GENDER_LABELS, PREFECTURES
@@ -20,6 +19,8 @@ from services.station_search_service import (
     StationSearchError,
     search_station_candidates,
 )
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_save_failure, render_validation_summary
 
 SAVED_DATA_KEY = "basic_info"
 ERRORS_KEY = "basic_info_errors"
@@ -262,20 +263,7 @@ def render_error_summary(
 ) -> None:
     """ページ上部にエラーをまとめて表示する。"""
 
-    if not errors:
-        return
-
-    error_items = "".join(
-        f"<li>{escape(message)}</li>"
-        for message in dict.fromkeys(errors.values())
-    )
-    st.markdown(
-        '<div class="metea-basic-error-summary" role="alert">'
-        '<span class="metea-basic-error-icon">!</span>'
-        '<div><strong>入力内容を確認してください</strong>'
-        f'<ul>{error_items}</ul></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_validation_summary(errors)
 
 
 def render_error_field_styles(errors: dict[str, str]) -> None:
@@ -332,10 +320,7 @@ def render_field_error(
     message = errors.get(error_key)
 
     if message:
-        st.markdown(
-            f'<p class="metea-basic-field-error">{escape(message)}</p>',
-            unsafe_allow_html=True,
-        )
+        render_common_field_error(message)
 
 
 def format_station_candidate(
@@ -951,10 +936,9 @@ def render_basic_info_page() -> None:
     try:
         save_basic_info(basic_info)
     except Exception:
-        st.error(
-            "基本情報を保存できませんでした。"
-            "入力内容は下書きとして保存されています。"
-            "時間をおいて、もう一度「次へ」を押してください。"
+        render_save_failure(
+            "基本情報",
+            recovery="入力内容は下書きとして保持されています。時間をおいて、もう一度「次へ」を押してください。",
         )
         return
 

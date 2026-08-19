@@ -19,6 +19,8 @@ from services.job_hunting_axis_service import (
     save_job_hunting_axis_data,
     save_job_hunting_axis_draft,
 )
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_save_failure, render_validation_summary
 
 
 AXES_STATE_KEY = "job_hunting_axes"
@@ -308,18 +310,7 @@ def render_axis_error_summary() -> None:
     """共通形式で画面上部へエラー一覧を表示する。"""
 
     errors = st.session_state.get(PAGE_ERRORS_KEY, [])
-    if not errors:
-        return
-    items = "".join(
-        f"<li>{escape(message)}</li>"
-        for message in dict.fromkeys(errors)
-    )
-    st.markdown(
-        '<div class="metea-axis-error-summary" role="alert">'
-        '<span>!</span><div><strong>入力内容を確認してください</strong>'
-        f'<ul>{items}</ul></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_validation_summary(errors)
 
 
 def render_axis_field_error(field_key: str) -> None:
@@ -327,10 +318,7 @@ def render_axis_field_error(field_key: str) -> None:
 
     message = st.session_state.get(FIELD_ERRORS_KEY, {}).get(field_key)
     if message:
-        st.markdown(
-            f'<p class="metea-axis-field-error">{escape(message)}</p>',
-            unsafe_allow_html=True,
-        )
+        render_common_field_error(message)
 
 
 def set_axis_form_errors(
@@ -925,10 +913,10 @@ def render_job_hunting_axis_page() -> None:
                     "入力内容を一時保存しました。"
                 )
 
-            except Exception as error:
-                st.error(
-                    "一時保存に失敗しました。"
-                    f"\n\n{error}"
+            except Exception:
+                render_save_failure(
+                    "就活の軸の一時保存",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
                 )
 
     with action_columns[2]:
@@ -957,10 +945,10 @@ def render_job_hunting_axis_page() -> None:
                     st.query_params["page"] = "career"
                     st.rerun()
 
-            except Exception as error:
-                st.error(
-                    "保存に失敗しました。"
-                    f"\n\n{error}"
+            except Exception:
+                render_save_failure(
+                    "就活の軸",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「この内容で確定して次へ」を押してください。",
                 )
 
     message = st.session_state.pop(

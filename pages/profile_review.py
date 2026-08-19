@@ -401,8 +401,6 @@ def _render_basic() -> None:
     ]
     completion = 0 if not info else round(sum(bool(value) for value in required_values) / len(required_values) * 100)
     name = f"{info.family_name} {info.given_name}" if info else "未登録"
-    location = f"{info.prefecture}{info.municipality}" if info else "未登録"
-    station = info.nearest_station if info else "未登録"
     profile_values = [name != "未登録", info.gender, info.birth_date] if info else []
     location_values = [info.prefecture, info.municipality, info.nearest_station] if info else []
     profile_done = sum(bool(value) for value in profile_values)
@@ -434,8 +432,7 @@ def _render_basic() -> None:
     )
     if not info:
         st.markdown('<div class="metea-empty">基本情報はまだ登録されていません。<br><a href="?page=basic_info">基本情報を入力する</a></div>', unsafe_allow_html=True); return
-    card = "profile"
-    if True:
+    if info:
         gender_label = GENDER_LABELS.get(info.gender, info.gender)
         statuses = _status_counts()
         status_labels = {

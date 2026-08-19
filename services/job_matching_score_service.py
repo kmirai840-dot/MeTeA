@@ -9,7 +9,6 @@ from services.job_matching_rule_service import (
     HOPE_CONDITION_GROUP_WEIGHTS,
     MatchItemResult,
     calculate_grouped_match_rate,
-    calculate_overall_score,
     calculate_weighted_match_rate,
 )
 

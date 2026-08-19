@@ -1,8 +1,6 @@
 """希望条件画面の表示を担当するモジュール。"""
 
 from datetime import date
-from html import escape
-
 import streamlit as st
 
 from data.master_data import (
@@ -27,6 +25,8 @@ from services.hope_condition_service import (
     save_hope_conditions_data,
     save_hope_conditions_draft,
 )
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_save_failure, render_validation_summary
 
 
 DRAFT_MESSAGE_KEY = "hope_conditions_draft_message"
@@ -351,20 +351,7 @@ def validate_hope_conditions() -> dict[str, str]:
 def render_hope_error_summary(errors: dict[str, str]) -> None:
     """ページ上部に希望条件のエラーをまとめて表示する。"""
 
-    if not errors:
-        return
-
-    error_items = "".join(
-        f"<li>{escape(message)}</li>"
-        for message in dict.fromkeys(errors.values())
-    )
-    st.markdown(
-        '<div class="metea-hope-error-summary" role="alert">'
-        '<span class="metea-hope-error-icon">!</span>'
-        '<div><strong>入力内容を確認してください</strong>'
-        f'<ul>{error_items}</ul></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_validation_summary(errors)
 
 
 def render_hope_error_field_styles(errors: dict[str, str]) -> None:
@@ -404,10 +391,7 @@ def render_hope_field_error(errors: dict[str, str], field_key: str) -> None:
 
     message = errors.get(field_key)
     if message:
-        st.markdown(
-            f'<p class="metea-hope-field-error">{escape(message)}</p>',
-            unsafe_allow_html=True,
-        )
+        render_common_field_error(message)
 
 
 def collect_hope_conditions_draft() -> dict[str, object]:
@@ -1914,10 +1898,10 @@ def render_hope_conditions_page() -> None:
 
                 st.toast("入力内容を一時保存しました。")
 
-            except Exception as error:
-                st.error(
-                    "一時保存に失敗しました。"
-                    f"\n\n{error}"
+            except Exception:
+                render_save_failure(
+                    "希望条件の一時保存",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
                 )
 
     with action_columns[2]:
@@ -1955,10 +1939,10 @@ def render_hope_conditions_page() -> None:
                 st.query_params["page"] = "work_values"
                 st.rerun()
 
-            except Exception as error:
-                st.error(
-                    "保存に失敗しました。"
-                    f"\n\n{error}"
+            except Exception:
+                render_save_failure(
+                    "希望条件",
+                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
                 )
 
     st.caption(

@@ -4,6 +4,8 @@ from html import escape
 
 import streamlit as st
 
+from ui.design_system import apply_common_design_system
+
 
 SELF_DISCOVERY_STEPS = (
     ("基本情報", "あなたについて"),
@@ -55,34 +57,15 @@ def apply_self_discovery_theme(
 ) -> None:
     """TOP画面を基準にした共通スタイルを現在の画面へ適用する。"""
 
+    apply_common_design_system()
+
     st.markdown(
         """
         <style>
-        :root {
-            --metea-ink: #071a36;
-            --metea-muted: #66758c;
-            --metea-blue: #146cff;
-            --metea-blue-dark: #0759df;
-            --metea-page: #f5f8fc;
-            --metea-panel: #ffffff;
-            --metea-line: #dce5f2;
-            --metea-soft-blue: #eef5ff;
-            --metea-shadow: 0 14px 36px rgba(31, 65, 114, 0.08);
-        }
-
         .stApp,
         [data-testid="stAppViewContainer"],
         [data-testid="stMain"] {
             background: var(--metea-page);
-        }
-
-        .stApp,
-        .stApp button,
-        .stApp input,
-        .stApp textarea,
-        .stApp select {
-            font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN",
-                "Noto Sans JP", sans-serif;
         }
 
         [data-testid="stMainBlockContainer"],

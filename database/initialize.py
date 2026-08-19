@@ -304,6 +304,13 @@ def initialize_database() -> None:
                 ADD COLUMN selection_result TEXT NOT NULL DEFAULT ''
                 """
             )
+        if "selection_stage" not in phase_history_columns:
+            connection.execute(
+                """
+                ALTER TABLE application_phase_history
+                ADD COLUMN selection_stage TEXT NOT NULL DEFAULT ''
+                """
+            )
 
         connection.commit()
 

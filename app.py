@@ -11,46 +11,8 @@ from database.initialize import initialize_database
 from database.repositories.home_activity_repository import get_home_activities
 from services.application_management_service import load_application_views, operational_summary
 from services.current_user_service import get_current_user_id
-from pages.basic_info import render_basic_info_page
-from pages.hope_conditions import render_hope_conditions_page
-
-from pages.job_hunting_axis import (
-    render_job_hunting_axis_page,
-)
-
-from pages.work_values import (
-    show_page as render_work_values_page,
-)
-
-from pages.career import (
-    show_page as render_career_page,
-)
-from pages.profile_review import show_page as render_profile_review_page
-from pages.self_discovery_hub import show_page as render_self_discovery_hub_page
 from pages.job_layout import render_job_navigation
-
-from pages.job_registration import (
-    show_page as render_job_registration_page,
-)
-
-from pages.job_list import (
-    show_page as render_job_list_page,
-)
-
-from pages.application_management import (
-    render_application_dashboard_page,
-    render_application_detail_page,
-    render_application_list_page,
-    render_selection_preparation_page,
-)
-
-from pages.job_detail import (
-    show_page as render_job_detail_page,
-)
-
-from pages.job_comparison import (
-    show_page as render_job_comparison_page,
-)
+from ui.design_system import apply_common_design_system
 
 # ========================================
 # 基本設定
@@ -225,6 +187,7 @@ elif current_page == "help":
     st.stop()
 
 elif current_page == "logout":
+    render_job_navigation("logout")
     st.title("ログアウト")
 
     st.write(
@@ -240,6 +203,10 @@ elif current_page == "logout":
         st.rerun()
 
     st.stop()
+
+
+# TOP画面も、内部画面と同じフォント・色・カード基準を参照する。
+apply_common_design_system()
 
 
 # ========================================
@@ -589,12 +556,12 @@ activity_items_html = render_activity_items()
 page = """
 <style>
   :root {
-    --ink: #071a36;
-    --muted: #53627a;
-    --blue: #146cff;
-    --line: #e4e9f1;
-    --panel: #ffffff;
-    --page: #fbfcfe;
+    --ink: var(--metea-ink);
+    --muted: var(--metea-muted);
+    --blue: var(--metea-primary);
+    --line: var(--metea-line);
+    --panel: var(--metea-panel);
+    --page: var(--metea-page);
   }
 
   header[data-testid="stHeader"], #MainMenu, footer {
@@ -1147,7 +1114,7 @@ page = """
       <article class="metea-panel metea-info-panel">
         <div class="metea-panel-head">
           <h2>期限が近いタスク</h2>
-          <a href="?page=milestones">すべてのタスクを見る</a>
+          <a href="?page=application_list&amp;focus=milestones">すべてのタスクを見る</a>
         </div>
 
         __TASK_ITEMS_HTML__

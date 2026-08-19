@@ -7,11 +7,14 @@ from datetime import (
     datetime,
     time,
 )
+from html import escape
 from pathlib import Path
 
 import streamlit as st
 
 from pages.job_layout import render_job_navigation
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_validation_summary
 
 from models import Job
 
@@ -41,6 +44,8 @@ from services.job_service import (
     update_job_data,
 )
 from services.current_user_service import get_current_user_id
+from services.job_evaluation_service import load_job_application_decisions
+from database.repositories.application_repository import get_applications
 from database.repositories.draft_repository import (
     delete_draft,
     get_draft,
@@ -62,6 +67,7 @@ JOB_COMPLETE_NOTE_KEY = "job_complete_note"
 JOB_COMPLETE_JOB_ID_KEY = "job_complete_job_id"
 JOB_DUPLICATE_ID_KEY = "job_duplicate_id"
 JOB_DUPLICATE_TYPE_KEY = "job_duplicate_type"
+SAME_COMPANY_OTHER_JOB = "same_company_other_job"
 JOB_FORM_ERRORS_KEY = "job_form_validation_errors"
 JOB_FORM_GENERAL_ERRORS_KEY = "job_form_general_validation_errors"
 JOB_SCROLL_TO_ERRORS_KEY = "job_form_scroll_to_errors"
@@ -268,10 +274,10 @@ def render_required_field_error(field_name: str) -> None:
     if not message:
         return
     st.markdown(
-        f'<span class="job-field-error-marker"></span>'
-        f'<div class="job-field-error-message">{message}</div>',
+        '<span class="job-field-error-marker"></span>',
         unsafe_allow_html=True,
     )
+    render_common_field_error(message)
 
 
 def render_job_field_error_styles(errors: dict[str, str]) -> None:
@@ -3145,16 +3151,7 @@ def render_job_form() -> None:
         *general_validation_errors,
     ]
     if all_validation_messages:
-        error_items = "".join(
-            f"<li>{message}</li>"
-            for message in all_validation_messages
-        )
-        st.markdown(
-            '<div class="job-validation-summary"><span>!</span><div>'
-            '<strong>入力内容を確認してください</strong>'
-            f'<ul>{error_items}</ul></div></div>',
-            unsafe_allow_html=True,
-        )
+        render_validation_summary(all_validation_messages)
 
         if st.session_state.pop(JOB_SCROLL_TO_ERRORS_KEY, False):
             st.components.v1.html(
@@ -3162,7 +3159,7 @@ def render_job_form() -> None:
                 <script>
                     window.setTimeout(() => {
                         const summary = window.parent.document
-                            .querySelector('.job-validation-summary');
+                            .querySelector('.metea-error-summary');
                         if (summary) {
                             summary.scrollIntoView({
                                 behavior: 'smooth',
@@ -4721,6 +4718,22 @@ def render_job_confirmation() -> None:
                 return
 
             if duplicate_type == DUPLICATE_NONE:
+                same_company_job = next(
+                    (
+                        (saved_job_id, saved_job)
+                        for saved_job_id, saved_job in load_jobs()
+                        if saved_job.company_name.strip().casefold()
+                        == job.company_name.strip().casefold()
+                    ),
+                    None,
+                )
+                if same_company_job is not None:
+                    st.session_state[JOB_PENDING_DATA_KEY] = job
+                    st.session_state[JOB_DUPLICATE_ID_KEY] = same_company_job[0]
+                    st.session_state[JOB_DUPLICATE_TYPE_KEY] = SAME_COMPANY_OTHER_JOB
+                    st.session_state[JOB_FORM_STEP_KEY] = "duplicate"
+                    st.rerun()
+
                 job_id, create_errors = (
                     create_job_data(job)
                 )
@@ -4790,29 +4803,11 @@ def render_job_confirmation() -> None:
                     )
                     return
 
-                source_errors = add_job_source_data(
-                    existing_job_id,
-                    job,
-                )
-
-                if source_errors:
-                    for error in source_errors:
-                        st.error(error)
-
-                    return
-
-                move_to_job_completion(
-                    message=(
-                        "登録済みの求人へ、"
-                        "新しい紹介経路を追加しました。"
-                    ),
-                    job_id=existing_job_id,
-                    note=(
-                        "二重応募を避けるため、"
-                        "応募前に紹介元のエージェント等へ"
-                        "応募経路を確認してください。"
-                    ),
-                )
+                st.session_state[JOB_PENDING_DATA_KEY] = job
+                st.session_state[JOB_DUPLICATE_ID_KEY] = existing_job_id
+                st.session_state[JOB_DUPLICATE_TYPE_KEY] = DUPLICATE_DIFFERENT_SOURCE
+                st.session_state[JOB_FORM_STEP_KEY] = "duplicate"
+                st.rerun()
 
 
 def move_to_job_completion(
@@ -4994,6 +4989,8 @@ def render_duplicate_confirmation() -> None:
         not in (
             DUPLICATE_EXACT,
             DUPLICATE_POSSIBLE,
+            DUPLICATE_DIFFERENT_SOURCE,
+            SAME_COMPANY_OTHER_JOB,
         )
         or pending_job is None
         or existing_job_id is None
@@ -5036,7 +5033,12 @@ def render_duplicate_confirmation() -> None:
         )
         return
 
-    if duplicate_type == DUPLICATE_POSSIBLE:
+    if duplicate_type == SAME_COMPANY_OTHER_JOB:
+        st.warning(
+            "同じ会社に登録済みの別求人があります。複数ポジションへの応募状況を確認してから登録してください。"
+        )
+        st.markdown("### 同じ会社の登録済み求人")
+    elif duplicate_type == DUPLICATE_POSSIBLE:
         st.warning(
             "同じ求人の可能性がある求人が見つかりました。"
             "内容を確認して、同じ求人かどうか判断してください。"
@@ -5052,26 +5054,63 @@ def render_duplicate_confirmation() -> None:
 
         st.markdown("### 登録済みの求人")
 
-    with st.container(border=True):
-        st.markdown(
-            f"**{existing_job.company_name}**"
-        )
+    related_jobs = [(existing_job_id, existing_job)]
+    if duplicate_type == SAME_COMPANY_OTHER_JOB:
+        related_jobs = [
+            (job_id, job)
+            for job_id, job in load_jobs()
+            if job.company_name.strip().casefold()
+            == pending_job.company_name.strip().casefold()
+        ]
+    related_job_ids = {job_id for job_id, _ in related_jobs}
+    related_job_names = {
+        job_id: (job.job_title or job.occupation or "求人名未入力")
+        for job_id, job in related_jobs
+    }
+    for related_job_id, related_job in related_jobs:
+        with st.container(border=True):
+            st.markdown(f"**{escape(related_job.company_name)}**")
+            st.write(related_job_names[related_job_id])
+            st.caption(
+                f"紹介経路：{related_job.source_type or '未設定'}／"
+                f"{related_job.source_name or '未設定'}"
+            )
+            st.caption(f"求人ID：{related_job_id}")
 
-        st.write(
-            existing_job.job_title
-            or existing_job.occupation
-            or "求人名未入力"
+    applications = [
+        item for item in get_applications(get_current_user_id(), include_closed=True)
+        if item.job_id in related_job_ids
+    ]
+    decisions = load_job_application_decisions()
+    related_decisions = [
+        (job_id, decisions[job_id])
+        for job_id in related_job_ids
+        if job_id in decisions and decisions[job_id].decision_status
+    ]
+    st.markdown("### 過去の応募・検討状況")
+    if applications:
+        for application in applications:
+            result_text = application.selection_result or "未設定"
+            job_label = related_job_names.get(application.job_id, "求人名未入力")
+            st.markdown(
+                f"- 求人：**{escape(job_label)}**　"
+                f"応募経路：**{escape(str(application.actual_route or '未設定'))}**　"
+                f"応募日：**{escape(str(application.application_date or '未登録'))}**　"
+                f"結果：**{escape(result_text)}**　現在地：**{escape(application.current_phase or '未設定')}**"
+            )
+        st.error(
+            f"今回の紹介経路は「{pending_job.source_name or pending_job.source_type or '未設定'}」です。"
+            "二重応募・再応募を避けるため、登録後に応募する前に紹介元へ確認してください。"
         )
-
-        st.caption(
-            f"紹介経路："
-            f"{existing_job.source_type}／"
-            f"{existing_job.source_name}"
-        )
-
-        st.caption(
-            f"求人ID：{existing_job_id}"
-        )
+    elif related_decisions:
+        for decision_job_id, decision in related_decisions:
+            st.info(
+                f"「{related_job_names.get(decision_job_id, '求人名未入力')}」の過去の応募判断は"
+                f"「{decision.decision_status}」です。実際の応募履歴はありません。"
+                "今回あらためて検討する求人か確認してください。"
+            )
+    else:
+        st.info("この求人に紐づく過去の応募履歴はありません。")
 
     differences = compare_jobs(
         existing_job,
@@ -5088,23 +5127,33 @@ def render_duplicate_confirmation() -> None:
             "この画面から既存求人を上書きすることはありません。"
         )
 
-        comparison_data = [
-            {
-                "項目": label,
-                "登録済み情報": old_value,
-                "今回の入力": new_value,
-            }
-            for (
-                label,
-                old_value,
-                new_value,
-            ) in differences
-        ]
-
-        st.dataframe(
-            comparison_data,
-            use_container_width=True,
-            hide_index=True,
+        comparison_rows = "".join(
+            "<tr>"
+            f"<th scope='row'>{escape(str(label))}</th>"
+            f"<td>{escape(str(old_value or '未登録'))}</td>"
+            f"<td>{escape(str(new_value or '未登録'))}</td>"
+            "</tr>"
+            for label, old_value, new_value in differences
+        )
+        st.markdown(
+            """
+            <style>
+            .job-difference-wrap{width:100%;overflow:hidden;border:1px solid #dce3ed;border-radius:10px;background:#fff}
+            .job-difference-table{width:100%;table-layout:fixed;border-collapse:collapse;color:#263a58;font-size:12px;line-height:1.65}
+            .job-difference-table col:first-child{width:20%}.job-difference-table col:nth-child(2),.job-difference-table col:nth-child(3){width:40%}
+            .job-difference-table th,.job-difference-table td{padding:10px 12px;border-right:1px solid #e3e8f0;border-bottom:1px solid #e3e8f0;vertical-align:top;text-align:left;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+            .job-difference-table thead th{background:#f7f9fc;color:#607087;font-weight:800}
+            .job-difference-table tbody th{background:#fbfcfe;color:#40536d;font-weight:750}
+            .job-difference-table tr>*:last-child{border-right:0}.job-difference-table tbody tr:last-child>*{border-bottom:0}
+            @media(max-width:700px){.job-difference-table{font-size:11px}.job-difference-table th,.job-difference-table td{padding:8px}.job-difference-table col:first-child{width:24%}.job-difference-table col:nth-child(2),.job-difference-table col:nth-child(3){width:38%}}
+            </style>
+            <div class="job-difference-wrap"><table class="job-difference-table">
+              <colgroup><col><col><col></colgroup>
+              <thead><tr><th>項目</th><th>登録済み情報</th><th>今回の入力</th></tr></thead>
+              <tbody>"""
+            + comparison_rows
+            + "</tbody></table></div>",
+            unsafe_allow_html=True,
         )
 
     else:
@@ -5112,7 +5161,7 @@ def render_duplicate_confirmation() -> None:
             "登録済み情報と今回の入力内容は同じです。"
         )
 
-    if duplicate_type == DUPLICATE_POSSIBLE:
+    if duplicate_type in {DUPLICATE_POSSIBLE, DUPLICATE_DIFFERENT_SOURCE}:
         st.markdown("### この求人をどう登録しますか？")
 
         st.caption(
@@ -5170,41 +5219,70 @@ def render_duplicate_confirmation() -> None:
                 )
 
         with new_job_col:
-            if st.button(
-                "別の求人として登録する",
-                key="possible_register_as_new",
-                use_container_width=True,
-            ):
-                job_id, create_errors = create_job_data(
-                    pending_job
-                )
+            if duplicate_type == DUPLICATE_POSSIBLE:
+                if st.button(
+                    "別の求人として登録する",
+                    key="possible_register_as_new",
+                    use_container_width=True,
+                ):
+                    job_id, create_errors = create_job_data(
+                        pending_job
+                    )
 
-                if create_errors:
-                    for error in create_errors:
-                        st.error(error)
+                    if create_errors:
+                        for error in create_errors:
+                            st.error(error)
 
-                    return
+                        return
 
-                st.session_state[
-                    JOB_PENDING_DATA_KEY
-                ] = None
+                    st.session_state[
+                        JOB_PENDING_DATA_KEY
+                    ] = None
 
-                st.session_state[
-                    JOB_CONFIRM_DATA_KEY
-                ] = None
+                    st.session_state[
+                        JOB_CONFIRM_DATA_KEY
+                    ] = None
 
-                st.session_state[
-                    JOB_DUPLICATE_ID_KEY
-                ] = None
+                    st.session_state[
+                        JOB_DUPLICATE_ID_KEY
+                    ] = None
 
-                st.session_state[
-                    JOB_DUPLICATE_TYPE_KEY
-                ] = None
+                    st.session_state[
+                        JOB_DUPLICATE_TYPE_KEY
+                    ] = None
 
-                move_to_job_completion_after_ai_evaluation(
-                    message="別の求人として保存しました。",
-                    job_id=job_id,
-                )
+                    move_to_job_completion_after_ai_evaluation(
+                        message="別の求人として保存しました。",
+                        job_id=job_id,
+                    )
+            else:
+                st.caption("同一求人のため、求人本体を重複登録せず紹介経路だけを追加します。")
+
+    elif duplicate_type == SAME_COMPANY_OTHER_JOB:
+        st.markdown("### 今回の求人")
+        st.write(pending_job.job_title or pending_job.occupation or "求人名未入力")
+        st.caption(
+            f"紹介経路：{pending_job.source_name or pending_job.source_type or '未設定'}"
+        )
+        if st.button(
+            "別求人として登録する",
+            key="same_company_register_new_job",
+            type="primary",
+            use_container_width=True,
+        ):
+            job_id, create_errors = create_job_data(pending_job)
+            if create_errors:
+                for error in create_errors:
+                    st.error(error)
+                return
+            st.session_state[JOB_PENDING_DATA_KEY] = None
+            st.session_state[JOB_CONFIRM_DATA_KEY] = None
+            st.session_state[JOB_DUPLICATE_ID_KEY] = None
+            st.session_state[JOB_DUPLICATE_TYPE_KEY] = None
+            move_to_job_completion_after_ai_evaluation(
+                message="同じ会社の別求人として保存しました。",
+                job_id=job_id,
+            )
 
     detail_col, back_col = st.columns(2)
 

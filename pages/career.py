@@ -22,6 +22,8 @@ from services.career_document_service import (
     extract_text_from_pdf,
     parse_career_document,
 )
+from ui.design_system import render_field_error as render_common_field_error
+from ui.design_system import render_save_failure, render_validation_summary
 
 
 PAGE_TITLE = "職務経歴"
@@ -60,6 +62,21 @@ CAREER_SCROLL_TO_FORM_KEY = (
 CAREER_COMPLETE_KEY = "career_complete"
 CAREER_REVIEW_CONFIRMED_KEY = "career_review_confirmed"
 CAREER_ACTIVE_ERRORS_KEY = "career_active_errors"
+
+
+def save_career_with_feedback(
+    career_items: list[tuple[Career, list[CareerHistory]]],
+) -> tuple[list[str], bool]:
+    """職務経歴を保存し、システム上の失敗は共通通知で案内する。"""
+
+    try:
+        return save_career_data(career_items), False
+    except Exception:
+        render_save_failure(
+            "職務経歴・スキル",
+            recovery="入力中の内容は画面に残っています。時間をおいて、もう一度保存してください。",
+        )
+        return [], True
 
 
 def apply_career_page_styles(errors: list[str]) -> None:
@@ -436,16 +453,7 @@ def apply_career_page_styles(errors: list[str]) -> None:
 def render_career_error_summary(errors: list[str]) -> None:
     """入力エラーを画面上部へまとめて表示する。"""
 
-    if not errors:
-        return
-    from html import escape
-    items = "".join(f"<li>{escape(message)}</li>" for message in dict.fromkeys(errors))
-    st.markdown(
-        '<div class="metea-career-error-summary" role="alert"><span>!</span>'
-        '<div><strong>入力内容を確認してください</strong>'
-        f'<ul>{items}</ul></div></div>',
-        unsafe_allow_html=True,
-    )
+    render_validation_summary(errors)
 
 
 def render_career_field_error(keyword: str) -> None:
@@ -454,12 +462,7 @@ def render_career_field_error(keyword: str) -> None:
     errors = st.session_state.get(CAREER_ACTIVE_ERRORS_KEY, [])
     message = next((item for item in errors if keyword in item), None)
     if message:
-        from html import escape
-        st.markdown(
-            f'<p style="margin:-8px 0 8px;color:#dc2626;font-size:.88rem;'
-            f'font-weight:600">{escape(message)}</p>',
-            unsafe_allow_html=True,
-        )
+        render_common_field_error(message)
 
 # ==========================================
 # 初期化
@@ -1699,9 +1702,12 @@ def save_current_company() -> None:
 
     if ai_reviewing:
 
-        save_errors = save_career_data(
+        save_errors, save_failed = save_career_with_feedback(
             career_items
         )
+
+        if save_failed:
+            return
 
         if save_errors:
             st.session_state[CAREER_ERRORS_KEY] = save_errors
@@ -1747,7 +1753,11 @@ def finalize_career_registration() -> None:
     """確認済みの職務経歴をDBへ正式保存する。"""
 
     career_items = list(st.session_state.get(CAREER_ITEMS_KEY, []))
-    save_errors = save_career_data(career_items)
+    save_errors, save_failed = save_career_with_feedback(career_items)
+
+    if save_failed:
+        st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
+        return
 
     if save_errors:
         st.session_state[CAREER_ERRORS_KEY] = save_errors
@@ -1816,9 +1826,12 @@ def delete_company(
         )
     ]
 
-    save_errors = save_career_data(
+    save_errors, save_failed = save_career_with_feedback(
         updated_items
     )
+
+    if save_failed:
+        return
 
     if save_errors:
         st.session_state[

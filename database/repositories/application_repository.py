@@ -89,14 +89,15 @@ def save_application(application: ApplicationRecord) -> int:
         connection.close()
 
 
-def add_phase_history(application_id: int, phase: str, category: str, result: str = "") -> None:
+def add_phase_history(application_id: int, phase: str, category: str, result: str = "",
+                      selection_stage: str = "") -> None:
     connection = get_connection()
     try:
         connection.execute(
             """INSERT INTO application_phase_history
-               (application_id, phase_name, phase_category, selection_result)
-               VALUES (?, ?, ?, ?)""",
-            (application_id, phase, category, result),
+               (application_id, phase_name, phase_category, selection_result, selection_stage)
+               VALUES (?, ?, ?, ?, ?)""",
+            (application_id, phase, category, result, selection_stage),
         )
         connection.commit()
     finally:
@@ -181,6 +182,27 @@ def delete_milestone(milestone_id: int) -> bool:
         connection.close()
 
 
+def get_phase_history(application_id: int | None = None, user_id: int | None = None) -> list[dict]:
+    connection = get_connection()
+    try:
+        if application_id is not None:
+            rows = connection.execute(
+                "SELECT * FROM application_phase_history WHERE application_id = ? ORDER BY changed_at, id",
+                (application_id,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """SELECT h.* FROM application_phase_history h
+                   JOIN user_applications a ON a.id = h.application_id
+                   WHERE a.user_id = ? AND a.deleted_at IS NULL
+                   ORDER BY h.changed_at, h.id""",
+                (user_id,),
+            ).fetchall()
+    finally:
+        connection.close()
+    return [dict(row) for row in rows]
+
+
 def get_activities(application_id: int | None = None, user_id: int | None = None, limit: int = 100) -> list[ApplicationActivity]:
     connection = get_connection()
     try:
@@ -260,6 +282,23 @@ def save_preparation(item: ApplicationPreparation) -> int:
         connection.close()
 
 
+def delete_preparation(preparation_id: int, application_id: int) -> bool:
+    """応募に追加した準備テーマを物理削除する。"""
+    connection = get_connection()
+    try:
+        cursor = connection.execute(
+            "DELETE FROM application_preparations WHERE id = ? AND application_id = ? AND is_custom = 1",
+            (preparation_id, application_id),
+        )
+        connection.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def get_user_preparation_templates(user_id: int) -> list[UserPreparationTemplate]:
     connection = get_connection()
     try:
@@ -294,6 +333,23 @@ def save_user_preparation_template(item: UserPreparationTemplate) -> int:
             (item.user_id, item.theme_key),
         ).fetchone()
         return int(row["id"])
+    finally:
+        connection.close()
+
+
+def delete_user_preparation_template(template_id: int, user_id: int) -> bool:
+    """利用者が追加した共通準備テーマを物理削除する。"""
+    connection = get_connection()
+    try:
+        cursor = connection.execute(
+            "DELETE FROM user_preparation_templates WHERE id = ? AND user_id = ? AND is_custom = 1",
+            (template_id, user_id),
+        )
+        connection.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 

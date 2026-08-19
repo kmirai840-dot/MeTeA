@@ -1,4 +1,4 @@
-"""応募管理・就職活動ダッシュボード画面（カード内編集対応）。"""
+"""応募管理・選考通過率レポート画面（カード内編集対応）。"""
 
 import calendar
 import base64
@@ -8,26 +8,26 @@ from pathlib import Path
 
 import streamlit as st
 
-from models import ApplicationActivity, ApplicationMilestone
+from models import ApplicationMilestone
 from pages.job_layout import render_job_navigation
+from ui.design_system import render_save_failure
 from services.application_management_service import (
     MILESTONE_TYPES,
     PHASE_OPTIONS,
     RESULT_OPTIONS,
     SELECTION_STAGES,
     ApplicationManagementError,
-    add_manual_activity,
     add_custom_preparation,
     add_milestone_data,
     cancel_milestone,
     complete_milestone,
     delete_milestone_data,
+    delete_custom_preparation,
     is_milestone_overdue,
     is_milestone_upcoming,
     milestone_status_label,
     postpone_milestone,
     update_milestone_schedule,
-    dashboard_summary,
     load_application_detail,
     load_application_views,
     load_preparation_items,
@@ -40,6 +40,12 @@ from services.application_management_service import (
     register_selection_result,
     save_preparation_item,
     save_global_preparation_template,
+    selection_pass_report,
+)
+from services.selection_preparation_ai_service import (
+    SelectionPreparationAIError,
+    format_preparation_material,
+    generate_preparation_material,
 )
 
 
@@ -798,6 +804,14 @@ def _inject_css() -> None:
           width:9px;height:9px;border-radius:50%;background:#9db2d1;left:-30px;top:16px}.activity-date{color:#708097;font-size:12px}
         @media(max-width:900px){.detail-hero{grid-template-columns:1fr 1fr}.detail-hero>div{border-bottom:1px solid #e6ebf2}}
         .prep-page-title{font-size:30px!important;line-height:1.35!important;margin:14px 0 8px!important;letter-spacing:.01em!important}
+        .prep-chooser-lead{margin:4px 0 22px;color:#66768d;font-size:13px;line-height:1.7}
+        .prep-chooser-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+        .prep-chooser-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;padding:18px 20px;border:1px solid #dbe3ef;border-radius:13px;background:#fff;box-shadow:0 5px 16px rgba(31,65,115,.04);text-decoration:none!important}
+        .prep-chooser-card:hover{border-color:#9fc1ff;background:#fbfdff}
+        .prep-chooser-card b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#102846;font-size:15px}
+        .prep-chooser-card span{display:block;margin-top:6px;color:#718198;font-size:11px}
+        .prep-chooser-card i{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#eaf2ff;color:#1268f3;font-size:18px;font-style:normal;font-weight:800}
+        .prep-chooser-empty{padding:32px;border:1px dashed #ccd9ea;border-radius:13px;background:#fff;text-align:center;color:#718198;font-size:13px}
         .prep-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin:2px 0 20px;padding-bottom:20px;border-bottom:1px solid #dfe6f0}
         .prep-company{margin-top:12px;color:#1f3454;font-size:14px;font-weight:750}.prep-meta{display:flex;gap:13px;align-items:center;padding-top:14px;white-space:nowrap}
         .progress-track{width:220px;height:10px;background:#e7edf7;border-radius:99px;overflow:hidden}.progress-fill{height:100%;background:#1268f3;border-radius:99px}
@@ -826,8 +840,111 @@ def _inject_css() -> None:
         [class*="st-key-prep_edit_"] [data-testid="stPopover"] button p:after{content:'✎';font-size:14px}
         [class*="st-key-prep_card_"] textarea{min-height:150px!important;background:#f8faff}
         .prep-editor{margin-top:2px}.prep-editor-title{font-size:13px;font-weight:800;margin-bottom:8px;color:#263a58}
+        [class*="st-key-prep_theme_"]{margin-bottom:12px}
+        [class*="st-key-prep_theme_"] details{overflow:hidden;border:1px solid #dbe3ef!important;border-radius:12px!important;background:#fff!important;box-shadow:0 4px 14px rgba(36,62,101,.04)}
+        [class*="st-key-prep_theme_"] details summary{min-height:64px;padding:12px 16px!important;background:#fff!important}
+        [class*="st-key-prep_theme_"] details summary:hover{background:#f8fbff!important}
+        [class*="st-key-prep_theme_"] details summary p{color:#17304f!important;font-size:14px!important;font-weight:850!important}
+        [class*="st-key-prep_theme_"] details[open] summary{border-bottom:1px solid #e7ecf3;background:#f9fbff!important}
+        [class*="st-key-prep_theme_"] [data-testid="stExpanderDetails"]{padding:14px 16px 16px!important}
+        [class*="st-key-prep_theme_"] [data-testid="stTextArea"] textarea{min-height:210px!important;border:1px solid #dce5f1!important;border-radius:10px!important;background:#f7f9fd!important;color:#263a58!important;font-size:13px!important;line-height:1.75!important}
+        [class*="st-key-prep_theme_"] .prep-theme-description{margin:0 0 9px;color:#74849a;font-size:12px;line-height:1.6}
+        [class*="st-key-prep_theme_"] .prep-theme-updated{color:#8795a8;font-size:10px;text-align:right}
+        [class*="st-key-prep_theme_"] [class*="st-key-prep_save_"] button{min-height:39px;border-radius:8px;font-size:13px;font-weight:850}
         .prep-side{background:#fff;border:1px solid #dbe3ef;border-radius:12px;padding:18px;height:max-content;position:sticky;top:20px}.prep-side h3{font-size:16px;margin:0 0 16px}.prep-side dl{display:grid;grid-template-columns:78px 1fr;gap:12px 8px;font-size:12px}.prep-side dt{color:#738299}.prep-side dd{margin:0;font-weight:700}.prep-side-section{margin-top:18px;padding-top:18px;border-top:1px solid #e4e9f1}.prep-side-button{display:block;margin-top:12px;padding:9px;text-align:center;border:1px solid #a9c7fb;border-radius:8px;color:#1268f3!important;text-decoration:none!important;font-size:12px;font-weight:800}
+        [class*="st-key-prep_sidebar_"]{background:#fff;border:1px solid #dbe3ef;border-radius:12px;padding:18px;position:sticky;top:20px}
+        [class*="st-key-prep_sidebar_"]>div[data-testid="stVerticalBlock"]{gap:.55rem}
+        [class*="st-key-prep_sidebar_"] .prep-side-overview h3,
+        [class*="st-key-prep_sidebar_"] .prep-ai-heading h3,
+        [class*="st-key-prep_sidebar_"] .prep-reflection h3{margin:0 0 12px;color:#102846;font-size:16px;font-weight:800}
+        [class*="st-key-prep_sidebar_"] .prep-side-overview dl{display:grid;grid-template-columns:72px 1fr;gap:10px 7px;margin:0;font-size:12px}
+        [class*="st-key-prep_sidebar_"] .prep-side-overview dt{color:#738299}
+        [class*="st-key-prep_sidebar_"] .prep-side-overview dd{margin:0;color:#102846;font-weight:700}
+        [class*="st-key-prep_sidebar_"] .prep-ai-heading{margin-top:8px;padding-top:17px;border-top:1px solid #e4e9f1}
+        [class*="st-key-prep_sidebar_"] .prep-ai-heading p,
+        [class*="st-key-prep_sidebar_"] .prep-reflection p{margin:0;color:#66768d;font-size:12px;line-height:1.65}
+        [class*="st-key-prep_sidebar_"] [data-testid="stSelectbox"] label p{color:#33465f;font-size:12px;font-weight:500}
+        [class*="st-key-prep_sidebar_"] [data-baseweb="select"]>div{min-height:36px;border:0;background:#f5f7fa;border-radius:8px;font-size:12px}
+        [class*="st-key-prep_sidebar_"] [class*="st-key-prep_ai_generate_"] button{min-height:37px;border:1px solid #a9c7fb;border-radius:8px;background:#fff;color:#1268f3;font-size:12px;font-weight:800;box-shadow:none}
+        [class*="st-key-prep_sidebar_"] [class*="st-key-prep_ai_generate_"] button:hover{border-color:#1268f3;background:#f6f9ff;color:#1268f3}
+        [class*="st-key-prep_sidebar_"] .prep-reflection{margin-top:8px;padding-top:17px;border-top:1px solid #e4e9f1}
+        .analytics-page{margin-top:4px}.analytics-kicker{color:#1268f3;font-size:11px;font-weight:850;letter-spacing:.08em}.analytics-title{margin:5px 0 4px;color:#071a36;font-size:clamp(2rem,2.15vw,2.3rem);line-height:1.28;font-weight:800}.analytics-lead{margin:0;color:#66768d;font-size:13px;line-height:1.65}
+        .analytics-section{margin:22px 0 0;padding:18px;background:#fff;border:1px solid #dbe3ef;border-radius:15px;box-shadow:0 8px 24px rgba(31,65,115,.045)}
+        [class*="st-key-analytics_row_"]{gap:14px!important;margin-top:14px}[class*="st-key-analytics_row_"] .analytics-section{height:auto;margin:0}[class*="st-key-analytics_row_top"] .analytics-section{min-height:322px}[class*="st-key-analytics_row_bottom"] .analytics-section{min-height:336px}
+        [class*="st-key-analytics_row_top"] .analytics-donut-layout{grid-template-columns:116px minmax(0,1fr);gap:9px}[class*="st-key-analytics_row_top"] .analytics-donut{width:112px;height:112px}[class*="st-key-analytics_row_top"] .analytics-chart-card{min-height:250px;padding:14px}[class*="st-key-analytics_row_top"] .analytics-legend{gap:5px}[class*="st-key-analytics_row_top"] .analytics-legend-row{gap:5px;padding-bottom:5px}
+        [class*="st-key-analytics_row_bottom"] .analytics-route-grid{grid-template-columns:minmax(0,1.55fr) minmax(150px,.75fr);gap:10px}[class*="st-key-analytics_row_bottom"] .analytics-table th{padding:6px 4px;font-size:8px}[class*="st-key-analytics_row_bottom"] .analytics-table td{padding:7px 4px;font-size:9px}[class*="st-key-analytics_row_bottom"] .analytics-route-bars{padding:12px}[class*="st-key-analytics_row_bottom"] .analytics-route-bar{grid-template-columns:66px 1fr 28px;gap:6px;margin:9px 0;font-size:9px}
+        .analytics-section-head{display:flex;align-items:center;gap:9px;margin-bottom:14px;color:#0d2548;font-size:16px;font-weight:850}.analytics-index{display:grid;place-items:center;width:23px;height:23px;border:1.5px solid #1268f3;border-radius:50%;color:#1268f3;font-size:11px;font-weight:900}
+        .analytics-overview{display:grid;grid-template-columns:1fr;gap:0}.analytics-total-card{display:flex;align-items:center;justify-content:space-between;min-height:72px;padding:14px 18px;border:1px solid #cfe0f8;border-radius:13px;background:linear-gradient(145deg,#f7faff,#fff)}.analytics-total-card span{color:#526b8e;font-size:12px;font-weight:850}.analytics-total-card strong{color:#0d2548;font-size:30px;line-height:1;font-weight:900}.analytics-total-card strong small{font-size:11px;margin-left:4px}.analytics-breakdown{position:relative;margin-top:14px;padding:27px 0 0;border-top:1px solid #e8edf5}.analytics-breakdown:before{content:'全体の内訳';position:absolute;top:8px;left:2px;color:#8090a5;font-size:10px;font-weight:850}.analytics-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.analytics-metric{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:78px;padding:12px 14px;border:1px solid #dce5f2;border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}.analytics-metric.offer{border-color:#cceadf;background:linear-gradient(145deg,#fff,#f3fcf8)}
+        .analytics-metric-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#eaf2ff;color:#1268f3}.analytics-metric.offer .analytics-metric-icon{background:#e5f7ef;color:#159a70}.analytics-metric-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.analytics-metric-label{color:#52647d;font-size:11px;font-weight:800}.analytics-metric strong{color:#0d2548;font-size:24px;line-height:1;font-weight:900}.analytics-metric strong small{font-size:11px;margin-left:3px}.analytics-metric.offer strong{color:#138c71}
+        .analytics-phase-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:14px}.analytics-chart-card{min-height:250px;padding:18px;border:1px solid #e0e7f1;border-radius:13px;background:#fff}.analytics-detail-card{position:relative;background:#fbfcfe;border-color:#e6ebf3}.analytics-detail-card:before{content:'大分類の内訳';position:absolute;right:16px;top:17px;padding:3px 7px;border-radius:999px;background:#eef3f8;color:#77879c;font-size:8px;font-weight:850}.analytics-card-title{display:flex;align-items:center;gap:7px;margin-bottom:16px;color:#263a58;font-size:13px;font-weight:850}.analytics-card-title i{width:7px;height:7px;border-radius:50%;background:#9fc5f8}
+        .analytics-donut-layout{display:grid;grid-template-columns:178px minmax(0,1fr);align-items:center;gap:24px}.analytics-donut{position:relative;width:162px;height:162px;margin:auto}.analytics-donut svg{display:block;width:100%;height:100%;overflow:visible}.analytics-donut-track{fill:none;stroke:#f0f3f7;stroke-width:17}.analytics-donut-segment{fill:none;stroke-width:17;stroke-linecap:butt;transition:opacity .16s ease}.analytics-donut-center{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#8794a5;font-size:9px;font-weight:750}.analytics-donut-center strong{margin-top:3px;color:#0d2548;font-size:27px;font-weight:900}.analytics-donut-center small{font-size:10px;margin-left:2px}.analytics-legend{display:grid;gap:9px}.analytics-legend-row{display:grid;grid-template-columns:9px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding-bottom:7px;border-bottom:1px solid #f0f3f7;color:#53647b;font-size:11px}.analytics-legend-row:last-child{border-bottom:0}.analytics-legend-row i{width:8px;height:8px;border-radius:50%}.analytics-legend-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#435570}.analytics-legend-row span{font-weight:850;color:#0d2548}.analytics-legend-row em{min-width:34px;color:#8a98aa;font-size:9px;font-style:normal;text-align:right}
+        .analytics-distribution-total{display:flex;align-items:baseline;gap:6px;margin:2px 0 18px;color:#708199;font-size:10px;font-weight:750}.analytics-distribution-total strong{color:#0d2548;font-size:28px;font-weight:900}.analytics-distribution-track{display:flex;width:100%;height:18px;overflow:hidden;border:4px solid #f3f6fa;border-radius:999px;background:#edf2f7;box-shadow:inset 0 0 0 1px #e6ebf2}.analytics-distribution-segment{height:100%;min-width:3px}.analytics-distribution-label{margin:8px 0 16px;color:#8795a7;font-size:9px}.analytics-distribution-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}.analytics-distribution-row{display:grid;grid-template-columns:9px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef2f6;font-size:11px}.analytics-distribution-row i{width:8px;height:8px;border-radius:50%}.analytics-distribution-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#435570}.analytics-distribution-row span{color:#0d2548;font-weight:850}.analytics-distribution-row small{margin-left:4px;color:#8c9aab;font-size:9px}
+        .analytics-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px;margin-top:3px}.analytics-flow-step{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:83px;padding:11px;border:1px solid #e2e9f3;border-radius:12px;background:linear-gradient(160deg,#fff,#fafcff);text-align:center;color:#52647d;font-size:11px;font-weight:800}.analytics-flow-step:not(:last-child):after{content:'›';position:absolute;right:-17px;top:50%;transform:translateY(-54%);color:#b7cff5;font-size:27px;font-weight:500}.analytics-flow-step strong{margin-top:7px;color:#0d2548;font-size:24px;line-height:1;font-weight:900}.analytics-flow-step small{font-size:10px;margin-left:2px}.analytics-flow-step.final{border-color:#d9eee6;background:linear-gradient(160deg,#fff,#f7fcfa)}.analytics-flow-step.final strong{color:#398d75}.analytics-rate-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}.analytics-rate{padding:14px;border:1px solid #e2e9f3;border-radius:11px;background:linear-gradient(180deg,#fff,#fcfdff);text-align:center;color:#52647d;font-size:11px;font-weight:800}.analytics-rate strong{display:block;margin:6px 0 3px;color:#0d2548;font-size:26px;font-weight:900}.analytics-rate span{color:#6685b5;font-size:9px}.analytics-rate.primary{border-color:#d4e3fa;background:linear-gradient(160deg,#f8fbff,#fff);box-shadow:inset 0 3px 0 #a8c9f8}.analytics-rate.primary strong{color:#356da9}.analytics-chart-note{margin:-8px 0 14px;color:#8290a3;font-size:10px;line-height:1.55}.analytics-detail-list{display:grid;gap:7px}.analytics-detail-row{display:grid;grid-template-columns:9px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:30px;padding:4px 6px;border-bottom:1px solid #edf1f6;color:#52647d;font-size:11px}.analytics-detail-row:last-child{border-bottom:0}.analytics-detail-row i{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 3px rgba(157,190,231,.14)}.analytics-detail-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#263a58}.analytics-detail-row span{color:#0d2548;font-weight:850}.analytics-detail-row small{margin-left:3px;color:#8b99aa;font-size:9px}
+        .analytics-route-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.72fr);gap:16px}.analytics-table-wrap{overflow:auto;border:1px solid #e1e7f0;border-radius:11px}.analytics-table{width:100%;border-collapse:collapse;font-size:10px}.analytics-table th{padding:9px 10px;background:#f8faff;color:#60728c;text-align:center;white-space:nowrap}.analytics-table th:first-child{text-align:left}.analytics-table .analytics-group-head th{padding:7px 10px;background:#fbfcfe;color:#8996a8;font-size:8px;letter-spacing:.02em;border-bottom:1px solid #e8edf4}.analytics-table .analytics-group-head th+th{border-left:1px solid #e8edf4}.analytics-table td{padding:10px;border-top:1px solid #e8edf4;color:#263a58;text-align:center}.analytics-table td:first-child{text-align:left}.analytics-table tbody tr:hover{background:#fbfdff}.analytics-table .metric-cell{background:#fbfcff;color:#356da9;font-weight:850}.analytics-route-bars{padding:16px;border:1px solid #e1e7f0;border-radius:11px;background:#fcfdff}.analytics-route-bar{display:grid;grid-template-columns:94px 1fr 34px;align-items:center;gap:9px;margin:12px 0;color:#53647b;font-size:10px;font-weight:750}.analytics-route-bar label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.analytics-route-track{height:8px;overflow:hidden;border-radius:99px;background:#eef3f9}.analytics-route-fill{height:100%;border-radius:99px;background:#8fbaf0}.analytics-route-bar b{text-align:right;color:#435570;font-size:10px}
+        .analytics-route-list{display:grid;gap:12px}.analytics-route-card{padding:14px 16px;border:1px solid #e0e7f1;border-radius:12px;background:#fff}.analytics-route-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:11px;border-bottom:1px solid #edf1f6}.analytics-route-head b{color:#263a58;font-size:12px}.analytics-route-head span{color:#73839a;font-size:9px;font-weight:750}.analytics-route-head strong{margin-left:5px;color:#0d2548;font-size:20px}.analytics-route-head small{font-size:9px;margin-left:2px}.analytics-route-detail-label{margin:10px 0 7px;color:#8795a7;font-size:9px;font-weight:800}.analytics-route-stages{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.analytics-route-stage{position:relative;padding:9px 10px;border-radius:9px;background:#f8faff;color:#6b7c92;font-size:9px}.analytics-route-stage:not(:last-child):after{content:'›';position:absolute;right:-6px;top:50%;transform:translateY(-50%);color:#b9c9de}.analytics-route-stage b{display:block;margin-top:4px;color:#263a58;font-size:15px}.analytics-route-outcome{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px dashed #e5ebf3;color:#6b7c92;font-size:9px}.analytics-route-outcome strong{color:#356da9;font-size:15px}
+        .report-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:2px 0 14px}.report-head h1{margin:0;color:#071a36;font-size:34px}.report-head p{margin:7px 0 0;color:#66768d;font-size:13px}.report-period{padding:9px 14px;border:1px solid #d8e2ef;border-radius:9px;background:#fff;color:#415571;font-size:12px;font-weight:750}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]{justify-content:flex-end;gap:8px;border:0;margin-bottom:12px}[data-testid="stTabs"] [data-baseweb="tab"]{height:40px;padding:0 18px;border:1px solid #d7e0ed;border-radius:9px;background:#fff;color:#61728a;font-weight:800}[data-testid="stTabs"] [aria-selected="true"]{background:#1268f3!important;color:#fff!important;border-color:#1268f3!important}[data-testid="stTabs"] [data-baseweb="tab-highlight"]{display:none}
+        .report-summary{display:grid;grid-template-columns:repeat(6,1fr);margin-bottom:14px;padding:14px 8px;border:1px solid #dbe3ef;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)}.report-summary-item{display:flex;align-items:center;justify-content:center;gap:10px;min-height:62px;border-right:1px solid #e7ecf3}.report-summary-item:last-child{border:0}.report-summary-item span{color:#61728a;font-size:11px;font-weight:800}.report-summary-item strong{display:block;margin-top:4px;color:#0d2548;font-size:25px}.report-summary-item small{font-size:10px;margin-left:2px}
+        .report-card{padding:17px 19px;border:1px solid #dbe3ef;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)}.report-card h2{margin:0 0 14px;color:#132b4c;font-size:16px}.report-card-desc{margin:-6px 0 10px;color:#66758c;font-size:12px;line-height:1.6;font-weight:650}.report-flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr) 38px) minmax(0,1fr);align-items:center;gap:0}.report-flow-step{position:relative;display:grid;place-items:center;min-height:84px;border:1.5px solid var(--c);border-radius:11px;color:var(--c);font-size:11px;font-weight:800}.report-flow-step strong{display:block;margin-top:5px;color:#0d2548;font-size:23px}.report-flow-step small{font-size:10px;margin-left:2px}.report-flow-connector{display:flex;min-width:0;flex-direction:column;align-items:center;justify-content:center;color:#71849d;font-style:normal;font-weight:850;line-height:1}.report-flow-connector span{font-size:10px;white-space:nowrap}.report-flow-connector i{margin-top:5px;font-size:22px;font-style:normal;font-weight:700}
+        .report-bottom{display:grid;grid-template-columns:1.08fr .92fr;gap:14px;margin-top:14px}.report-bars{display:grid;gap:10px}.report-bar{display:grid;grid-template-columns:105px 1fr 42px 58px;align-items:center;gap:9px;color:#52647d;font-size:10px}.report-track{height:8px;border-radius:99px;background:#edf2f8;overflow:hidden}.report-fill{height:100%;border-radius:99px;background:var(--c)}.report-bar b{color:#0d2548;text-align:right}.report-bar small{color:#74859b;text-align:right}.report-insight{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;min-height:150px;border:1px solid #ded7fb;border-radius:11px;background:#fdfcff}.report-insight>div{padding:15px;text-align:center;border-right:1px solid #e4e8f0}.report-insight>div:last-child{border:0}.report-insight strong{display:block;margin-top:5px;color:#0d2548;font-size:25px}.report-insight .accent strong{color:#7651e6;font-size:38px}
+        .report-rank-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.report-rank-card{padding:15px;border:1px solid #dbe3ef;border-radius:13px;background:#fff}.report-rank-card h3{margin:0 0 10px;font-size:14px}.report-winner{margin-bottom:12px;padding:9px;border:1px solid var(--c);border-radius:8px;color:var(--c);font-size:11px;font-weight:800}.report-axis-title{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px}.report-axis-title h2{margin:0;font-size:16px}.report-table-wrap{overflow:hidden;border:1px solid #dde5ef;border-radius:10px}.report-table{width:100%;border-collapse:collapse;font-size:9px}.report-table th,.report-table td{padding:7px;border:1px solid #e3e8f0;text-align:center}.report-table th{background:#f8faff;color:#52647d}.report-table td:first-child{font-weight:800;text-align:left;background:#fff}.report-cell b{display:block;font-size:14px}.report-cell small{font-size:8px}.report-ref{display:inline-block;margin-left:3px;padding:1px 4px;border:1px solid #cbd6e5;border-radius:4px;color:#6d7d92;font-size:7px}
+        /* レポートの縦横比を維持し、余白を情報の視認性へ振り替える。 */
+        .report-head{margin-bottom:6px}.report-head h1{font-size:44px;font-weight:950;letter-spacing:-.03em}.report-head p{margin-top:3px;font-size:18px;font-weight:700}.report-period{padding:6px 10px;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]{margin-bottom:5px}[data-testid="stTabs"] [data-baseweb="tab"]{height:38px;padding:0 13px;font-size:18px;font-weight:950}
+        .report-summary{margin-bottom:7px;padding:4px 3px}.report-summary-item{min-height:50px}.report-summary-item span{font-size:17px;font-weight:950}.report-summary-item strong{margin-top:0;font-size:38px;font-weight:950}.report-summary-item small{font-size:14px;font-weight:900}
+        .report-card{padding:7px 10px}.report-card h2{margin-bottom:6px;font-size:24px;font-weight:950}.report-flow-step{min-height:70px;padding:2px;font-size:16px;font-weight:950}.report-flow-step strong{margin-top:1px;font-size:35px;font-weight:950}.report-flow-step small{font-size:14px;font-weight:900}.report-flow-connector span{font-size:12px;font-weight:950}.report-flow-connector i{margin-top:4px;font-size:25px;font-weight:900}
+        .report-bottom{gap:7px;margin-top:7px}.report-bars{gap:5px}.report-bar{grid-template-columns:140px 1fr 58px 152px;gap:6px;font-size:17px;font-weight:900}.report-track{height:11px}.report-bar b{font-size:17px;font-weight:950}.report-bar small{font-size:14px;font-weight:850}.report-insight{min-height:126px}.report-insight>div{padding:5px;font-size:18px;font-weight:900}.report-insight strong{font-size:40px;font-weight:950}.report-insight .accent strong{font-size:54px}
+        .report-rank-grid{gap:10px}.report-rank-card{min-height:210px;padding:10px 12px;box-sizing:border-box}.report-rank-card h3{margin-bottom:7px;font-size:18px;line-height:1.2;font-weight:950}.report-winner{margin-bottom:7px;padding:6px 9px;font-size:15px;line-height:1.2;font-weight:950}.report-rank-card .report-bars{gap:6px}.report-rank-card .report-bar{grid-template-columns:minmax(112px,1.25fr) minmax(62px,.7fr) 48px 78px;font-size:14px;line-height:1.18}.report-rank-card .report-bar b{font-size:14px}.report-rank-card .report-bar small{font-size:11px}.report-axis-title{margin:-17px 0 2px}.report-axis-title h2{font-size:21px;line-height:1.15;font-weight:950}.report-table{font-size:13px}.report-table th,.report-table td{height:38px;padding:2px 5px;box-sizing:border-box}.report-table th{height:31px;font-size:13px;font-weight:950}.report-table td:first-child{font-size:13px;font-weight:950}.report-cell b{font-size:18px;line-height:1;font-weight:950}.report-cell small{font-size:10px;line-height:1;font-weight:850}.report-ref{font-size:9px;font-weight:950}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tabpanel"] [data-testid="stVerticalBlock"]{gap:.45rem!important}
+        /* UIイメージに合わせた3階層のタブ表現。 */
+        [data-testid="stTabs"] [data-baseweb="tab-list"]{box-shadow:none!important}
+        [data-testid="stTabs"] [data-baseweb="tab"]{display:flex;align-items:center;justify-content:center;min-width:0;border:1px solid #d6e0ef!important;border-radius:10px!important;background:#fff!important;color:#304566!important;box-shadow:0 2px 7px rgba(31,65,115,.035);font-family:inherit!important;font-size:16px!important;font-weight:850!important;letter-spacing:0!important}
+        [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"]{border-color:#1268f3!important;background:linear-gradient(180deg,#2478f7,#1268f3)!important;color:#fff!important;box-shadow:0 5px 12px rgba(18,104,243,.18)}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(6)){display:grid!important;grid-template-columns:178px repeat(6,minmax(0,1fr));align-items:center;gap:10px!important;margin:0 0 12px!important;padding:12px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(6))::before{content:'分析する選考フェーズ';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(6)) [data-baseweb="tab"]{width:100%;height:42px!important;padding:0 8px!important}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(3)):not(:has([role="tab"]:nth-of-type(4))){display:grid!important;grid-template-columns:178px repeat(3,118px) 1fr;align-items:center;gap:0!important;margin:10px 0 7px!important;padding:10px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(3)):not(:has([role="tab"]:nth-of-type(4)))::before{content:'分析軸を切り替え';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(3)):not(:has([role="tab"]:nth-of-type(4))) [data-baseweb="tab"]{height:38px!important;padding:0 10px!important;border-radius:0!important;box-shadow:none!important}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(3)):not(:has([role="tab"]:nth-of-type(4))) [data-baseweb="tab"]:first-of-type{border-radius:9px 0 0 9px!important}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(3)):not(:has([role="tab"]:nth-of-type(4))) [data-baseweb="tab"]:nth-of-type(3){border-radius:0 9px 9px 0!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(2)):not(:has([role="tab"]:nth-of-type(3))){display:grid!important;grid-template-columns:178px repeat(2,118px) 1fr;align-items:center;gap:0!important;margin:10px 0 7px!important;padding:10px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(2)):not(:has([role="tab"]:nth-of-type(3)))::before{content:'分析軸を切り替え';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(2)):not(:has([role="tab"]:nth-of-type(3))) [data-baseweb="tab"]{height:38px!important;padding:0 10px!important;border-radius:0!important;box-shadow:none!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(2)):not(:has([role="tab"]:nth-of-type(3))) [data-baseweb="tab"]:first-of-type{border-radius:9px 0 0 9px!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"]:has([role="tab"]:nth-of-type(2)):not(:has([role="tab"]:nth-of-type(3))) [data-baseweb="tab"]:nth-of-type(2){border-radius:0 9px 9px 0!important}
+        /* Streamlit React Aria版の実DOMへ適用するタブデザイン。 */
+        [data-testid="stTabs"] [role="tablist"]{display:flex;justify-content:flex-start;align-items:center;gap:10px;margin:0 0 10px;padding:0;border:0;background:transparent;box-shadow:none}
+        [data-testid="stTabs"] [data-testid="stTab"]{display:flex;align-items:center;justify-content:center;height:44px;padding:0 18px;border:1px solid #d6e0ef!important;border-radius:10px!important;background:#fff!important;color:#304566!important;box-shadow:0 2px 7px rgba(31,65,115,.035);font-family:inherit!important;font-size:16px!important;font-weight:850!important;white-space:nowrap}
+        [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"]{border-color:#1268f3!important;background:linear-gradient(180deg,#2478f7,#1268f3)!important;color:#fff!important;box-shadow:0 5px 12px rgba(18,104,243,.18)}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(6)){display:grid!important;grid-template-columns:178px repeat(6,minmax(0,1fr));gap:10px!important;margin:0 0 6px!important;padding:9px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(6))::before{content:'分析する選考フェーズ';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(6)) > [data-testid="stTab"]{width:100%;height:40px;padding:0 8px}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(3)):not(:has(> [data-testid="stTab"]:nth-child(4))){display:grid!important;grid-template-columns:178px repeat(3,118px) 1fr;gap:0!important;margin:10px 0 7px!important;padding:10px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(3)):not(:has(> [data-testid="stTab"]:nth-child(4)))::before{content:'分析軸を切り替え';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(3)):not(:has(> [data-testid="stTab"]:nth-child(4))) > [data-testid="stTab"]{height:38px;padding:0 10px;border-radius:0!important;box-shadow:none}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(3)):not(:has(> [data-testid="stTab"]:nth-child(4))) > [data-testid="stTab"]:first-of-type{border-radius:9px 0 0 9px!important}
+        [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(3)):not(:has(> [data-testid="stTab"]:nth-child(4))) > [data-testid="stTab"]:nth-of-type(3){border-radius:0 9px 9px 0!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(2)):not(:has(> [data-testid="stTab"]:nth-child(3))){display:grid!important;grid-template-columns:178px repeat(2,118px) 1fr;gap:0!important;margin:10px 0 7px!important;padding:10px 14px!important;border:1px solid #dbe3ef!important;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(31,65,115,.045)!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(2)):not(:has(> [data-testid="stTab"]:nth-child(3)))::before{content:'分析軸を切り替え';color:#0d2548;font-size:17px;font-weight:950}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(2)):not(:has(> [data-testid="stTab"]:nth-child(3))) > [data-testid="stTab"]{height:38px;padding:0 10px;border-radius:0!important;box-shadow:none}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(2)):not(:has(> [data-testid="stTab"]:nth-child(3))) > [data-testid="stTab"]:first-of-type{border-radius:9px 0 0 9px!important}
+        [data-testid="stTabs"] [data-testid="stTabs"] [role="tablist"]:has(> [data-testid="stTab"]:nth-child(2)):not(:has(> [data-testid="stTab"]:nth-child(3))) > [data-testid="stTab"]:nth-of-type(2){border-radius:0 9px 9px 0!important}
+        .report-period-label{margin:0 0 5px;color:#0d2548;font-size:15px;font-weight:950;text-align:left}
+        [class*="st-key-report_period_popover"] button{min-height:44px!important;border:1px solid #d6e0ef!important;border-radius:10px!important;background:#fff!important;color:#304566!important;box-shadow:0 2px 7px rgba(31,65,115,.035)!important;font-size:15px!important;font-weight:850!important}
+        [class*="st-key-report_period_popover"] button [data-testid="stIconMaterial"]{color:#1268f3!important;font-size:20px!important}
+        @media(min-width:901px){
+          .report-summary{min-height:96px;box-sizing:border-box}.report-summary-item{min-height:82px}
+          .report-flow{min-height:128px}.report-flow-step{min-height:104px}
+          .report-bottom .report-card{min-height:286px;box-sizing:border-box}
+          .report-bottom .report-bars{min-height:220px;align-content:space-evenly}
+          .report-bottom .report-insight{min-height:220px}
+        }
+        @media(max-width:900px){.report-summary{grid-template-columns:repeat(2,1fr)}.report-summary-item{border-bottom:1px solid #e7ecf3}.report-flow{grid-template-columns:1fr}.report-flow-connector{min-height:42px}.report-flow-connector i{font-size:0}.report-flow-connector i:after{content:'↓';font-size:24px}.report-bottom,.report-rank-grid{grid-template-columns:1fr}.report-table-wrap{overflow:auto}}
+        @media(max-width:1050px){.analytics-donut-layout{grid-template-columns:150px 1fr}.analytics-donut{width:142px;height:142px}.analytics-donut:after{inset:31px}.analytics-flow{gap:16px}.analytics-flow-step:not(:last-child):after{right:-12px}.analytics-rate-grid{grid-template-columns:repeat(2,1fr)}}
+        @media(max-width:800px){.analytics-overview{grid-template-columns:1fr}.analytics-summary{grid-template-columns:1fr}.analytics-phase-grid,.analytics-route-grid{grid-template-columns:1fr}.analytics-flow{grid-template-columns:1fr}.analytics-flow-step:not(:last-child):after{content:'⌄';right:auto;top:auto;bottom:-22px;left:50%}.analytics-rate-grid{grid-template-columns:1fr}.analytics-donut-layout{grid-template-columns:1fr}[class*="st-key-analytics_row_"]{display:block!important}[class*="st-key-analytics_row_"] [data-testid="stColumn"]{margin-bottom:14px}}
         @media(max-width:1100px){.prep-grid{grid-template-columns:repeat(2,1fr)}.prep-layout{grid-template-columns:1fr}.prep-side{position:static}.detail-grid{grid-template-columns:1fr}.detail-hero{grid-template-columns:1fr}.detail-hero>div{border-right:0;border-bottom:1px solid #e6ebf2}}
+        @media(max-width:700px){.prep-chooser-grid{grid-template-columns:1fr}}
         @media(max-width:900px){.summary-grid,.funnel{grid-template-columns:repeat(2,1fr)}.app-meta{grid-template-columns:1fr}.bar-row{grid-template-columns:110px 1fr 50px}
           [class*="st-key-application_workspace"] [data-testid="stColumn"]:last-child { border-left:0; padding-left:0; }}
         </style>
@@ -840,7 +957,7 @@ def _tabs(active: str) -> None:
     st.markdown(
         '<div class="app-tabs">'
         f'<a class="{"active" if active == "management" else ""}" href="?page=application_list&amp;focus=all">応募管理</a>'
-        f'<a class="{"active" if active == "dashboard" else ""}" href="?page=application_dashboard">就職活動ダッシュボード</a>'
+        f'<a class="{"active" if active == "dashboard" else ""}" href="?page=application_dashboard">選考通過率レポート</a>'
         '</div>', unsafe_allow_html=True,
     )
 
@@ -895,18 +1012,11 @@ def _summary_cards(items: list[tuple], page_name: str = "") -> None:
     }
     if selected_focus not in valid_focuses:
         selected_focus = ""
-    anchor_by_focus = {
-        "preparation": "application-company-list",
-        "active": "application-company-list",
-        "upcoming": "application-upcoming",
-        "attention": "application-attention",
-    }
     html = '<div class="summary-grid application-summary-grid">'
     for item in items:
         label, value, kind = item[:3]
         unit = item[3] if len(item) >= 4 else "社"
         focus = item[4] if len(item) >= 5 else ""
-        application_ids = item[5] if len(item) >= 6 else set()
         card_html = (
             f'<div class="summary-card {kind}">'
             f'<div class="summary-icon">{_summary_icon(kind)}</div>'
@@ -973,6 +1083,7 @@ def _clear_application_list_filters() -> None:
     for key, value in defaults.items():
         st.session_state[key] = value
     st.session_state["application_overview_focus"] = ""
+    st.session_state["application_task_focus"] = False
     _close_schedule_dialog_for_filter_change()
 
 
@@ -980,7 +1091,6 @@ def _close_schedule_dialog_for_filter_change() -> None:
     """絞り込みによる再描画で、以前閉じた応募詳細を再表示しない。"""
 
     st.session_state.pop("schedule_dialog_application_id", None)
-    st.session_state.pop("schedule_dialog_target_milestone_id", None)
 
 
 def _render_application_list_header_filters(
@@ -1027,7 +1137,7 @@ def _render_application_list_header_filters(
             st.selectbox(
                 "並び替え",
                 ["対応が必要な順", "次回予定が近い順", "最終更新が新しい順",
-                 "最終更新が古い順", "会社名順", "現在フェーズ順"],
+                 "最終更新が古い順", "会社名順", "応募日が新しい順", "現在フェーズ順"],
                 key="app_sort_order",
                 on_change=_close_schedule_dialog_for_filter_change,
             )
@@ -1426,6 +1536,10 @@ def render_application_list_page(focus: str = "") -> None:
     render_job_navigation("application_list")
     _inject_css()
     sync_applications_from_decisions()
+    requested_focus = str(st.query_params.get("focus", "") or focus).strip()
+    if requested_focus == "milestones":
+        st.session_state["application_task_focus"] = True
+        st.query_params.pop("focus", None)
     # トップ画面・通知・旧応募詳細URLから来た場合も、独立ページへは遷移せず
     # この応募管理画面上で予定・結果登録モーダルを一度だけ開く。
     try:
@@ -1434,12 +1548,6 @@ def render_application_list_page(focus: str = "") -> None:
         requested_application_id = 0
     if requested_application_id:
         st.session_state["schedule_dialog_application_id"] = requested_application_id
-        try:
-            requested_milestone_id = int(st.query_params.get("milestone_id", "0") or 0)
-        except (TypeError, ValueError):
-            requested_milestone_id = 0
-        if requested_milestone_id:
-            st.session_state["schedule_dialog_target_milestone_id"] = requested_milestone_id
         st.query_params.pop("application_id", None)
         st.query_params.pop("milestone_id", None)
     st.markdown(
@@ -1505,6 +1613,7 @@ def render_application_list_page(focus: str = "") -> None:
     route_filter = str(st.session_state.get("app_route", "すべて"))
     response_filter = str(st.session_state.get("app_response_status", "すべて"))
     sort_order = str(st.session_state.get("app_sort_order", "対応が必要な順"))
+    task_focus_active = bool(st.session_state.get("application_task_focus", False))
     ended_views = sorted(
         [view for view in all_views if _is_ended_application(view)],
         key=lambda view: view["job"].company_name,
@@ -1519,6 +1628,8 @@ def render_application_list_page(focus: str = "") -> None:
             if app.id == notification_schedule_application_id:
                 views.append(view)
             continue
+        if task_focus_active and view.get("next_milestone") is None:
+            continue
         if query and query.lower() not in job.company_name.lower(): continue
         if phase_filter != "すべて":
             if phase_filter in PHASE_CATEGORIES and app.phase_category != phase_filter: continue
@@ -1530,6 +1641,7 @@ def render_application_list_page(focus: str = "") -> None:
     views = _sort_application_views(views, sort_order)
     filters_active = bool(
         notification_schedule_application_id
+        or task_focus_active
         or query
         or phase_filter != "すべて"
         or route_filter != "すべて"
@@ -1537,6 +1649,21 @@ def render_application_list_page(focus: str = "") -> None:
         or sort_order != "対応が必要な順"
     )
     with st.container(key="application_schedule_section"):
+        if task_focus_active:
+            with st.container(key="application_task_focus_context"):
+                task_message, task_action = st.columns([5, 1])
+                task_message.markdown(
+                    f"**予定・タスクが登録されている応募企業を{len(views)}社表示中**  \n"
+                    "各企業の「次の予定・期限」を確認し、完了・日程変更・結果登録が必要な場合は、"
+                    "操作列の「予定・結果を更新」から対応してください。"
+                )
+                if task_action.button(
+                    "絞り込みを解除",
+                    key="clear_application_task_focus",
+                    use_container_width=True,
+                ):
+                    st.session_state["application_task_focus"] = False
+                    st.rerun()
         st.markdown(
             '<span id="application-company-list" class="application-anchor"></span>',
             unsafe_allow_html=True,
@@ -1665,6 +1792,15 @@ def _sort_application_views(views: list[dict], sort_order: str) -> list[dict]:
         return sorted(views, key=lambda view: view["application"].updated_at or "")
     if sort_order == "会社名順":
         return sorted(views, key=lambda view: view["job"].company_name)
+    if sort_order == "応募日が新しい順":
+        return sorted(
+            views,
+            key=lambda view: (
+                view["application"].application_date or "",
+                view["application"].created_at or "",
+            ),
+            reverse=True,
+        )
     if sort_order == "現在フェーズ順":
         return sorted(views, key=lambda view: (view["application"].current_phase, view["job"].company_name))
     priority = {"対応が必要": 0, "近日予定": 1, "通常": 2}
@@ -1873,10 +2009,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         st.session_state.pop("schedule_dialog_application_id", 0) or 0
     )
     if selected_application_id:
-        selected_milestone_id = int(
-            st.session_state.pop("schedule_dialog_target_milestone_id", 0) or 0
-        )
-        _render_application_detail_dialog(selected_application_id, selected_milestone_id)
+        _render_application_detail_dialog(selected_application_id)
 
 
 def _render_application_card(view: dict) -> None:
@@ -1918,34 +2051,284 @@ def _render_application_card(view: dict) -> None:
     )
 
 
+ANALYTICS_COLORS = ("#1F6FEB", "#1CB7C9", "#F59A00", "#E7B416", "#7651E6", "#EF6B7B", "#19A66A", "#AAB5C4")
+ANALYTICS_PHASE_COLORS = {
+    "応募準備": "#1F6FEB", "応募": "#1CB7C9", "書類選考": "#F59A00",
+    "適性検査": "#E7B416", "面接": "#7651E6", "オファー・条件確認": "#EF6B7B",
+    "内定": "#19A66A", "保留": "#D783B5", "終了": "#AAB5C4",
+}
+
+
+def _analytics_icon(kind: str) -> str:
+    paths = {
+        "total": '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20v-2a5 5 0 0 1 10 0v2M13 20v-2a5 5 0 0 1 8-4"/>',
+        "applied": '<path d="m4 12 16-8-6 16-3-6-7-2Z"/><path d="m11 14 4-5"/>',
+        "interview": '<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0M13 20a4 4 0 0 1 8 0"/>',
+        "offer": '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 12v5M8 20h8M10 17h4"/>',
+    }
+    return f'<svg viewBox="0 0 24 24" aria-hidden="true">{paths[kind]}</svg>'
+
+
+def _analytics_donut(title: str, counts, total: int) -> str:
+    rows = list(counts.most_common())
+    if not rows:
+        return '<div class="analytics-chart-card"><div class="analytics-card-title"><i></i>' + escape(title) + '</div><div class="notification-empty">集計対象の応募はありません。</div></div>'
+    circumference = 364.42
+    cursor = 0.0
+    segments, legend = [], []
+    for index, (name, count) in enumerate(rows):
+        color = ANALYTICS_PHASE_COLORS.get(str(name), ANALYTICS_COLORS[index % len(ANALYTICS_COLORS)])
+        percent = count / total * 100 if total else 0
+        length = circumference * percent / 100
+        visible_length = max(0, length - 2.4)
+        segments.append(
+            f'<circle class="analytics-donut-segment" cx="90" cy="90" r="58" stroke="{color}" '
+            f'stroke-dasharray="{visible_length:.2f} {circumference - visible_length:.2f}" '
+            f'stroke-dashoffset="{-cursor:.2f}" transform="rotate(-90 90 90)">'
+            f'<title>{escape(str(name))} {count}社・{round(percent)}%</title></circle>'
+        )
+        cursor += length
+        legend.append(
+            f'<div class="analytics-legend-row"><i style="background:{color}"></i>'
+            f'<b title="{escape(str(name))}">{escape(str(name))}</b><span>{count}社</span>'
+            f'<em>{round(percent)}%</em></div>'
+        )
+    return (
+        '<div class="analytics-chart-card"><div class="analytics-card-title"><i></i>' + escape(title) + '</div>'
+        '<div class="analytics-donut-layout"><div class="analytics-donut">'
+        '<svg viewBox="0 0 180 180" aria-label="現在フェーズの構成"><circle class="analytics-donut-track" cx="90" cy="90" r="58"/>'
+        f'{"".join(segments)}</svg><div class="analytics-donut-center">全体<strong>{total}<small>社</small></strong></div></div>'
+        f'<div class="analytics-legend">{"".join(legend)}</div></div></div>'
+    )
+
+
+def _analytics_detail_color(name: str, index: int) -> str:
+    if "不合格" in name or "辞退" in name:
+        return "#EF6B7B"
+    for phase_name, color in ANALYTICS_PHASE_COLORS.items():
+        if phase_name in name or (phase_name == "面接" and "面談" in name):
+            return color
+    return ANALYTICS_COLORS[index % len(ANALYTICS_COLORS)]
+
+
+def _analytics_detail_panel(counts, total: int) -> str:
+    rows = []
+    for index, (name, count) in enumerate(counts.most_common()):
+        color = _analytics_detail_color(str(name), index)
+        percent = round(count / total * 100) if total else 0
+        rows.append(
+            f'<div class="analytics-detail-row"><i style="background:{color}"></i>'
+            f'<b title="{escape(str(name))}">{escape(str(name))}</b>'
+            f'<span>{count}<small>社・{percent}%</small></span></div>'
+        )
+    body = ''.join(rows) if rows else '<div class="notification-empty">集計対象の応募はありません。</div>'
+    return (
+        '<div class="analytics-chart-card analytics-detail-card"><div class="analytics-card-title"><i></i>詳細フェーズ内訳</div>'
+        '<p class="analytics-chart-note">右側は、左の大分類を「現在どの予定・結果の状態か」まで細かくした内訳です。</p>'
+        f'<div class="analytics-detail-list">{body}</div></div>'
+    )
+
+
+def _analytics_rate(value) -> str:
+    return "―" if value is None else f"{value}%"
+
+
+REPORT_COLORS = {
+    "書類選考": "#1f6feb", "適性検査": "#18a979", "一次面接": "#f59a00",
+    "二次面接": "#7651e6", "最終面接": "#ef5f78", "内定": "#19a66a",
+}
+
+
+def _report_bars(rows: dict, stage: str, color: str, limit: int = 4) -> str:
+    ordered = sorted(
+        ((name, values[stage]) for name, values in rows.items() if values[stage]["reached"]),
+        key=lambda item: (item[1]["rate"] or -1, item[1]["reached"]), reverse=True,
+    )[:limit]
+    if not ordered:
+        return '<div class="notification-empty">集計対象のデータはありません。</div>'
+    return ''.join(
+        f'<div class="report-bar" style="--c:{color}"><span title="{escape(name)}">{escape(name)}</span>'
+        f'<div class="report-track"><div class="report-fill" style="width:{row["rate"] or 0}%"></div></div>'
+        f'<b>{row["rate"]}%</b><small>{row["passed"]} / {row["reached"]}'
+        f'{" 参考" if row["is_reference"] else ""}</small></div>'
+        for name, row in ordered
+    )
+
+
+def _report_ranking_card(title: str, rows: dict, stage: str, color: str, winner_label: str) -> str:
+    valid = sorted(
+        ((name, values[stage]) for name, values in rows.items() if values[stage]["reached"]),
+        key=lambda item: (item[1]["rate"] or -1, item[1]["reached"]), reverse=True,
+    )
+    winner = valid[0] if valid else ("データなし", {"rate": 0})
+    return (
+        f'<section class="report-rank-card" style="--c:{color}"><h3>{escape(title)}　{escape(stage)}通過率</h3>'
+        f'<div class="report-winner">{escape(winner_label)}　 {escape(winner[0])} {winner[1]["rate"] or 0}%</div>'
+        f'<div class="report-bars">{_report_bars(rows, stage, color, 3)}</div></section>'
+    )
+
+
+def _report_heatmap(rows: dict, stages: tuple[str, ...], axis_name: str) -> str:
+    ordered = sorted(rows.items(), key=lambda item: item[1][stages[0]]["reached"], reverse=True)[:6]
+    header = ''.join(f'<th>{escape(stage.replace("選考", ""))}</th>' for stage in stages)
+    body = []
+    for name, values in ordered:
+        cells = []
+        for stage in stages:
+            row = values[stage]
+            if not row["reached"]:
+                cells.append('<td class="report-cell">―<small>対象なし</small></td>')
+                continue
+            rate = row["rate"] or 0
+            color = REPORT_COLORS[stage]
+            cells.append(
+                f'<td class="report-cell" style="background:{color}12;color:{color}"><b>{rate}%</b>'
+                f'<small>{row["passed"]} / {row["reached"]}</small>'
+                f'{"<i class=\"report-ref\">参考値</i>" if row["is_reference"] else ""}</td>'
+            )
+        body.append(f'<tr><td>{escape(name)}</td>{"".join(cells)}</tr>')
+    return (
+        f'<div class="report-axis-title"><h2>{escape(axis_name)} × 選考フェーズ</h2></div>'
+        f'<div class="report-table-wrap"><table class="report-table"><thead><tr><th>{escape(axis_name)}</th>{header}</tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table></div>'
+    )
+
+
 def render_application_dashboard_page() -> None:
     render_job_navigation("application_dashboard")
     _inject_css()
     sync_applications_from_decisions()
-    _tabs("dashboard")
-    st.title("就職活動ダッシュボード")
-    st.markdown('<p class="page-lead">応募状況と選考実績を振り返り、今後のアクションに活かします。</p>', unsafe_allow_html=True)
-    data = dashboard_summary()
-    _summary_cards([("管理対象", data["total"], ""), ("応募", data["applied"], ""), ("面接進出", data["interview"], ""), ("内定", data["offers"], "offer")])
-    left, right = st.columns([1.2, 1])
-    with left:
-        st.subheader("現在フェーズ（集計）")
-        _bar_panel(data["categories"], data["total"])
-    with right:
-        st.subheader("詳細フェーズ内訳")
-        _bar_panel(data["detailed"], data["total"])
-    st.subheader("選考実績（全体の流れ）")
+    today = date.today()
+    period_enabled = bool(st.session_state.get("report_period_enabled", False))
+    selected_period = st.session_state.get("report_period_range", (today - timedelta(days=30), today))
+    if period_enabled and isinstance(selected_period, (tuple, list)) and len(selected_period) == 2:
+        period_label = f'{selected_period[0].strftime("%Y/%m/%d")} 〜 {selected_period[1].strftime("%Y/%m/%d")}'
+    else:
+        period_label = "全期間"
+
+    header_left, header_right = st.columns([0.78, 0.22], vertical_alignment="bottom")
+    with header_left:
+        st.markdown(
+            '<header class="report-head"><div><h1>選考通過率レポート</h1>'
+            '<p>選考全体の通過状況と各フェーズの通過率を確認できます。</p></div></header>',
+            unsafe_allow_html=True,
+        )
+    with header_right:
+        st.markdown('<div class="report-period-label">集計期間</div>', unsafe_allow_html=True)
+        with st.popover(
+            period_label,
+            icon=":material/calendar_month:",
+            use_container_width=True,
+            key="report_period_popover",
+        ):
+            period_enabled = st.checkbox("期間を指定する", key="report_period_enabled")
+            if period_enabled:
+                selected_period = st.date_input(
+                    "応募日の範囲",
+                    value=selected_period,
+                    max_value=today,
+                    format="YYYY/MM/DD",
+                    key="report_period_range",
+                )
+                st.caption("応募日が未登録の場合は、応募管理への登録日を使用します。")
+
+    start_date = end_date = None
+    if period_enabled and isinstance(selected_period, (tuple, list)) and len(selected_period) == 2:
+        start_date, end_date = selected_period
+    data = selection_pass_report(start_date=start_date, end_date=end_date)
+    summary = data["summary"]
+    overall_tab, analysis_tab = st.tabs(["1　全体サマリー", "2　経路・業種・職種別分析"])
+    with overall_tab:
+        items = [("応募企業", "total"), ("応募", "applied"), ("選考中", "active"),
+                 ("面接進出", "interview"), ("内定", "offers"), ("選考終了", "closed")]
+        strip = ''.join(f'<div class="report-summary-item"><div><span>{label}</span><strong>{summary[key]}<small>社</small></strong></div></div>' for label, key in items)
+        flow = (
+            f'<div class="report-flow-step" style="--c:#4b8df8">応募'
+            f'<strong>{summary["applied"]}<small>社</small></strong></div>'
+        ) + ''.join(
+            f'<div class="report-flow-connector"><span>'
+            f'{data["overall"][stage]["rate"] if data["overall"][stage]["rate"] is not None else "―"}%'
+            f'</span><i>→</i></div>'
+            f'<div class="report-flow-step" style="--c:{REPORT_COLORS[stage]}">'
+            f'{"内定" if stage == "内定" else stage.replace("選考", "") + "通過"}'
+            f'<strong>{data["overall"][stage]["passed"]}<small>社</small></strong></div>'
+            for stage in data["stages"]
+        )
+        stage_bars = ''.join(
+            f'<div class="report-bar" style="--c:{REPORT_COLORS[stage]}"><span>{stage}</span><div class="report-track">'
+            f'<div class="report-fill" style="width:{data["overall"][stage]["rate"] or 0}%"></div></div>'
+            f'<b>{data["overall"][stage]["rate"] if data["overall"][stage]["rate"] is not None else "―"}%</b>'
+            f'<small>{data["overall"][stage]["passed"]} / {data["overall"][stage]["reached"]}'
+            f'　結果待ち {data["overall"][stage]["pending"]}</small></div>'
+            for stage in data["stages"][:-1]
+        )
+        candidates = [(s, data["overall"][s]) for s in data["stages"][:-1] if data["overall"][s]["reached"]]
+        focus_stage, focus = min(candidates, key=lambda x: x[1]["rate"]) if candidates else ("未設定", {"rate": None, "passed": 0, "reached": 0, "pending": 0})
+        st.markdown(
+            f'<div class="report-summary">{strip}</div><section class="report-card"><h2>選考全体の流れ</h2><div class="report-flow">{flow}</div></section>'
+            f'<div class="report-bottom"><section class="report-card"><h2>フェーズ別通過率</h2><div class="report-bars">{stage_bars}</div></section>'
+            f'<section class="report-card"><h2>通過率を確認したいフェーズ</h2><p class="report-card-desc">選考結果を確認したいフェーズの状況です。結果待ちがある場合は、結果確定後に通過率へ反映されます。</p><div class="report-insight"><div class="accent">{focus_stage}<strong>{focus["rate"] if focus["rate"] is not None else "―"}%</strong></div>'
+            f'<div>通過<strong>{focus["passed"]}件</strong><small>対象 {focus["reached"]}件</small></div><div>結果待ち<strong>{focus["pending"]}件</strong></div></div></section></div>',
+            unsafe_allow_html=True,
+        )
+    with analysis_tab:
+        phase_tabs = st.tabs(list(data["stages"]))
+        for stage, phase_tab in zip(data["stages"], phase_tabs):
+            with phase_tab:
+                if stage == "適性検査":
+                    st.markdown(
+                        '<div class="report-rank-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">'
+                        f'{_report_ranking_card("業種別", data["industries"], stage, "#f28a16", "最も高い業種")}'
+                        f'{_report_ranking_card("職種別", data["occupations"], stage, "#7651e6", "最も高い職種")}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    industry_axis, occupation_axis = st.tabs(["業種", "職種"])
+                    with industry_axis: st.markdown(_report_heatmap(data["industries"], data["stages"], "業種"), unsafe_allow_html=True)
+                    with occupation_axis: st.markdown(_report_heatmap(data["occupations"], data["stages"], "職種"), unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        '<div class="report-rank-grid">'
+                        f'{_report_ranking_card("応募経路別", data["routes"], stage, "#159b69", "最も高い経路")}'
+                        f'{_report_ranking_card("業種別", data["industries"], stage, "#f28a16", "最も高い業種")}'
+                        f'{_report_ranking_card("職種別", data["occupations"], stage, "#7651e6", "最も高い職種")}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    route_axis, industry_axis, occupation_axis = st.tabs(["応募経路", "業種", "職種"])
+                    with route_axis: st.markdown(_report_heatmap(data["routes"], data["stages"], "応募経路"), unsafe_allow_html=True)
+                    with industry_axis: st.markdown(_report_heatmap(data["industries"], data["stages"], "業種"), unsafe_allow_html=True)
+                    with occupation_axis: st.markdown(_report_heatmap(data["occupations"], data["stages"], "職種"), unsafe_allow_html=True)
+
+
+def _analytics_route_section(routes: dict) -> None:
+    if not routes:
+        st.markdown('<section class="analytics-section"><div class="analytics-section-head"><span class="analytics-index">4</span>応募経路別実績</div><div class="notification-empty">応募経路別に集計できるデータはありません。</div></section>', unsafe_allow_html=True)
+        return
+    ordered = sorted(routes.items(), key=lambda item: item[1]["applications"], reverse=True)
+    table_rows, bars = [], []
+    for route, row in ordered:
+        rate = round(row["document_pass"] / row["applications"] * 100) if row["applications"] else None
+        rate_text = "―" if rate is None else f"{rate}%"
+        table_rows.append(
+            f'<tr><td><b>{escape(route)}</b></td><td>{row["applications"]}</td><td>{row["document_known"]}</td>'
+            f'<td>{row["document_pass"]}</td><td>{row["interview"]}</td><td>{row["offers"]}</td>'
+            f'<td class="metric-cell">{rate_text}</td></tr>'
+        )
+        bars.append(
+            f'<div class="analytics-route-bar"><label title="{escape(route)}">{escape(route)}</label>'
+            f'<div class="analytics-route-track"><div class="analytics-route-fill" style="width:{0 if rate is None else rate}%"></div></div>'
+            f'<b>{rate_text}</b></div>'
+        )
     st.markdown(
-        '<div class="funnel">' + ''.join([
-            f'<div class="funnel-card">応募<strong>{data["applied"]}社</strong></div>',
-            f'<div class="funnel-card">書類通過<strong>{data["document_pass"]}社</strong></div>',
-            f'<div class="funnel-card">面接進出<strong>{data["interview"]}社</strong></div>',
-            f'<div class="funnel-card">内定<strong>{data["offers"]}社</strong></div>',
-        ]) + '</div>', unsafe_allow_html=True,
+        '<section class="analytics-section"><div class="analytics-section-head"><span class="analytics-index">4</span>応募経路別実績</div>'
+        '<div class="analytics-route-grid"><div class="analytics-table-wrap"><table class="analytics-table"><thead>'
+        '<tr class="analytics-group-head"><th rowspan="2">応募経路</th><th colspan="1">全体</th>'
+        '<th colspan="4">選考の内訳・到達状況</th><th rowspan="2">成果指標</th></tr>'
+        '<tr><th>応募数</th><th>結果判明</th><th>書類通過</th><th>面接進出</th><th>内定</th></tr>'
+        f'</thead><tbody>{"".join(table_rows)}</tbody></table></div>'
+        '<div class="analytics-route-bars"><div class="analytics-card-title"><i></i>書類通過率（応募数ベース）</div>'
+        f'{"".join(bars)}</div></div></section>',
+        unsafe_allow_html=True,
     )
-    _rate_cards(data)
-    st.subheader("応募経路別実績")
-    _route_table(data["routes"])
 
 
 def _bar_panel(counts, total: int) -> None:
@@ -1980,139 +2363,6 @@ def _route_table(routes: dict) -> None:
     st.markdown(html + '</tbody></table></div>', unsafe_allow_html=True)
 
 
-def render_application_detail_page() -> None:
-    render_job_navigation("application_list")
-    _inject_css()
-    application_id = int(st.query_params.get("application_id", "0") or 0)
-    detail = load_application_detail(application_id)
-    if not detail:
-        st.error("応募情報が見つかりません。")
-        st.page_link("app.py", label="応募管理へ戻る", query_params={"page": "application_list"})
-        return
-    app, job = detail["application"], detail["job"]
-    st.markdown('<a href="?page=application_list">← 応募管理へ戻る</a>', unsafe_allow_html=True)
-    st.title(job.company_name)
-    st.caption(job.job_title or "求人名未登録")
-    st.subheader("選考状況")
-    c1, c2, c3 = st.columns(3)
-    route = c1.text_input("実際の応募経路", value=app.actual_route)
-    phase = c2.selectbox("現在フェーズ", PHASE_OPTIONS, index=PHASE_OPTIONS.index(app.current_phase) if app.current_phase in PHASE_OPTIONS else 0)
-    result = c3.selectbox("選考結果", RESULT_OPTIONS, index=RESULT_OPTIONS.index(app.selection_result) if app.selection_result in RESULT_OPTIONS else 0)
-    application_date = st.date_input("応募日", value=date.fromisoformat(app.application_date) if app.application_date else None)
-    notes = st.text_area("メモ", value=app.notes)
-    if st.button("選考状況を保存", type="primary", use_container_width=True):
-        app.actual_route, app.current_phase, app.selection_result = route.strip(), phase, result
-        app.application_date = application_date.isoformat() if application_date else None
-        app.notes = notes
-        update_application_data(app)
-        st.toast("選考状況を保存しました。")
-        st.rerun()
-    st.subheader("予定・期限")
-    with st.expander("予定を追加", expanded=not detail["milestones"]):
-        kind = st.selectbox("種類", MILESTONE_TYPES)
-        title = st.text_input("予定名", placeholder="例：一次面接")
-        d = st.date_input("日付", value=date.today(), key="milestone_date")
-        schedule_kind = st.radio("日付の意味", ["予定", "期限"], horizontal=True)
-        memo = st.text_area("補足", key="milestone_memo")
-        if st.button("予定を登録", type="primary"):
-            try:
-                add_milestone_data(ApplicationMilestone(
-                    application_id=app.id,
-                    milestone_type=kind,
-                    title=title.strip(),
-                    schedule_kind="deadline" if schedule_kind == "期限" else "event",
-                    scheduled_date=d.isoformat(),
-                    memo=memo.strip(),
-                ))
-            except ApplicationManagementError as exc:
-                st.error(str(exc))
-            else:
-                st.toast("予定を登録しました。")
-                st.rerun()
-    if not detail["milestones"]:
-        st.info("予定はまだ登録されていません。")
-    for milestone in detail["milestones"]:
-        with st.container(border=True):
-            header, status_column = st.columns([4, 1])
-            header.markdown(
-                f"**{milestone.title or milestone.milestone_type}**  "
-                f"  {milestone.scheduled_date or '日付未定'}"
-            )
-            status_column.markdown(f"**{milestone_status_label(milestone.status)}**")
-            if milestone.memo:
-                st.caption(milestone.memo)
-            if milestone.status == "pending":
-                complete_column, postpone_column, cancel_column = st.columns(3)
-                if complete_column.button("完了にする", key=f"complete_{milestone.id}", use_container_width=True):
-                    try:
-                        complete_milestone(milestone)
-                    except ApplicationManagementError as exc:
-                        st.error(str(exc))
-                    else:
-                        st.rerun()
-                with postpone_column.expander("延期する"):
-                    original = date.today()
-                    if milestone.scheduled_date:
-                        try:
-                            original = date.fromisoformat(milestone.scheduled_date)
-                        except ValueError:
-                            pass
-                    new_date = st.date_input(
-                        "新しい日付",
-                        value=original + timedelta(days=1),
-                        key=f"postpone_date_{milestone.id}",
-                    )
-                    reason = st.text_input("延期理由（任意）", key=f"postpone_reason_{milestone.id}")
-                    if st.button("新しい予定を作る", key=f"postpone_{milestone.id}"):
-                        try:
-                            postpone_milestone(milestone, new_date.isoformat(), reason)
-                        except ApplicationManagementError as exc:
-                            st.error(str(exc))
-                        else:
-                            st.toast("元の予定を延期として残し、新しい予定を作成しました。")
-                            st.rerun()
-                with cancel_column.expander("中止する"):
-                    cancel_reason = st.text_input("中止理由（任意）", key=f"cancel_reason_{milestone.id}")
-                    confirm_cancel = st.checkbox("この予定を中止します", key=f"cancel_confirm_{milestone.id}")
-                    if st.button("予定を中止", key=f"cancel_{milestone.id}", disabled=not confirm_cancel):
-                        try:
-                            cancel_milestone(milestone, cancel_reason)
-                        except ApplicationManagementError as exc:
-                            st.error(str(exc))
-                        else:
-                            st.toast("予定を中止しました。履歴は保持されます。")
-                            st.rerun()
-            with st.expander("誤って登録した予定を削除"):
-                st.caption(
-                    "この予定を予定一覧から削除します。"
-                    "選考予定そのものがなくなった場合は、削除ではなく「中止する」を使用してください。"
-                )
-                confirm_delete = st.checkbox(
-                    "この予定を削除することを確認しました",
-                    key=f"delete_confirm_{milestone.id}",
-                )
-                if st.button(
-                    "予定を削除",
-                    key=f"delete_{milestone.id}",
-                    disabled=not confirm_delete,
-                ):
-                    try:
-                        delete_milestone_data(milestone)
-                    except ApplicationManagementError as exc:
-                        st.error(str(exc))
-                    else:
-                        st.toast("誤って登録した予定を削除しました。")
-                        st.rerun()
-    st.subheader("活動履歴")
-    with st.expander("活動を手動で追加"):
-        activity_title = st.text_input("活動内容", key="activity_title")
-        activity_detail = st.text_area("詳細", key="activity_detail")
-        if st.button("活動を追加") and activity_title:
-            add_manual_activity(app.id, activity_title, activity_detail, datetime.now().isoformat(timespec="minutes")); st.rerun()
-    for activity in detail["activities"]:
-        st.markdown(f'**{escape(activity.title)}**　{escape(activity.occurred_at)}  \n{escape(activity.detail)}')
-
-
 # UIイメージに合わせた応募詳細。通常ページと応募管理上のモーダルで同じ内容を利用する。
 def _rerun_application_detail(*, embedded: bool) -> None:
     """モーダル内の更新はモーダルだけ、通常ページでは画面全体を再描画する。"""
@@ -2126,7 +2376,6 @@ def render_application_detail_page(
     application_id_override: int | None = None,
     *,
     embedded: bool = False,
-    target_milestone_override: int = 0,
 ) -> None:
     if not embedded:
         render_job_navigation("application_list")
@@ -2150,16 +2399,7 @@ def render_application_detail_page(
     app, job = detail["application"], detail["job"]
     phase_confirmation_key = f"show_phase_confirmation_{app.id}"
     pending = [m for m in detail["milestones"] if m.status == "pending"]
-    next_m = min(pending, key=lambda m: m.scheduled_date or "9999-12-31", default=None)
     overdue = [m for m in pending if is_milestone_overdue(m, date.today())]
-    try:
-        target_milestone_id = (
-            int(target_milestone_override)
-            if embedded
-            else int(st.query_params.get("milestone_id", "0") or 0)
-        )
-    except (TypeError, ValueError):
-        target_milestone_id = 0
     if not embedded:
         st.markdown('<div class="application-page-head"><h1>応募詳細</h1></div>', unsafe_allow_html=True)
     top_left, top_right = st.columns([1, 1])
@@ -2195,14 +2435,14 @@ def render_application_detail_page(
                         app.notes = edited_notes.strip()
                         try:
                             update_application_data(app)
-                        except Exception as exc:
-                            st.error(f"応募情報を更新できませんでした：{exc}")
+                        except Exception:
+                            render_save_failure(
+                                "応募経路・応募日・管理メモ",
+                                recovery="入力内容は画面に残っています。時間をおいて、もう一度「変更を保存」を押してください。",
+                            )
                         else:
                             st.toast("応募経路・応募日・管理メモを更新しました。")
                             _rerun_application_detail(embedded=embedded)
-    next_text = "予定未登録"
-    if next_m:
-        next_text = f"{next_m.title or next_m.milestone_type}　{_display_milestone_date(next_m.scheduled_date)} {next_m.start_time}"
     st.markdown(f'''<section class="detail-hero">
       <div><div class="company-row"><div><div class="detail-company">{escape(job.company_name)}</div>
       <div class="detail-role">{escape(job.job_title or "求人名未登録")}</div></div></div></div>
@@ -2306,6 +2546,38 @@ def render_application_detail_page(
                         delete_milestone_data(milestone)
                         _rerun_application_detail(embedded=embedded)
 
+        historical_milestones = [
+            milestone for milestone in detail["milestones"]
+            if milestone.status in {"completed", "postponed", "cancelled"}
+        ]
+        if historical_milestones:
+            with st.expander(f"完了・延期・中止済みの予定（{len(historical_milestones)}件）"):
+                st.caption(
+                    "実際に発生した完了・延期・中止は履歴として残してください。"
+                    "誤って登録した予定に限り、状態にかかわらず物理削除できます。"
+                )
+                for milestone in historical_milestones:
+                    row_info, row_action = st.columns([4, 1])
+                    row_info.markdown(
+                        f"**{escape(milestone.title or milestone.milestone_type)}**　"
+                        f"{escape(milestone_status_label(milestone.status))}  \n"
+                        f"{escape(milestone.scheduled_date or '日付未定')}　・　"
+                        f"{escape(milestone.milestone_type)}"
+                    )
+                    with row_action:
+                        confirm_history_delete = st.checkbox(
+                            "誤登録",
+                            key=f"history_delete_confirm_{milestone.id}",
+                        )
+                        if st.button(
+                            "物理削除",
+                            key=f"history_delete_{milestone.id}",
+                            disabled=not confirm_history_delete,
+                            use_container_width=True,
+                        ):
+                            delete_milestone_data(milestone)
+                            _rerun_application_detail(embedded=embedded)
+
     with st.expander("＋ 選考結果を登録する", expanded=False):
         st.caption("結果と次回選考を登録すると、次の予定と現在フェーズへ反映されます。")
         r1, r2, r3 = st.columns(3)
@@ -2381,7 +2653,7 @@ def render_application_detail_page(
     width="large",
     on_dismiss=_close_schedule_dialog_for_filter_change,
 )
-def _render_application_detail_dialog(application_id: int, target_milestone_id: int = 0) -> None:
+def _render_application_detail_dialog(application_id: int) -> None:
     """応募管理画面を離れず、予定・結果の登録と現在地確認を行う。"""
     st.markdown(
         """
@@ -2402,19 +2674,41 @@ def _render_application_detail_dialog(application_id: int, target_milestone_id: 
         use_container_width=True,
     ):
         st.session_state.pop("schedule_dialog_application_id", None)
-        st.session_state.pop("schedule_dialog_target_milestone_id", None)
         st.rerun()
     render_application_detail_page(
         application_id,
         embedded=True,
-        target_milestone_override=target_milestone_id,
     )
 
 
 def render_selection_preparation_page() -> None:
-    render_job_navigation("application_list")
+    render_job_navigation("selection_preparation")
     _inject_css()
     application_id = int(st.query_params.get("application_id", "0") or 0)
+    if application_id <= 0:
+        # The shared navigation opens this chooser first because preparation is
+        # stored per application and cannot be edited without selecting one.
+        st.markdown(
+            '<h1 class="prep-page-title">選考準備</h1>'
+            '<p class="prep-chooser-lead">準備する応募企業を選択してください。企業ごとの準備内容と、現在の選考に合わせたテーマを確認できます。</p>',
+            unsafe_allow_html=True,
+        )
+        views = load_application_views(include_closed=False)
+        if views:
+            cards = "".join(
+                f'<a class="prep-chooser-card" href="?page=selection_preparation&amp;application_id={view["application"].id}" target="_self">'
+                f'<div><b>{escape(view["job"].company_name)}</b>'
+                f'<span>{escape(view["application"].current_phase or "応募準備")}　／　{escape(view["application"].actual_route or "応募経路未設定")}</span></div>'
+                '<i>›</i></a>'
+                for view in views
+            )
+            st.markdown(f'<div class="prep-chooser-grid">{cards}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(
+                '<div class="prep-chooser-empty">選考準備を作成できる応募企業がありません。<br>求人確認画面から応募判断を登録してください。</div>',
+                unsafe_allow_html=True,
+            )
+        return
     detail = load_application_detail(application_id)
     if not detail:
         st.error("応募情報が見つかりません。")
@@ -2455,7 +2749,13 @@ def render_selection_preparation_page() -> None:
       <div class="prep-company">{escape(job.company_name)}　/　{escape(job.job_title or "求人名未登録")}</div></div>
       <div class="prep-meta"><div class="progress-track"><div class="progress-fill" style="width:{rate}%"></div></div>
       <b>{rate}%</b><span>{completed} / {len(visible)} 完了</span></div></div>
-      <div class="prep-actions"><a class="prep-action" href="#free-theme">＋ テーマを追加</a></div>''', unsafe_allow_html=True)
+      ''', unsafe_allow_html=True)
+    if st.button(
+        "＋ テーマを追加",
+        key=f"show_custom_theme_form_{app.id}_{active_tab}",
+        use_container_width=False,
+    ):
+        st.session_state[f"custom_theme_form_open_{app.id}_{active_tab}"] = True
     st.segmented_control(
         "準備の種類",
         options=list(scope_labels.values()),
@@ -2475,10 +2775,6 @@ def render_selection_preparation_page() -> None:
             st.toast(f"{copied}件を{selection_type}へコピーしました。")
             st.rerun()
 
-    icon_map = {
-        "self_intro": "♙", "career_reason": "↔", "motivation": "▦", "career_plan": "▥",
-        "achievement": "♛", "strengths": "●", "conditions": "▣", "questions": "?",
-    }
     main_column, side_column = st.columns([3.35, 1], gap="large")
     with main_column:
         st.markdown(
@@ -2489,57 +2785,171 @@ def render_selection_preparation_page() -> None:
         card_columns = st.columns(2, gap="medium")
         for index, item in enumerate(visible):
             with card_columns[index % 2]:
-                with st.container(border=False, key=f"prep_card_{item.id}"):
-                    state = "完了" if item.is_completed else ("入力済み" if item.content else "未着手")
-                    state_css = "" if item.is_completed else "todo"
-                    updated = item.updated_at[:16].replace("T", " ") if item.updated_at else "未更新"
-                    with st.container(key=f"prep_edit_{item.id}"):
-                        with st.popover("編集"):
-                            st.markdown(f'<div class="prep-editor"><div class="prep-editor-title">{escape(item.title)}を編集</div></div>', unsafe_allow_html=True)
-                            content = st.text_area(
-                                "整理した内容",
-                                value=item.content,
-                                key=f"prep_content_{item.id}",
-                                height=180,
-                                placeholder="考えたことや確認したい内容を、自分の言葉で整理します。",
-                            )
-                            done = st.checkbox(
-                                "準備完了",
-                                value=item.is_completed,
-                                key=f"prep_done_{item.id}",
-                            )
-                            if st.button(
-                                "保存",
-                                key=f"prep_save_{item.id}",
-                                type="primary",
-                                use_container_width=True,
-                            ):
-                                item.content, item.is_completed = content, done
-                                if active_tab == "common":
-                                    save_global_preparation_template(item)
-                                else:
-                                    save_preparation_item(item)
-                                st.toast("準備内容を保存しました。")
-                                st.rerun()
-                    note_html = (
-                        f'<div class="prep-note">{escape(item.content)}</div>'
-                        if item.content.strip()
-                        else '<div class="prep-note empty">まだ整理した内容はありません<br>右上の編集から追加できます</div>'
+                state = "完了" if item.is_completed else ("入力済み" if item.content else "未着手")
+                updated = item.updated_at[:16].replace("T", " ") if item.updated_at else "未更新"
+                with st.expander(
+                    f"{item.title}　｜　{state}",
+                    expanded=False,
+                    key=f"prep_theme_{active_tab}_{item.id}",
+                    type="compact",
+                ):
+                    st.markdown(
+                        f'<p class="prep-theme-description">{escape(item.description)}</p>',
+                        unsafe_allow_html=True,
                     )
-                    st.markdown(f'''<div class="prep-card-body"><div class="prep-card-top">
-                      <span class="prep-icon">{icon_map.get(item.theme_key, "✦")}</span><span class="prep-state {state_css}">{escape(state)}</span></div>
-                      <h3>{escape(item.title)}</h3><p>{escape(item.description)}</p>{note_html}</div>''', unsafe_allow_html=True)
-                    st.markdown(f'<div class="prep-updated">最終更新：{escape(updated)}</div>', unsafe_allow_html=True)
+                    content_key = f"prep_content_{active_tab}_{item.id}"
+                    pending_content_key = f"prep_pending_content_{active_tab}_{item.id}"
+                    if pending_content_key in st.session_state:
+                        st.session_state[content_key] = st.session_state.pop(pending_content_key)
+                    content = st.text_area(
+                        "整理した内容",
+                        value=item.content,
+                        key=content_key,
+                        height=230,
+                        placeholder="考えたことや確認したい内容を、自分の言葉で直接入力します。",
+                    )
+                    done = st.checkbox(
+                        "準備完了",
+                        value=item.is_completed,
+                        key=f"prep_done_{active_tab}_{item.id}",
+                    )
+                    st.markdown(
+                        f'<div class="prep-theme-updated">最終更新：{escape(updated)}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(
+                        "保存",
+                        key=f"prep_save_{active_tab}_{item.id}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        item.content, item.is_completed = content, done
+                        if active_tab == "common":
+                            save_global_preparation_template(item)
+                        else:
+                            save_preparation_item(item)
+                        st.toast("準備内容を保存しました。")
+                        st.rerun()
+                    if item.is_custom:
+                        delete_confirmed = st.checkbox(
+                            "この追加テーマを削除する",
+                            key=f"prep_delete_confirm_{active_tab}_{item.id}",
+                        )
+                        if st.button(
+                            "追加テーマを削除",
+                            key=f"prep_delete_{active_tab}_{item.id}",
+                            disabled=not delete_confirmed,
+                            use_container_width=True,
+                        ):
+                            try:
+                                delete_custom_preparation(item)
+                            except ApplicationManagementError as exc:
+                                st.error(str(exc))
+                            else:
+                                st.toast("追加テーマを削除しました。")
+                                st.rerun()
     with side_column:
-        st.markdown(f'''<aside class="prep-side"><h3>この選考の概要</h3><dl><dt>選考ステップ</dt><dd>{escape(selection_type)}</dd>
-          <dt>選考目標</dt><dd>{escape(next_date)}</dd><dt>面接形式</dt><dd>未登録</dd><dt>応募経路</dt><dd>{escape(app.actual_route or "未設定")}</dd></dl>
-          <div class="prep-side-section"><h3>AI支援</h3><p style="font-size:12px;color:#66768d;line-height:1.65">選択したテーマに関連する材料をAIが提示します。</p>
-          <span class="prep-side-button">AIから材料を取得する</span></div>
-          <div class="prep-side-section"><h3>直近面接の振り返り</h3><p style="font-size:12px;color:#66768d">過去の質問や改善点を次の準備に活用します。</p></div></aside>''', unsafe_allow_html=True)
-
-    st.markdown('<div id="free-theme"></div>', unsafe_allow_html=True)
-    with st.expander("＋ テーマを追加する（自由テーマ）"):
-        custom_title = st.text_input("テーマ名")
-        if st.button("テーマを追加", disabled=not custom_title.strip()):
-            add_custom_preparation(app.id, selection_type, custom_title)
-            st.rerun()
+        with st.container(border=False, key=f"prep_sidebar_{app.id}_{active_tab}"):
+            st.markdown(f'''<div class="prep-side-overview"><h3>この選考の概要</h3><dl>
+              <dt>選考ステップ</dt><dd>{escape(selection_type)}</dd><dt>選考目標</dt><dd>{escape(next_date)}</dd>
+              <dt>面接形式</dt><dd>未登録</dd><dt>応募経路</dt><dd>{escape(app.actual_route or "未設定")}</dd>
+              </dl></div><div class="prep-ai-heading"><h3>AI支援</h3>
+              <p>選択したテーマに関連する材料をAIが提示します。内容を確認してから準備メモへ追加できます。</p></div>''', unsafe_allow_html=True)
+            if visible:
+                selected_item = st.selectbox(
+                    "材料を取得するテーマ",
+                    options=visible,
+                    format_func=lambda row: row.title,
+                    key=f"prep_ai_theme_{app.id}_{active_tab}",
+                )
+                # Version the session key whenever the AI output contract changes so an
+                # old generated result is not mistaken for a result from the current rules.
+                result_key = f"prep_ai_result_v7_{app.id}_{active_tab}_{selected_item.id}"
+                if st.button(
+                    "AIから材料を取得する",
+                    key=f"prep_ai_generate_{app.id}_{active_tab}",
+                    use_container_width=True,
+                ):
+                    try:
+                        with st.spinner("登録情報をもとに材料を整理しています…"):
+                            material = generate_preparation_material(
+                                job_id=app.job_id,
+                                company_name=job.company_name,
+                                job_title=job.job_title or "求人名未登録",
+                                selection_type=selection_type,
+                                theme_key=selected_item.theme_key,
+                                theme_title=selected_item.title,
+                                theme_description=selected_item.description,
+                                existing_content=selected_item.content,
+                            )
+                        st.session_state[result_key] = format_preparation_material(
+                            material,
+                            selected_item.theme_key,
+                        )
+                    except SelectionPreparationAIError as exc:
+                        st.error(str(exc))
+                    except Exception:
+                        st.error("AI材料の取得処理でエラーが発生しました。画面を再読み込みして、もう一度お試しください。")
+                if result_key in st.session_state:
+                    generated_text = st.text_area(
+                        "AIが提示した材料",
+                        value=st.session_state[result_key],
+                        height=260,
+                        key=f"prep_ai_text_v7_{app.id}_{active_tab}_{selected_item.id}",
+                    )
+                    st.caption("AIの内容には誤りが含まれる場合があります。事実と異なる箇所を修正してから追加してください。")
+                    if st.button(
+                        "このテーマの準備メモに追加",
+                        type="primary",
+                        key=f"prep_ai_apply_v7_{app.id}_{active_tab}_{selected_item.id}",
+                        use_container_width=True,
+                    ):
+                        selected_item.content = "\n\n".join(
+                            row for row in (selected_item.content.strip(), generated_text.strip()) if row
+                        )
+                        if active_tab == "common":
+                            save_global_preparation_template(selected_item)
+                        else:
+                            save_preparation_item(selected_item)
+                        st.session_state[
+                            f"prep_pending_content_{active_tab}_{selected_item.id}"
+                        ] = selected_item.content
+                        st.session_state.pop(result_key, None)
+                        st.toast("AIの材料を準備メモへ追加しました。")
+                        st.rerun()
+            else:
+                st.info("材料を取得するテーマがありません。先にテーマを追加してください。")
+    custom_form_key = f"custom_theme_form_open_{app.id}_{active_tab}"
+    if st.session_state.get(custom_form_key, False):
+        with st.container(border=True, key=f"custom_theme_form_{app.id}_{active_tab}"):
+            st.markdown("### 自由テーマを追加")
+            st.caption(f"「{scope_labels[active_tab]}」に新しい準備テーマを追加します。")
+            custom_title = st.text_input(
+                "テーマ名",
+                key=f"custom_theme_title_{app.id}_{active_tab}",
+                placeholder="例：面接で確認したいこと",
+            )
+            add_col, cancel_col = st.columns(2)
+            if add_col.button(
+                "このテーマを追加",
+                key=f"add_custom_theme_{app.id}_{active_tab}",
+                type="primary",
+                disabled=not custom_title.strip(),
+                use_container_width=True,
+            ):
+                add_custom_preparation(
+                    app.id,
+                    selection_type,
+                    custom_title,
+                    scope=active_tab,
+                )
+                st.session_state[custom_form_key] = False
+                st.toast("準備テーマを追加しました。")
+                st.rerun()
+            if cancel_col.button(
+                "キャンセル",
+                key=f"cancel_custom_theme_{app.id}_{active_tab}",
+                use_container_width=True,
+            ):
+                st.session_state[custom_form_key] = False
+                st.rerun()

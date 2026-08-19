@@ -1,12 +1,12 @@
-"""応募管理と就職活動ダッシュボードの業務ロジック。"""
+"""応募管理と選考通過率レポートの業務ロジック。"""
 
 from collections import Counter, defaultdict
-from dataclasses import asdict
 from datetime import date, datetime, timedelta
 
 from database.repositories.application_repository import (
-    add_phase_history, get_activities, get_application, get_application_by_job_route,
-    delete_milestone, get_applications, get_milestones, get_preparations,
+    add_phase_history, get_activities, get_application, get_application_by_job_route, get_phase_history,
+    delete_milestone, delete_preparation, delete_user_preparation_template,
+    get_applications, get_milestones, get_preparations,
     get_user_preparation_templates, save_activity, save_application, save_milestone,
     save_preparation, save_user_preparation_template,
 )
@@ -14,7 +14,7 @@ from models import (ApplicationActivity, ApplicationMilestone, ApplicationPrepar
                     ApplicationRecord, UserPreparationTemplate)
 from services.current_user_service import get_current_user_id
 from services.job_evaluation_service import load_job_application_decisions
-from services.job_service import load_job, load_jobs, load_job_sources
+from services.job_service import load_job, load_job_sources
 
 
 ACTIVE_DECISIONS = {"応募する", "他経路から応募する"}
@@ -280,7 +280,13 @@ def ensure_application_from_decision(job_id: int, decision_status: str, next_act
         return existing.id
     application = ApplicationRecord(user_id=user_id, job_id=job_id, actual_route=actual_route)
     application_id = save_application(application)
-    add_phase_history(application_id, application.current_phase, application.phase_category)
+    add_phase_history(
+        application_id,
+        application.current_phase,
+        application.phase_category,
+        application.selection_result,
+        application.selection_stage,
+    )
     save_activity(ApplicationActivity(
         application_id=application_id, activity_type="application_created",
         occurred_at=datetime.now().isoformat(timespec="minutes"), title="応募管理へ追加",
@@ -345,6 +351,7 @@ def update_application_data(application: ApplicationRecord) -> None:
             application.current_phase,
             application.phase_category,
             application.selection_result,
+            application.selection_stage,
         )
         previous_phase = previous.current_phase if previous else "未設定"
         previous_stage = previous.selection_stage if previous else "未設定"
@@ -623,13 +630,40 @@ def save_preparation_item(item: ApplicationPreparation) -> None:
     save_preparation(item)
 
 
-def add_custom_preparation(application_id: int, selection_type: str, title: str) -> None:
+def add_custom_preparation(
+    application_id: int,
+    selection_type: str,
+    title: str,
+    scope: str = "selection",
+) -> None:
     key = f"custom_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    if scope == "common":
+        save_user_preparation_template(UserPreparationTemplate(
+            user_id=get_current_user_id(), theme_key=key, title=title.strip(),
+            description="自由に追加した準備テーマです。", is_custom=True,
+            sort_order=1000,
+        ))
+        return
     save_preparation(ApplicationPreparation(
-        application_id=application_id, scope="selection", selection_type=selection_type,
+        application_id=application_id, scope=scope,
+        selection_type=selection_type if scope == "selection" else "",
         theme_key=key, title=title.strip(), description="自由に追加した準備テーマです。",
         is_custom=True, sort_order=1000,
     ))
+
+
+def delete_custom_preparation(
+    item: ApplicationPreparation | UserPreparationTemplate,
+) -> None:
+    """利用者が追加した準備テーマだけを物理削除する。"""
+    if not item.is_custom or item.id <= 0:
+        raise ApplicationManagementError("標準テーマは削除できません。")
+    if isinstance(item, UserPreparationTemplate):
+        deleted = delete_user_preparation_template(item.id, get_current_user_id())
+    else:
+        deleted = delete_preparation(item.id, item.application_id)
+    if not deleted:
+        raise ApplicationManagementError("追加テーマが見つからないか、すでに削除されています。")
 
 
 def dashboard_summary() -> dict:
@@ -653,10 +687,130 @@ def dashboard_summary() -> dict:
     return {"total": len(applications), "applied": applied, "interview": interview, "offers": offers,
             "categories": categories, "detailed": detailed,
             "document_known": document_known, "document_pass": document_pass,
-            "document_pass_rate": round(document_pass / document_known * 100) if document_known else None,
-            "interview_rate": round(interview / document_known * 100) if document_known else None,
+            "document_pass_rate": round(document_pass / applied * 100) if applied else None,
+            "document_result_pass_rate": round(document_pass / document_known * 100) if document_known else None,
+            "interview_rate": round(interview / applied * 100) if applied else None,
             "offer_rate": round(offers / applied * 100) if applied else None,
             "routes": dict(route_rows)}
+
+
+REPORT_STAGES = ("書類選考", "適性検査", "一次面接", "二次面接", "最終面接", "内定")
+
+
+def _report_stage_from_milestone(kind: str) -> str:
+    return {"書類提出": "書類選考"}.get(kind, kind if kind in REPORT_STAGES else "")
+
+
+def _rate_row(reached: int, passed: int, failed: int = 0) -> dict:
+    pending = max(0, reached - passed - failed)
+    return {
+        "reached": reached,
+        "passed": passed,
+        "failed": failed,
+        "pending": pending,
+        "rate": round(passed / reached * 100) if reached else None,
+        "is_reference": 0 < reached < 3,
+    }
+
+
+def selection_pass_report(start_date: date | None = None, end_date: date | None = None) -> dict:
+    """選考フェーズと応募経路・業種・職種ごとの通過実績を返す。"""
+    views = load_application_views(True)
+    if start_date or end_date:
+        filtered_views = []
+        for view in views:
+            application = view["application"]
+            raw_date = application.application_date or application.created_at
+            try:
+                applied_on = date.fromisoformat(str(raw_date)[:10])
+            except (TypeError, ValueError):
+                continue
+            if start_date and applied_on < start_date:
+                continue
+            if end_date and applied_on > end_date:
+                continue
+            filtered_views.append(view)
+        views = filtered_views
+    target_application_ids = {view["application"].id for view in views}
+    histories = get_phase_history(user_id=get_current_user_id())
+    history_by_application = defaultdict(list)
+    for row in histories:
+        application_id = int(row["application_id"])
+        if application_id in target_application_ids:
+            history_by_application[application_id].append(row)
+
+    records = []
+    for view in views:
+        app, job = view["application"], view["job"]
+        reached, passed, failed = set(), set(), set()
+        applied = app.phase_category != "応募準備"
+        if applied:
+            reached.add("書類選考")
+        for milestone in view["milestones"]:
+            stage = _report_stage_from_milestone(milestone.milestone_type)
+            if stage:
+                reached.add(stage)
+        for row in history_by_application.get(app.id, []):
+            stage = (row.get("selection_stage") or "").strip()
+            result = (row.get("selection_result") or "").strip()
+            if stage in REPORT_STAGES:
+                reached.add(stage)
+                if result in {"通過", "内定"}: passed.add(stage)
+                elif result in {"不合格", "辞退", "選考終了"}: failed.add(stage)
+        if app.selection_stage in REPORT_STAGES:
+            reached.add(app.selection_stage)
+            if app.selection_result in {"通過", "内定"}: passed.add(app.selection_stage)
+            elif app.selection_result in {"不合格", "辞退", "選考終了"}: failed.add(app.selection_stage)
+        # 旧履歴に対象選考がないデータの書類通過だけは、到達済み状態から補完する。
+        if app.phase_category in {"適性検査", "面接", "オファー・条件確認", "内定"}:
+            passed.add("書類選考")
+        if app.phase_category == "内定" or app.selection_result == "内定":
+            passed.add("内定")
+        if applied:
+            reached.add("内定")  # 内定率は応募数ベース。
+        records.append({
+            "application": app,
+            "job": job,
+            "reached": reached,
+            "passed": passed,
+            "failed": failed,
+            "route": app.actual_route or "未設定",
+            "industry": (job.industry or "").strip() or "未設定",
+            "occupation": (job.occupation or "").strip() or "未設定",
+        })
+
+    def aggregate(items: list[dict]) -> dict:
+        result = {}
+        for stage in REPORT_STAGES:
+            stage_reached = sum(stage in item["reached"] for item in items)
+            stage_passed = sum(stage in item["passed"] for item in items)
+            stage_failed = sum(stage in item["failed"] for item in items)
+            result[stage] = _rate_row(stage_reached, stage_passed, stage_failed)
+        return result
+
+    def grouped(field: str) -> dict:
+        buckets = defaultdict(list)
+        for record in records:
+            buckets[record[field]].append(record)
+        return {name: aggregate(items) for name, items in buckets.items()}
+
+    applications = [record["application"] for record in records]
+    overall = aggregate(records)
+    return {
+        "summary": {
+            "total": len(records),
+            "applied": sum(a.phase_category != "応募準備" for a in applications),
+            "active": sum(a.status == "active" and a.phase_category != "応募準備" for a in applications),
+            "interview": sum(a.phase_category in {"面接", "オファー・条件確認", "内定"} for a in applications),
+            "offers": sum(a.phase_category == "内定" or a.selection_result == "内定" for a in applications),
+            "closed": sum(a.status == "closed" for a in applications),
+        },
+        "stages": REPORT_STAGES,
+        "overall": overall,
+        "routes": grouped("route"),
+        "industries": grouped("industry"),
+        "occupations": grouped("occupation"),
+    }
 
 
 def operational_summary(views: list[dict]) -> dict:

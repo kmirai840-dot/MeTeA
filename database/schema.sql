@@ -501,6 +501,7 @@ CREATE TABLE IF NOT EXISTS user_applications (
 
 CREATE TABLE IF NOT EXISTS application_phase_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    selection_stage TEXT NOT NULL DEFAULT '',
     selection_result TEXT NOT NULL DEFAULT '',
     application_id INTEGER NOT NULL,
     phase_name TEXT NOT NULL,
