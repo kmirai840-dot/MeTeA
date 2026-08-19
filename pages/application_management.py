@@ -51,6 +51,7 @@ from services.selection_preparation_ai_service import (
 
 BLUE = "#1268f3"
 PHASE_CATEGORIES = ("応募準備", "書類選考", "適性検査", "面接", "オファー・条件確認", "内定", "保留", "終了")
+SELECTION_RESULT_NOTICE_KEY_PREFIX = "selection_result_notice_"
 
 
 def _svg_data_uri(filename: str) -> str:
@@ -2461,6 +2462,11 @@ def render_application_detail_page(
     st.markdown('<div class="detail-section-title">選考予定・結果を登録する</div>', unsafe_allow_html=True)
     st.markdown('<p class="detail-section-copy">選考終了までを一つの流れとして、予定の追加・変更と結果の登録を行います。</p>', unsafe_allow_html=True)
 
+    result_notice_key = f"{SELECTION_RESULT_NOTICE_KEY_PREFIX}{app.id}"
+    result_notice = st.session_state.pop(result_notice_key, "")
+    if result_notice:
+        st.success(result_notice, icon="✅")
+
     with st.container(border=True):
         upcoming_milestones = [m for m in detail["milestones"] if m.status == "pending"]
         st.markdown('<div class="detail-subtitle">次にすべきこと</div>', unsafe_allow_html=True)
@@ -2597,15 +2603,39 @@ def render_application_detail_page(
                 next_end_value = nd3.time_input("終了時刻（任意）", value=None, key=f"next_selection_end_{app.id}")
         st.caption(f"画面上では「{stage}{result}」として扱います。現在フェーズと次回選考の予定は登録内容から自動更新されます。")
         if st.button("結果を登録", type="primary", use_container_width=True):
-            register_selection_result(
-                app.id, stage, result,
-                "" if next_stage == "未定" else next_stage,
-                next_date_value,
-                next_start_value.strftime("%H:%M") if next_start_value else "",
-                next_end_value.strftime("%H:%M") if next_end_value else "",
-            )
-            st.session_state[phase_confirmation_key] = True
-            _rerun_application_detail(embedded=embedded)
+            try:
+                register_selection_result(
+                    app.id, stage, result,
+                    "" if next_stage == "未定" else next_stage,
+                    next_date_value,
+                    next_start_value.strftime("%H:%M") if next_start_value else "",
+                    next_end_value.strftime("%H:%M") if next_end_value else "",
+                )
+            except ApplicationManagementError as exc:
+                st.error(str(exc))
+            except Exception:
+                render_save_failure(
+                    "選考結果",
+                    recovery="入力内容は画面に残っています。時間をおいて、もう一度「結果を登録」を押してください。",
+                )
+            else:
+                updated_detail = load_application_detail(app.id)
+                updated_application = (
+                    updated_detail["application"]
+                    if updated_detail
+                    else None
+                )
+                updated_phase = (
+                    updated_application.current_phase
+                    if updated_application
+                    else "更新後のフェーズ"
+                )
+                st.session_state[result_notice_key] = (
+                    f"{stage}の結果「{result}」を登録しました。"
+                    f"現在フェーズを「{updated_phase}」へ更新しました。"
+                )
+                st.session_state[phase_confirmation_key] = True
+                _rerun_application_detail(embedded=embedded)
 
     with st.expander("＋ 次の予定を登録する", expanded=not upcoming_milestones):
         a, b = st.columns([1, 2])
