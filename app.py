@@ -13,6 +13,12 @@ from services.application_management_service import load_application_views, oper
 from services.current_user_service import get_current_user_id
 from pages.job_layout import render_job_navigation
 from ui.design_system import apply_common_design_system
+from database.demo_seed import seed_demo_data
+from services.runtime_config import (
+    configure_runtime_secrets,
+    is_demo_environment,
+    require_app_password,
+)
 
 # ========================================
 # 基本設定
@@ -29,7 +35,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+configure_runtime_secrets()
+require_app_password()
 initialize_database()
+if is_demo_environment():
+    seed_demo_data()
 
 
 def render_reloaded_page(

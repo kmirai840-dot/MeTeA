@@ -185,3 +185,6 @@ database/metea.db
 database/metea.db-journal
 database/metea.db-wal
 database/metea.db-shm
+
+# Streamlit secrets
+.streamlit/secrets.toml
