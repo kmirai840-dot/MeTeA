@@ -33,7 +33,17 @@ logger = logging.getLogger(__name__)
 def _build_failure_message(error: Exception) -> str:
     """秘密情報を含めず、利用者が対処できる失敗理由を返す。"""
 
-    error_text = str(error).strip()
+    error_parts: list[str] = []
+    current_error: BaseException | None = error
+    for _ in range(4):
+        if current_error is None:
+            break
+        error_parts.append(
+            f"{type(current_error).__name__}: {str(current_error).strip()}"
+        )
+        current_error = current_error.__cause__
+
+    error_text = " | ".join(error_parts)
     lowered = error_text.lower()
 
     if "api key" in lowered or "authentication" in lowered or "401" in lowered:
@@ -44,8 +54,16 @@ def _build_failure_message(error: Exception) -> str:
         reason = "AIモデルの設定を確認してください。"
     elif "rate limit" in lowered or "429" in lowered:
         reason = "APIの利用上限に達しました。時間を置いて再実行してください。"
-    elif "timeout" in lowered or "timed out" in lowered:
+    elif (
+        "timeout" in lowered
+        or "timed out" in lowered
+        or "readtimeout" in lowered
+    ):
         reason = "AIからの応答がタイムアウトしました。再実行してください。"
+    elif "connection" in lowered:
+        reason = "AIサービスへ接続できませんでした。再実行してください。"
+    elif "badrequest" in lowered or "400" in lowered:
+        reason = "AIへの依頼内容を処理できませんでした。管理者へ連絡してください。"
     else:
         reason = "AIとの通信または評価結果の処理に失敗しました。"
 

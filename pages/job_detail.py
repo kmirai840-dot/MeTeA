@@ -2744,7 +2744,13 @@ def show_page() -> None:
     if not is_job_match_evaluation_ready(evaluation):
         if evaluation is not None and evaluation.evaluation_status == "failed":
             st.warning(
-                "AIマッチングを完了できませんでした。求人情報は保存されています。"
+                evaluation.failure_reason
+                or "AIマッチングを完了できませんでした。求人情報は保存されています。"
+            )
+        elif evaluation is not None and evaluation.evaluation_status == "running":
+            st.info(
+                "前回のAI評価は完了していません。"
+                "下のボタンから再実行してください。"
             )
         else:
             st.info(
@@ -2753,7 +2759,8 @@ def show_page() -> None:
 
         action_label = (
             "AIマッチングを再実行する"
-            if evaluation is not None and evaluation.evaluation_status == "failed"
+            if evaluation is not None
+            and evaluation.evaluation_status in {"failed", "running"}
             else "AIマッチングを実行する"
         )
         if st.button(

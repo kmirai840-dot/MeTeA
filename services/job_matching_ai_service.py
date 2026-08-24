@@ -27,13 +27,14 @@ load_dotenv()
 
 
 PROMPT_VERSION = "job-matching-v9"
-DEFAULT_AI_MODEL = "gpt-5-mini"
+DEFAULT_AI_MODEL = "gpt-4.1-mini"
 
 MAX_AI_ITEMS = 40
 MAX_ITEM_NAME_LENGTH = 100
 MAX_REASON_LENGTH = 240
 MAX_EVIDENCE_LENGTH = 240
-MAX_AI_OUTPUT_TOKENS = 5000
+MAX_AI_OUTPUT_TOKENS = 3000
+AI_REQUEST_TIMEOUT_SECONDS = 75.0
 
 ALLOWED_CATEGORIES = {
     "hope_condition",
@@ -550,7 +551,10 @@ def request_ai_semantic_evaluation(
     openai_client = (
         client
         if client is not None
-        else OpenAI()
+        else OpenAI(
+            timeout=AI_REQUEST_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
     )
 
     try:
@@ -561,12 +565,14 @@ def request_ai_semantic_evaluation(
             max_output_tokens=(
                 MAX_AI_OUTPUT_TOKENS
             ),
+            store=False,
         )
 
     except Exception as error:
         raise JobMatchingAIResultError(
             "AIマッチングの判定を"
-            "取得できませんでした"
+            "取得できませんでした。"
+            f"（{type(error).__name__}）"
         ) from error
 
     parsed_response = response.output_parsed
