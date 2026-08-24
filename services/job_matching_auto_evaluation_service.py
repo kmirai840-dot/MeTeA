@@ -113,6 +113,42 @@ def _run_background_evaluation(user_id: int, job_id: int) -> None:
             _submitted_jobs.discard(job_key)
 
 
+def evaluate_job_now(
+    job_id: int,
+) -> tuple[JobMatchEvaluation | None, str]:
+    """現在のリクエスト内でAI評価を実行する。
+
+    クラウド環境でバックグラウンド処理が中断された場合の
+    復旧動線として使用する。
+    """
+
+    if job_id <= 0:
+        return None, AI_EVALUATION_FAILURE_MESSAGE
+
+    user_id = get_current_user_id()
+    set_job_match_evaluation_status(user_id, job_id, "running")
+    evaluation, error_message = automatically_evaluate_and_save_job(job_id)
+
+    if evaluation is None or error_message:
+        failure_message = error_message or AI_EVALUATION_FAILURE_MESSAGE
+        set_job_match_evaluation_status(
+            user_id,
+            job_id,
+            "failed",
+            failure_reason=failure_message,
+            increment_retry=True,
+        )
+        return None, failure_message
+
+    set_job_match_evaluation_status(
+        user_id,
+        job_id,
+        "completed",
+        result_notice_pending=True,
+    )
+    return evaluation, ""
+
+
 def enqueue_job_evaluation(job_id: int, retry: bool = False) -> bool:
     """評価を重複させずバックグラウンドへ登録する。"""
 
