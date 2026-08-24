@@ -1,6 +1,7 @@
 """求人保存後のAIマッチングをバックグラウンドで管理する。"""
 
 from concurrent.futures import ThreadPoolExecutor
+import logging
 from threading import Lock
 
 from models import JobMatchEvaluation
@@ -24,6 +25,31 @@ AI_EVALUATION_FAILURE_MESSAGE = (
     "求人情報は保存されましたが、"
     "AIマッチング評価を完了できませんでした。"
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _build_failure_message(error: Exception) -> str:
+    """秘密情報を含めず、利用者が対処できる失敗理由を返す。"""
+
+    error_text = str(error).strip()
+    lowered = error_text.lower()
+
+    if "api key" in lowered or "authentication" in lowered or "401" in lowered:
+        reason = "OpenAI APIキーを確認してください。"
+    elif "model" in lowered and (
+        "not found" in lowered or "does not exist" in lowered
+    ):
+        reason = "AIモデルの設定を確認してください。"
+    elif "rate limit" in lowered or "429" in lowered:
+        reason = "APIの利用上限に達しました。時間を置いて再実行してください。"
+    elif "timeout" in lowered or "timed out" in lowered:
+        reason = "AIからの応答がタイムアウトしました。再実行してください。"
+    else:
+        reason = "AIとの通信または評価結果の処理に失敗しました。"
+
+    return f"{AI_EVALUATION_FAILURE_MESSAGE} {reason}"
 
 
 STALE_EVALUATION_BATCH_SIZE = 3
@@ -63,10 +89,11 @@ def automatically_evaluate_and_save_job(
             )
         )
 
-    except Exception:
+    except Exception as error:
+        logger.exception("AI matching evaluation failed for job_id=%s", job_id)
         return (
             None,
-            AI_EVALUATION_FAILURE_MESSAGE,
+            _build_failure_message(error),
         )
 
     if save_errors:

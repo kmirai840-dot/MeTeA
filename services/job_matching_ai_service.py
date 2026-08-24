@@ -27,7 +27,7 @@ load_dotenv()
 
 
 PROMPT_VERSION = "job-matching-v9"
-DEFAULT_AI_MODEL = "gpt-5.4-mini"
+DEFAULT_AI_MODEL = "gpt-5-mini"
 
 MAX_AI_ITEMS = 40
 MAX_ITEM_NAME_LENGTH = 100
