@@ -396,21 +396,16 @@ def render_job_card(
             )
 
         with job_col:
-            if is_job_match_evaluation_ready(evaluation):
-                company_html = (
-                    '<a class="job-row-company-link" '
-                    f'href="?page=job_detail&job_id={job_id}" '
-                    'target="_self">'
-                    f'{escape(str(company_name))}'
-                    '</a>'
-                )
-            else:
-                company_html = (
-                    '<span class="job-row-company-link is-disabled" '
-                    'aria-disabled="true">'
-                    f'{escape(str(company_name))}'
-                    '</span>'
-                )
+            # 求人詳細は評価を開始する入口でもあるため、AI評価の状態に
+            # かかわらず会社名から開けるようにする。評価完了を必要とする
+            # のは比較対象への選択だけとする。
+            company_html = (
+                '<a class="job-row-company-link" '
+                f'href="?page=job_detail&job_id={job_id}" '
+                'target="_self">'
+                f'{escape(str(company_name))}'
+                '</a>'
+            )
 
             job_html = (
                 company_html
