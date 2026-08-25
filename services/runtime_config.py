@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 import extra_streamlit_components as stx
 import streamlit as st
 from dotenv import load_dotenv
+from extra_streamlit_components.CookieManager import (
+    _component_func as _cookie_component,
+)
 
 
 SECRET_KEYS = (
@@ -38,6 +41,19 @@ def _cookie_manager() -> stx.CookieManager:
     """全画面で同じキーを使うCookie管理部品を返す。"""
 
     return stx.CookieManager(key="metea_demo_cookie_manager")
+
+
+def _read_browser_cookies() -> dict[str, str] | None:
+    """Cookie部品の読込完了後だけCookie一覧を返す。"""
+
+    cookies = _cookie_component(
+        method="getAll",
+        key="metea_demo_cookie_probe",
+        default=None,
+    )
+    if cookies is None:
+        return None
+    return dict(cookies)
 
 
 def configure_runtime_secrets() -> None:
@@ -76,8 +92,25 @@ def require_app_password() -> None:
         return
 
     expected_token = _authentication_token(expected_password)
-    cookie_manager = _cookie_manager()
-    saved_token = str(cookie_manager.get(AUTH_COOKIE_NAME) or "")
+    browser_cookies = _read_browser_cookies()
+    if browser_cookies is None:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stSidebar"] { display: none; }
+            .stApp { background: #f5f8fc; }
+            .block-container {
+                max-width: 560px;
+                padding-top: 12vh;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.info("認証情報を確認しています。")
+        st.stop()
+
+    saved_token = str(browser_cookies.get(AUTH_COOKIE_NAME) or "")
     if saved_token and hmac.compare_digest(saved_token, expected_token):
         st.session_state["app_authenticated"] = True
         return
@@ -112,6 +145,7 @@ def require_app_password() -> None:
 
     if submitted:
         if hmac.compare_digest(entered_password, expected_password):
+            cookie_manager = _cookie_manager()
             cookie_manager.set(
                 AUTH_COOKIE_NAME,
                 expected_token,
