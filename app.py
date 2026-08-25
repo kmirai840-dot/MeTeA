@@ -15,6 +15,7 @@ from pages.job_layout import render_job_navigation
 from ui.design_system import apply_common_design_system
 from database.demo_seed import seed_demo_data
 from services.runtime_config import (
+    clear_app_authentication,
     configure_runtime_secrets,
     is_demo_environment,
     require_app_password,
@@ -204,9 +205,12 @@ elif current_page == "logout":
         "ログアウトしますか？"
     )
 
-    st.info(
-        "実際のログアウト処理は、認証機能の実装時に追加します。"
-    )
+    st.info("ログアウトすると、再度閲覧用パスワードの入力が必要になります。")
+
+    if st.button("ログアウトする", type="primary"):
+        clear_app_authentication()
+        st.query_params.clear()
+        st.rerun()
 
     if st.button("トップ画面へ戻る"):
         st.query_params.clear()

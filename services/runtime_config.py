@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hmac
+import hashlib
 import os
+from datetime import datetime, timedelta
 
+import extra_streamlit_components as stx
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -16,6 +19,25 @@ SECRET_KEYS = (
     "APP_ENV",
     "METEA_DATABASE_PATH",
 )
+
+AUTH_COOKIE_NAME = "metea_demo_auth"
+AUTH_COOKIE_LIFETIME_HOURS = 12
+
+
+def _authentication_token(password: str) -> str:
+    """パスワードを保存せず、ブラウザ認証確認用の署名を作る。"""
+
+    return hmac.new(
+        password.encode("utf-8"),
+        b"metea-demo-browser-auth-v1",
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _cookie_manager() -> stx.CookieManager:
+    """全画面で同じキーを使うCookie管理部品を返す。"""
+
+    return stx.CookieManager(key="metea_demo_cookie_manager")
 
 
 def configure_runtime_secrets() -> None:
@@ -53,6 +75,13 @@ def require_app_password() -> None:
     if st.session_state.get("app_authenticated") is True:
         return
 
+    expected_token = _authentication_token(expected_password)
+    cookie_manager = _cookie_manager()
+    saved_token = str(cookie_manager.get(AUTH_COOKIE_NAME) or "")
+    if saved_token and hmac.compare_digest(saved_token, expected_token):
+        st.session_state["app_authenticated"] = True
+        return
+
     st.markdown(
         """
         <style>
@@ -83,9 +112,29 @@ def require_app_password() -> None:
 
     if submitted:
         if hmac.compare_digest(entered_password, expected_password):
+            cookie_manager.set(
+                AUTH_COOKIE_NAME,
+                expected_token,
+                key="metea_demo_auth_cookie_set",
+                path="/",
+                expires_at=datetime.now() + timedelta(hours=AUTH_COOKIE_LIFETIME_HOURS),
+                secure=is_demo_environment(),
+                same_site="strict",
+            )
             st.session_state["app_authenticated"] = True
             st.rerun()
 
         st.error("パスワードが正しくありません。")
 
     st.stop()
+
+
+def clear_app_authentication() -> None:
+    """ブラウザとStreamlitセッションのデモ認証情報を削除する。"""
+
+    st.session_state.pop("app_authenticated", None)
+    _cookie_manager().delete(
+        AUTH_COOKIE_NAME,
+        key="metea_demo_auth_cookie_delete",
+        path="/",
+    )
