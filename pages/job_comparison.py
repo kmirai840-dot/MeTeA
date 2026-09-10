@@ -622,10 +622,16 @@ def render_comparison_styles() -> None:
             border-color: #1268f3 !important;
         }
 
+        .comparison-mobile-hint, .comparison-mobile-columns { display: none; }
         @media (max-width: 900px) {
-            [data-testid="stMainBlockContainer"] {
-                min-width: 960px;
-            }
+            [data-testid="stMainBlockContainer"] { min-width: 0; width: 100%; padding-left: 16px; padding-right: 16px; }
+            .comparison-header-card, .comparison-table-card { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+            .comparison-grid { grid-template-columns: 112px repeat(var(--job-count), 240px) !important; width: calc(112px + var(--job-count) * 240px); }
+            .comparison-label-cell { position: sticky; left: 0; z-index: 1; background: #f8fafd; padding: 12px; }
+            .comparison-value-cell, .comparison-job-cell { padding: 12px; overflow-wrap: anywhere; }
+            .comparison-summary-grid { grid-template-columns: 1fr; }
+            .comparison-mobile-hint { display: block; color: #52637a; font-size: 13px; margin: 8px 0; }
+            .comparison-mobile-columns { display: grid; background: #eef5ff; font-weight: 700; }
         }
         </style>
         """,
@@ -658,7 +664,7 @@ def comparison_columns_style(job_count: int) -> str:
     """比較件数に応じた列幅を返す。"""
 
     return (
-        "grid-template-columns: "
+        f"--job-count: {job_count}; grid-template-columns: "
         f"180px repeat({job_count}, minmax(0, 1fr));"
     )
 
@@ -710,7 +716,7 @@ def render_job_headers(
         )
     ]
 
-    for job_id, job in selected_jobs:
+    for job_number, (job_id, job) in enumerate(selected_jobs, 1):
         company_name = job.company_name or "会社名未入力"
         job_title = (
             job.job_title
@@ -763,7 +769,7 @@ def render_job_headers(
         cells.append(
             '<div class="comparison-job-cell">'
             f'<a class="comparison-company-link" href="{job_link}" '
-            f'target="_self">{escape(company_name)}</a>'
+            f'target="_self">求人{job_number}：{escape(company_name)}</a>'
             f'<div class="comparison-job-title">{escape(job_title)}</div>'
             '<div class="comparison-score-box">'
             '<div class="comparison-score-label">AI総合マッチ度</div>'
@@ -1014,7 +1020,13 @@ def render_comparison_table(
 
     st.markdown(
         (
-            '<div class="comparison-table-card">'
+            '<p class="comparison-mobile-hint">表を左右にスワイプして求人を比較できます。</p>'
+            '<div class="comparison-table-card" tabindex="0" role="region" aria-label="求人比較表（横スクロール）">'
+            f'<div class="comparison-grid comparison-mobile-columns" style="{comparison_columns_style(job_count)}">'
+            '<div class="comparison-label-cell">比較項目</div>'
+            + ''.join(f'<div class="comparison-value-cell">求人{i+1}</div>' for i in range(job_count))
+            + '</div>'
+            +
             f'{"".join(row_html)}'
             '</div>'
         ),

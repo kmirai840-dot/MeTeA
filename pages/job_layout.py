@@ -207,7 +207,14 @@ def render_job_navigation(
         .metea-side-utilities { margin-top:14px; padding-top:12px; border-top:1px solid #e4eaf2; }
         .metea-side-utilities a { gap:10px; min-height:36px; padding:7px 11px; border-radius:8px; font-size:12px; font-weight:700; }
 
+        .metea-mobile-menu { display: none; }
         @media (max-width: 900px) {
+            .metea-mobile-menu { display: block; margin: 0 0 16px; border: 1px solid #dce5f2; border-radius: 12px; background: white; }
+            .metea-mobile-menu > summary { cursor: pointer; padding: 14px 16px; min-height: 48px; font-weight: 700; color: #0759df; }
+            .metea-mobile-links { padding: 8px 12px 16px; }
+            .metea-mobile-links .metea-side-logo-frame { display: none; }
+            .metea-mobile-links a { min-height: 44px; }
+
             .metea-side-navigation {
                 display: none;
             }
@@ -226,6 +233,8 @@ def render_job_navigation(
     )
 
     st.markdown(
-        navigation_html,
+        navigation_html + '<details class="metea-mobile-menu"><summary>☰ MeTeA メニュー</summary>'
+        + navigation_html.replace('class="metea-side-navigation"', 'class="metea-mobile-links" aria-label="携帯用メニュー"')
+        + '</details>',
         unsafe_allow_html=True,
     )

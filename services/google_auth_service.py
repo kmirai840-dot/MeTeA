@@ -188,6 +188,8 @@ def require_google_user() -> None:
         st.write("ご自身のGoogleアカウントでログインしてください。初回は招待コードを入力します。" if invitations is None else "招待されたGoogleアカウントでログインしてください。")
         from ui.data_notice import render_data_notice
         render_data_notice()
+        st.info("LINEから開いた方へ：GoogleログインはSafariまたはChromeで行ってください。LINE内で開いている場合は、メニューから外部ブラウザで開くか、下のURLをコピーしてSafari／Chromeに貼り付けてください。")
+        st.code("https://metea-job-support.streamlit.app/", language=None)
         if st.button("Googleでログイン", type="primary"):
             st.login("google")
         st.stop()

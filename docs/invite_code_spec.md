@@ -27,3 +27,19 @@ Google Auth Platformの公開ステータスを本番環境へ変更し、ホー
 ### 確認結果
 
 最終通常スイートはRan 69 tests / OK skipped=7。招待コードのSQLiteテスト4件（フォーム送信を含む）成功。実Neonのロジックテスト3件成功。公開版で既存IDのコード不要の継続利用と求人詳細画面への到達を確認した。求人156はimportエラーではなくAI評価未完了の案内が表示される。新規の実Googleアカウントでの確認は共有相手との受入確認として残る。
+
+
+## 携帯表示とLINE共有（2026年9月10日追加）
+
+| 対象 | As-Is（変更前） | To-Be（今回実装） |
+|---|---|---|
+| 共通メニュー | 900px以下で非表示 | 共通ナビを使う画面に開閉式「MeTeA メニュー」を表示。ホーム・求人・応募管理・設定等へ移動可能 |
+| 比較画面 | 画面全体の最小幅960px | ページは端末幅。比較表だけ横スクロールし、項目列を固定。求人番号で各表と企業を対応付け |
+| 比較サマリー | 複数列 | 携帯幅では1列 |
+| LINEからの利用 | 専用案内なし | ログイン前にSafari／Chromeで開く案内とコピー用の公開URLを表示 |
+
+共有するURLは `https://metea-job-support.streamlit.app/`。特定の求人ID・他人の入力情報・招待コードをURLに含めない。招待コードは送付用の文面にのみ含め、リポジトリには保存しない。LINEへの自動送信は行わない。
+
+確認範囲：実装から出力したナビ・3求人の比較HTMLを、Edgeで360・390・430・1280px幅で描画。携帯幅でページ全体の横はみ出しがないこと、メニューの開閉・リンク表示、表内スクロール、PCでは携帯メニュー非表示を確認。これは画面部品の検証であり、全画面の実機検証・LINE内からのGoogleログイン成功確認ではない。入力画面・応募管理を含む携帯実機での受入確認は残る。
+
+Googleログインは埋め込みブラウザで制限される場合があるため、Safari／Chromeへ案内する。[Googleの説明](https://developers.googleblog.com/en/upcoming-security-changes-to-googles-oauth-20-authorization-endpoint-in-embedded-webviews/)。iPhone/iPadではLINEの標準ブラウザ設定も利用できる：[LINE公式ヘルプ](https://help.line.me/line/smartphone?contentId=20023875&lang=ja)。アプリから外部ブラウザへの強制遷移は実装しない。
