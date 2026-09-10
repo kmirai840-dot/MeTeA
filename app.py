@@ -40,6 +40,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# データ取扱説明はGoogleログイン前でも参照できる。
+if st.query_params.get("page") == "privacy":
+    from ui.data_notice import NOTICE
+    st.title("MeTeA：保存する情報と利用目的")
+    st.markdown(NOTICE)
+    st.stop()
+
 configure_runtime_secrets()
 try:
     google_login_enabled = auth_mode() == "google"

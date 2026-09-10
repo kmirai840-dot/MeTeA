@@ -37,7 +37,8 @@ flowchart TD
     Login --> OIDC[Google OIDCとStreamlitによる検証]
     OIDC --> Cookie
     Cookie -->|はい| Claims[Google issuer・sub・確認済みメールを確認]
-    Claims --> Invite{許可メールに一致}
+    Claims --> Invite{登録方式の入場条件を確認}
+    Invite -. 招待コード方式 .-> Code[初回だけコード照合・登録済みは本人IDで復帰]
     Invite -->|いいえ| Deny[アクセス拒否・アカウント切替]
     Invite -->|はい| Identity[認証元とsubでusersを検索]
     Identity --> Account{既存アカウント}
@@ -140,3 +141,8 @@ NeonのMeTeA用PostgreSQLをFreeプランで作成済み（Singapore、PostgreSQ
 ## 2026年9月10日：運営者確認・出力とデータ説明
 
 As-Is：本人用画面とバックアップCLI。今回：通常利用者の分離を維持したまま、運営者に限り利用者別の保存データ確認・CSV/JSON出力を追加した。この機能の保存内容も対象となる。ログイン前・設定画面に保存情報と利用目的、外部送信の説明を追加した。To-Be：公開設定の反映と、別の実Googleアカウントを含む受入確認。詳細は[運営者データ設計](operator_data_spec.md)を参照。
+
+
+## 初回招待コード方式への変更
+
+メール事前登録から、Googleログイン後の初回招待コード入力へ変更する。通常利用者の所有者チェックと運営者専用権限を維持する。As-Is/To-Beと確認範囲は[招待コード設計](invite_code_spec.md)を参照。

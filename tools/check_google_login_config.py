@@ -33,7 +33,7 @@ def main() -> int:
     except LoginConfigurationError as error:
         print(str(error))
         return 1
-    print(f"設定形式は正常です。許可メール {len(emails)} 件。Googleへの実ログインは別途確認してください。")
+    print("設定形式は正常です。招待コード方式。Googleへの実ログインは別途確認してください。" if emails is None else f"設定形式は正常です。許可メール {len(emails)} 件。Googleへの実ログインは別途確認してください。")
     return 0
 
 

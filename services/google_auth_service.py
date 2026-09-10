@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import hmac
 import sqlite3
 import psycopg
 from collections.abc import Mapping
@@ -11,6 +12,10 @@ from database.connection import get_connection, begin_account_registration
 
 
 class LoginDenied(PermissionError):
+    pass
+
+
+class InvitationRequired(LoginDenied):
     pass
 
 
@@ -41,6 +46,19 @@ def allowed_emails(settings: Mapping) -> frozenset[str]:
     return frozenset(value.strip().casefold() for value in raw)
 
 
+def access_invitations(settings: Mapping):
+    access = settings.get("access", {})
+    mode = access.get("registration_mode", "email_allowlist")
+    if mode == "invite_code":
+        code = access.get("invite_code", "")
+        if not isinstance(code, str) or len(code) < 16:
+            raise LoginConfigurationError("招待コードは16文字以上で設定してください。")
+        return None  # 有効なGoogleアカウントの登録済みIDを継続利用する。
+    if mode != "email_allowlist":
+        raise LoginConfigurationError("利用者登録方式の設定を確認してください。")
+    return allowed_emails(settings)
+
+
 def validate_login_settings(settings: Mapping) -> frozenset[str]:
     auth = settings.get("auth", {})
     google = auth.get("google", {}) if isinstance(auth, Mapping) else {}
@@ -56,13 +74,13 @@ def validate_login_settings(settings: Mapping) -> frozenset[str]:
         raise LoginConfigurationError("Googleログインの戻り先URLを確認してください。")
     if len(auth["cookie_secret"]) < 32 or google.get("server_metadata_url") != GOOGLE_METADATA_URL:
         raise LoginConfigurationError("GoogleログインのCookie設定・認証元を確認してください。")
-    emails = allowed_emails(settings)
-    if not emails:
+    emails = access_invitations(settings)
+    if emails is not None and not emails:
         raise LoginConfigurationError("招待するメールアドレスが未設定です。")
     return emails
 
 
-def resolve_google_user(claims: Mapping, invitations: frozenset[str]) -> int:
+def resolve_google_user(claims: Mapping, invitations: frozenset[str] | None, *, invitation_code=None) -> int:
     """Streamlit検証済みst.user専用。ブラウザ入力・未検証JWTからは呼ばない。"""
     email = claims.get("email")
     subject = claims.get("sub")
@@ -72,7 +90,7 @@ def resolve_google_user(claims: Mapping, invitations: frozenset[str]) -> int:
             or not isinstance(email, str)):
         raise LoginDenied("確認済みのGoogleアカウントでログインしてください。")
     email = email.strip().casefold()
-    if email not in invitations:
+    if invitations is not None and email not in invitations:
         raise LoginDenied("このアカウントはMeTeAの利用対象に登録されていません。")
     name = claims.get("name", "")
     picture = claims.get("picture", "")
@@ -94,6 +112,15 @@ def resolve_google_user(claims: Mapping, invitations: frozenset[str]) -> int:
             # メールだけで既存ユーザーを乗っ取ったり、ID 1を自動移管しない。
             raise LoginDenied("アカウントの確認が必要です。運営者に連絡してください。")
         if existing is None:
+            if invitations is None:
+                import streamlit as st
+                # 呼出し引数だけで無制限登録を有効にしない。
+                if access_invitations(st.secrets) is not None:
+                    raise LoginDenied("登録方式が一致しません。")
+                expected = st.secrets["access"]["invite_code"]
+                if not isinstance(invitation_code, str) or not hmac.compare_digest(
+                        invitation_code.strip().encode(), expected.encode()):
+                    raise InvitationRequired("初回利用には招待コードが必要です。コードを確認して入力してください。")
             cursor = connection.execute(
                 """INSERT INTO users(email, display_name, auth_provider, auth_subject,
                        avatar_url, email_verified, last_login_at)
@@ -130,7 +157,7 @@ def require_account_enabled(user_id: int, invitations: frozenset[str]) -> None:
         ).fetchone()
         if (row is None or not row["is_active"] or row["deleted_at"] is not None
                 or row["auth_provider"] != "google" or not row["auth_subject"] or not row["email_verified"]
-                or str(row["email"] or "").casefold() not in invitations):
+                or (invitations is not None and str(row["email"] or "").casefold() not in invitations)):
             raise LoginDenied("このアカウントは現在利用できません。")
     finally:
         connection.close()
@@ -158,7 +185,7 @@ def require_google_user() -> None:
     if not st.user.is_logged_in:
         clear_current_user_id()
         st.title("MeTeA")
-        st.write("招待されたGoogleアカウントでログインしてください。")
+        st.write("ご自身のGoogleアカウントでログインしてください。初回は招待コードを入力します。" if invitations is None else "招待されたGoogleアカウントでログインしてください。")
         from ui.data_notice import render_data_notice
         render_data_notice()
         if st.button("Googleでログイン", type="primary"):
@@ -166,8 +193,29 @@ def require_google_user() -> None:
         st.stop()
     try:
         initialize_database()
-        user_id = resolve_google_user(dict(st.user), invitations)
+        entered_code = st.session_state.pop("metea_pending_invite_code", None)
+        if entered_code is None:
+            user_id = resolve_google_user(dict(st.user), invitations)
+        else:
+            user_id = resolve_google_user(dict(st.user), invitations, invitation_code=entered_code)
         set_current_user_id(user_id)
+    except InvitationRequired as error:
+        from services.current_user_service import CURRENT_USER_SESSION_KEY
+        if CURRENT_USER_SESSION_KEY in st.session_state:
+            clear_current_user_id()
+        st.title("MeTeAへようこそ")
+        st.info(str(error))
+        from ui.data_notice import render_data_notice
+        render_data_notice()
+        with st.form("first_invitation"):
+            code = st.text_input("招待コード", type="password")
+            submitted = st.form_submit_button("利用を開始")
+        if submitted:
+            st.session_state["metea_pending_invite_code"] = code
+            st.rerun()
+        if st.button("別のGoogleアカウントを使う"):
+            logout_google_user()
+        st.stop()
     except (ConnectionError, psycopg.OperationalError, psycopg.InterfaceError):
         clear_current_user_id()
         st.title("MeTeA")

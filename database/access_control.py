@@ -12,10 +12,10 @@ def require_user_id(user_id: int | None = None) -> int:
     current = get_current_user_id()
     if user_id is not None and user_id != current:
         raise DataAccessDenied("このデータを操作する権限がありません。")
-    from services.google_auth_service import auth_mode, allowed_emails, require_account_enabled
+    from services.google_auth_service import auth_mode, allowed_emails, access_invitations, require_account_enabled
     if auth_mode() == "google":
         import streamlit as st
-        require_account_enabled(current, allowed_emails(st.secrets))
+        require_account_enabled(current, access_invitations(st.secrets))
     return current
 
 

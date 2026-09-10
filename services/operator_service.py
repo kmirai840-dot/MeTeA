@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from database.connection import get_connection
 from database.access_control import DataAccessDenied
 from services.current_user_service import get_current_user_id
-from services.google_auth_service import auth_mode, allowed_emails, require_account_enabled
+from services.google_auth_service import auth_mode, allowed_emails, access_invitations, require_account_enabled
 
 
 def require_operator():
@@ -17,7 +17,7 @@ def require_operator():
         raise DataAccessDenied('運営者としてのログインが必要です。')
     admins = allowed_emails({'access': {'allowed_emails': st.secrets.get('access', {}).get('admin_emails', [])}})
     uid = get_current_user_id()
-    require_account_enabled(uid, allowed_emails(st.secrets))
+    require_account_enabled(uid, access_invitations(st.secrets))
     claims = dict(st.user)
     c = get_connection()
     try:

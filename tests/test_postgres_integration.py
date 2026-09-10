@@ -174,3 +174,9 @@ import test_operator as operator_tests
 
 class PostgresOperatorTest(PostgresFixture, operator_tests.OperatorTest):
     pass
+
+
+import test_invite_code as invite_tests
+
+class PostgresInviteCodeTest(PostgresFixture, invite_tests.InviteCodeTest):
+    pass

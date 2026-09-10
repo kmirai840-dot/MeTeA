@@ -34,3 +34,8 @@
 貸出時にConnectionPool.check_connectionを実行し、切れた接続の後片付けは元の例外を上書きせず、必ず返却してプールに破棄・補充させる。ログイン初期化中に通信エラーが残る場合は再試行案内を表示する。書込み・commitの自動再送やSQLiteへの切替はしない。
 Neonへの実接続で、この検証プロセス自身の接続だけを切断し、貸出時の交換・切断後のclose・次のSELECT成功を確認。業務データは変更していない。公開環境の長時間休止後の再発有無は継続して確認が必要。
 参考：[psycopg接続プールの生存確認](https://www.psycopg.org/psycopg3/docs/advanced/pool.html#connection-quality)。
+
+
+## 初回招待コード方式への変更
+
+メール事前登録から、Googleログイン後の初回招待コード入力へ変更する。通常利用者の所有者チェックと運営者専用権限を維持する。As-Is/To-Beと確認範囲は[招待コード設計](invite_code_spec.md)を参照。
