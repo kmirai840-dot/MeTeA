@@ -4,6 +4,8 @@ from html import escape
 
 import streamlit as st
 
+from ui.job_evaluation_progress import render_evaluation_progress
+
 from services.job_evaluation_service import (
     load_job_match_evaluations,
 )
@@ -1192,6 +1194,8 @@ def render_comparison_summary(
 
 def show_page() -> None:
     """求人比較結果を表示する。"""
+
+    render_evaluation_progress()
 
     render_job_navigation("job_comparison")
     render_comparison_styles()

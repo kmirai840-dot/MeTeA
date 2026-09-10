@@ -4,6 +4,8 @@ from html import escape
 
 import streamlit as st
 
+from ui.job_evaluation_progress import render_evaluation_progress
+
 from database.repositories.home_activity_repository import save_general_activity
 
 from pages.job_registration import (
@@ -24,10 +26,6 @@ from services.job_evaluation_service import (
 )
 from services.job_matching_auto_evaluation_service import (
     enqueue_job_evaluation,
-    enqueue_stale_job_evaluations,
-)
-from services.job_matching_cache_service import (
-    load_current_user_stale_job_ids,
 )
 from services.current_user_service import get_current_user_id
 
@@ -46,10 +44,6 @@ JOB_COMPARE_SELECTED_KEY = (
 
 JOB_LIST_PAGE_KEY = (
     "job_list_current_page"
-)
-
-JOB_STALE_REFRESH_SIGNATURE_KEY = (
-    "job_list_stale_refresh_signature"
 )
 
 JOB_LIST_PAGE_SIZE = 20
@@ -731,6 +725,8 @@ def render_recommendation_candidate(
 def show_page() -> None:
     """求人一覧画面を表示する。"""
 
+    render_evaluation_progress()
+
     render_job_navigation(
         "job_list"
     )
@@ -765,41 +761,6 @@ def show_page() -> None:
         st.session_state[
             JOB_LIST_PAGE_KEY
         ] = 1
-
-    stale_job_ids = (
-        load_current_user_stale_job_ids()
-    )
-
-    stale_signature = tuple(
-        stale_job_ids
-    )
-
-    previous_stale_signature = (
-        st.session_state.get(
-            JOB_STALE_REFRESH_SIGNATURE_KEY
-        )
-    )
-
-    if (
-        stale_job_ids
-        and previous_stale_signature
-        != stale_signature
-    ):
-        st.session_state[
-            JOB_STALE_REFRESH_SIGNATURE_KEY
-        ] = stale_signature
-
-        queued_count = enqueue_stale_job_evaluations()
-        if queued_count > 0:
-            st.info(
-                f"{queued_count}件の求人についてAIがマッチ度を確認しています。"
-                "ほかの操作を続けられます。"
-            )
-
-    if not stale_job_ids:
-        st.session_state[
-            JOB_STALE_REFRESH_SIGNATURE_KEY
-        ] = ()
 
     jobs = load_jobs()
 

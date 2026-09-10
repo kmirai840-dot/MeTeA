@@ -157,6 +157,11 @@ def _run_background_evaluation(user_id: int, job_id: int) -> None:
         finally:
             with _submission_lock:
                 _submitted_jobs.discard(job_key)
+            # 次のバッチと、評価中に変更された求人を継続する。
+            try:
+                enqueue_stale_job_evaluations()
+            except Exception:
+                logger.exception("Could not continue AI evaluation queue")
 
 
 def evaluate_job_now(
@@ -210,9 +215,19 @@ def enqueue_job_evaluation(job_id: int, retry: bool = False) -> bool:
             return False
         if current and current.evaluation_status == "failed" and not retry:
             return False
+        if (current and not retry and not current.is_stale
+                and current.overall_score is not None):
+            return False
         _submitted_jobs.add(job_key)
-        set_job_match_evaluation_status(user_id, job_id, "queued")
-        _executor.submit(_run_background_evaluation, user_id, job_id)
+        try:
+            set_job_match_evaluation_status(user_id, job_id, "queued")
+            _executor.submit(_run_background_evaluation, user_id, job_id)
+        except Exception:
+            _submitted_jobs.discard(job_key)
+            set_job_match_evaluation_status(
+                user_id, job_id, "failed", failure_reason=AI_EVALUATION_FAILURE_MESSAGE
+            )
+            raise
     return True
 
 
@@ -222,7 +237,9 @@ def enqueue_stale_job_evaluations(
     """再評価待ち求人を画面を止めずに指定件数まで登録する。"""
 
     queued = 0
-    for job_id in load_current_user_stale_job_ids()[:max(0, max_jobs)]:
+    for job_id in load_current_user_stale_job_ids():
+        if queued >= max(0, max_jobs):
+            break
         if enqueue_job_evaluation(job_id):
             queued += 1
     return queued

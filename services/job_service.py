@@ -612,6 +612,7 @@ def update_job_data(
 
     user_id = get_current_user_id()
 
+    previous_job = get_job(user_id=user_id, job_id=job_id)
     updated = update_job(
         user_id=user_id,
         job_id=job_id,
@@ -622,6 +623,10 @@ def update_job_data(
         return [
             "更新対象の求人が見つかりませんでした。"
         ]
+
+    if previous_job != get_job(user_id=user_id, job_id=job_id):
+        from services.job_matching_cache_service import invalidate_current_user_job_evaluation
+        invalidate_current_user_job_evaluation(job_id, "求人情報が変更されました。")
 
     source_id = sync_primary_job_source(
         user_id=user_id,

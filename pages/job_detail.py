@@ -6,6 +6,8 @@ import json
 
 import streamlit as st
 
+from ui.job_evaluation_progress import render_evaluation_progress
+
 from models import AISemanticMatchItem, JobAISemanticEvaluation, JobApplicationDecision
 from services.job_matching_score_service import (
     calculate_career_component_scores,
@@ -14,7 +16,6 @@ from services.job_matching_score_service import (
 from services.job_evaluation_service import (
     APPLICATION_DECISION_OPTIONS,
     acknowledge_job_match_evaluation_result,
-    is_job_match_evaluation_ready,
     load_job_application_decisions,
     load_job_match_evaluations,
     save_job_application_decision_data,
@@ -35,7 +36,6 @@ from services.job_confirmation_service import (
     restore_confirmation_item,
 )
 from services.job_matching_auto_evaluation_service import (
-    evaluate_job_now,
     enqueue_job_evaluation,
 )
 from services.job_matching_cache_service import (
@@ -2696,6 +2696,8 @@ def render_job_detail_styles() -> None:
 def show_page() -> None:
     """求人詳細画面を表示する。"""
 
+    render_evaluation_progress()
+
     render_job_navigation(
         "job_detail"
     )
@@ -2734,53 +2736,6 @@ def show_page() -> None:
         if st.button(
             "求人一覧へ戻る",
             key="missing_job_back",
-        ):
-            move_to_job_list()
-
-        return
-
-    evaluation = load_job_match_evaluations().get(job_id)
-
-    if not is_job_match_evaluation_ready(evaluation):
-        if evaluation is not None and evaluation.evaluation_status == "failed":
-            st.warning(
-                evaluation.failure_reason
-                or "AIマッチングを完了できませんでした。求人情報は保存されています。"
-            )
-        elif evaluation is not None and evaluation.evaluation_status == "running":
-            st.info(
-                "前回のAI評価は完了していません。"
-                "下のボタンから再実行してください。"
-            )
-        else:
-            st.info(
-                "AI評価がまだ完了していません。下のボタンからこの画面で評価を実行できます。"
-            )
-
-        action_label = (
-            "AIマッチングを再実行する"
-            if evaluation is not None
-            and evaluation.evaluation_status in {"failed", "running"}
-            else "AIマッチングを実行する"
-        )
-        if st.button(
-            action_label,
-            key=f"job_detail_gate_run_{job_id}",
-            type="primary",
-        ):
-            with st.spinner("AIが求人と登録情報を評価しています。そのままお待ちください。"):
-                completed_evaluation, error_message = evaluate_job_now(job_id)
-            if completed_evaluation is None:
-                st.error(
-                    error_message
-                    or "AIマッチングを完了できませんでした。"
-                )
-            else:
-                st.rerun()
-
-        if st.button(
-            "← 求人一覧へ戻る",
-            key="job_detail_gate_back",
         ):
             move_to_job_list()
 

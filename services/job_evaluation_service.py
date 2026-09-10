@@ -55,8 +55,11 @@ def load_job_match_evaluations(
     version_mismatch_found = False
     for evaluation in evaluations.values():
         if (
-            evaluation.rule_version != EVALUATION_RULE_VERSION
+            evaluation.evaluation_status not in {"queued", "running"}
+            and not evaluation.is_stale
+            and (evaluation.rule_version != EVALUATION_RULE_VERSION
             or evaluation.prompt_version != PROMPT_VERSION
+            )
         ):
             mark_job_match_evaluation_stale(
                 user_id=user_id,

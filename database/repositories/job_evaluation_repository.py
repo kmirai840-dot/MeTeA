@@ -193,9 +193,11 @@ def save_job_match_evaluation(
                 is_provisional =
                     excluded.is_provisional,
                 is_stale =
-                    excluded.is_stale,
+                    CASE WHEN user_job_match_evaluations.evaluation_status = 'running'
+                    THEN user_job_match_evaluations.is_stale ELSE excluded.is_stale END,
                 stale_reason =
-                    excluded.stale_reason,
+                    CASE WHEN user_job_match_evaluations.evaluation_status = 'running'
+                    THEN user_job_match_evaluations.stale_reason ELSE excluded.stale_reason END,
                 rule_version =
                     excluded.rule_version,
                 prompt_version =
@@ -559,6 +561,8 @@ def set_job_match_evaluation_status(
             )
             ON CONFLICT (user_id, job_id) DO UPDATE SET
                 evaluation_status = excluded.evaluation_status,
+                is_stale = CASE WHEN excluded.evaluation_status = 'running'
+                    THEN 0 ELSE user_job_match_evaluations.is_stale END,
                 failure_reason = excluded.failure_reason,
                 failed_at = CASE
                     WHEN excluded.evaluation_status = 'failed'
