@@ -79,12 +79,12 @@ class RefreshTest(unittest.TestCase):
                 return fn
             return decorate
         fake.fragment = fragment
-        with patch.object(ui, "st", fake), patch.object(ui, "load_job_match_evaluations"), patch.object(ui, "enqueue_stale_job_evaluations") as enqueue, patch.object(ui, "evaluation_snapshot", side_effect=[initial,initial,done]):
+        with patch.object(ui, "st", fake), patch.object(ui, "load_job_match_evaluations", return_value={self.job: JobMatchEvaluation(job_id=self.job, evaluation_status="running", evaluated_at="old")}), patch.object(ui, "enqueue_stale_job_evaluations") as enqueue, patch.object(ui, "evaluation_snapshot", side_effect=[initial,done]):
             ui.render_evaluation_progress()
             fake.rerun.assert_not_called()
             callbacks[0]()
             fake.rerun.assert_called_once()
-            enqueue.assert_called_once()  # 定期確認ではAIを投入しない
+            enqueue.assert_not_called()  # 定期確認ではAIを投入しない
 
     def test_job_update_invalidates_only_changed_content(self):
         from services.job_service import update_job_data
@@ -98,9 +98,11 @@ class RefreshTest(unittest.TestCase):
         self.assertTrue(repo.get_job_match_evaluations(1)[self.job].is_stale)
 
     def test_idle_has_no_timer(self):
-        with patch.object(ui, "st") as st, patch.object(ui, "load_job_match_evaluations"), patch.object(ui, "enqueue_stale_job_evaluations"), patch.object(ui, "evaluation_snapshot", return_value=((self.job,"completed",False,"now"),)):
+        with patch.object(ui, "st") as st, patch.object(ui, "load_job_match_evaluations", return_value={self.job: JobMatchEvaluation(job_id=self.job, overall_score=70)}), patch.object(ui, "enqueue_stale_job_evaluations") as enqueue, patch.object(ui, "evaluation_snapshot") as snapshot:
             ui.render_evaluation_progress()
             st.fragment.assert_not_called()
+            enqueue.assert_not_called()
+            snapshot.assert_not_called()
 
     def test_worker_continues_queue(self):
         with patch.object(worker, "automatically_evaluate_and_save_job", return_value=(JobMatchEvaluation(job_id=self.job), "")), patch.object(worker, "enqueue_stale_job_evaluations") as next_batch:

@@ -7,6 +7,17 @@ import importlib
 
 import streamlit as st
 
+st.set_page_config(
+    page_title="MeTeA",
+    page_icon="🧭",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# 重いサービスのimport・認証・DB通信より先に表示する。
+_loading_notice = st.empty()
+_loading_notice.info("MeTeAを読み込んでいます。接続とログイン状態を確認しています…")
+
 from database.initialize import initialize_database
 from database.repositories.home_activity_repository import get_home_activities
 from services.application_management_service import load_application_views, operational_summary
@@ -33,15 +44,11 @@ from services.runtime_config import (
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
-st.set_page_config(
-    page_title="MeTeA",
-    page_icon="🧭",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+
 
 # データ取扱説明はGoogleログイン前でも参照できる。
 if st.query_params.get("page") == "privacy":
+    _loading_notice.empty()
     from ui.data_notice import NOTICE
     st.title("MeTeA：保存する情報と利用目的")
     st.markdown(NOTICE)
@@ -53,10 +60,13 @@ try:
 except LoginConfigurationError:
     st.error("ログイン設定を確認しています。運営者に連絡してください。")
     st.stop()
-if google_login_enabled:
-    require_google_user()
-else:
-    require_app_password()
+try:
+    if google_login_enabled:
+        require_google_user()
+    else:
+        require_app_password()
+finally:
+    _loading_notice.empty()
 try:
     get_current_user_id()
 except UserIdentityRequired as error:
@@ -75,12 +85,15 @@ def render_reloaded_page(
     **kwargs,
 ):
     """画面を通常のimportで読み込む。更新はアプリ再起動で反映する。"""
+    _loading_notice.info("画面を読み込んでいます。保存された情報を確認しています…")
     try:
         module = importlib.import_module(module_name)
         return getattr(module, function_name)(*args, **kwargs)
     except (DataAccessDenied, UserIdentityRequired, LoginDenied, LoginConfigurationError) as error:
         st.error(str(error))
         st.stop()
+    finally:
+        _loading_notice.empty()
 
 
 

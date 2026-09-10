@@ -890,12 +890,12 @@ def render_section_heading(
 def render_ai_matching_result(
     job_id: int,
     job,
+    evaluations=None,
 ) -> None:
     """求人のAIマッチング結果を表示する。"""
 
-    evaluations = (
-        load_job_match_evaluations()
-    )
+    if evaluations is None:
+        evaluations = load_job_match_evaluations()
 
     evaluation = evaluations.get(job_id)
 
@@ -1460,12 +1460,12 @@ def render_dismissed_confirmation_items(
 
 def render_matching_detail(
     job_id: int,
+    evaluations=None,
 ) -> None:
     """AIマッチング評価の内訳を表示する。"""
 
-    evaluations = (
-        load_job_match_evaluations()
-    )
+    if evaluations is None:
+        evaluations = load_job_match_evaluations()
 
     evaluation = evaluations.get(job_id)
 
@@ -2696,13 +2696,13 @@ def render_job_detail_styles() -> None:
 def show_page() -> None:
     """求人詳細画面を表示する。"""
 
-    render_evaluation_progress()
-
     render_job_navigation(
         "job_detail"
     )
 
     render_job_detail_styles()
+
+    evaluations = render_evaluation_progress()
 
     job_id_value = st.query_params.get(
         "job_id"
@@ -2755,11 +2755,12 @@ def show_page() -> None:
     render_ai_matching_result(
         job_id=job_id,
         job=job,
+        evaluations=evaluations,
     )
 
     st.divider()
 
-    render_matching_detail(job_id)
+    render_matching_detail(job_id, evaluations=evaluations)
 
     st.divider()
 

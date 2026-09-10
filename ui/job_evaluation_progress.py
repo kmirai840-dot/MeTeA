@@ -39,11 +39,15 @@ def result_signature(snapshot):
 
 def render_evaluation_progress():
     # 画面を開いた時だけルール更新と未処理の変更を確認する。
-    load_job_match_evaluations()
-    enqueue_stale_job_evaluations()
-    initial = evaluation_snapshot()
+    evaluations = load_job_match_evaluations()
+    initial = tuple((job_id, e.evaluation_status, e.is_stale, str(e.evaluated_at or ''))
+                    for job_id, e in sorted(evaluations.items()))
     if not has_pending(initial):
-        return
+        return evaluations
+    if any(e.is_stale and e.evaluation_status not in {'queued', 'running', 'failed'}
+           for e in evaluations.values()):
+        enqueue_stale_job_evaluations()
+        initial = evaluation_snapshot()
     baseline = result_signature(initial)
 
     @st.fragment(run_every=3)
@@ -54,3 +58,4 @@ def render_evaluation_progress():
         st.info('AI評価を更新中です。前回の結果がある場合は表示を続け、完了すると自動で切り替わります。')
 
     watch()
+    return evaluations

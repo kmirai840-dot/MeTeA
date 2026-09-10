@@ -1195,10 +1195,10 @@ def render_comparison_summary(
 def show_page() -> None:
     """求人比較結果を表示する。"""
 
-    render_evaluation_progress()
-
     render_job_navigation("job_comparison")
     render_comparison_styles()
+
+    evaluations = render_evaluation_progress()
 
     selected_job_ids = st.session_state.get(
         JOB_COMPARE_SELECTED_KEY,
@@ -1267,7 +1267,6 @@ def show_page() -> None:
         )
         return
 
-    evaluations = load_job_match_evaluations()
     rule_data = load_rule_comparison_data(selected_jobs)
 
     def rule_judgments(*item_names):

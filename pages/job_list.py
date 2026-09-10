@@ -659,6 +659,8 @@ def render_recommendation_candidate(
         f"?page=job_detail&job_id={job_id}"
     )
 
+    evaluations = render_evaluation_progress()
+
     info_icon_uri = svg_data_uri("info.svg")
 
     card_html = (
@@ -725,8 +727,6 @@ def render_recommendation_candidate(
 def show_page() -> None:
     """求人一覧画面を表示する。"""
 
-    render_evaluation_progress()
-
     render_job_navigation(
         "job_list"
     )
@@ -764,9 +764,7 @@ def show_page() -> None:
 
     jobs = load_jobs()
 
-    evaluations = (
-        load_job_match_evaluations()
-    )
+
 
     for evaluated_job_id, current_evaluation in evaluations.items():
         if current_evaluation.evaluation_status == "failed":
