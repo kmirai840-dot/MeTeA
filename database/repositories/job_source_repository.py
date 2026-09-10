@@ -2,6 +2,7 @@
 
 import sqlite3
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import JobSource
 
@@ -51,6 +52,7 @@ def get_job_sources(
     job_id: int,
 ) -> list[tuple[int, JobSource]]:
     """指定求人に登録された紹介経路を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -95,6 +97,7 @@ def create_job_source(
     job_source: JobSource,
 ) -> int | None:
     """求人へ新しい紹介経路を追加する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -133,7 +136,7 @@ def create_job_source(
 
         cursor = connection.execute(
             """
-            INSERT OR IGNORE INTO user_job_sources (
+            INSERT INTO user_job_sources (
                 job_id,
                 source_type,
                 source_name,
@@ -145,6 +148,7 @@ def create_job_source(
                 is_primary
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (job_id, source_type, source_name, source_url) DO NOTHING
             """,
             (
                 job_id,
@@ -211,6 +215,7 @@ def set_primary_job_source(
     source_id: int,
 ) -> bool:
     """指定した紹介経路を主経路にする。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -286,6 +291,7 @@ def sync_primary_job_source(
     job_source: JobSource,
 ) -> int | None:
     """求人の主な紹介経路を新しい内容へ同期する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -428,6 +434,7 @@ def delete_job_source(
     source_id: int,
 ) -> bool:
     """紹介経路を論理削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

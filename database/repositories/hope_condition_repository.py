@@ -2,6 +2,7 @@
 
 from datetime import date
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import HopeCondition, HopeConditionItem
 
@@ -13,6 +14,7 @@ def save_hope_conditions(
     draft_form_name: str,
 ) -> None:
     """希望条件を正式保存し、下書きを削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -182,6 +184,7 @@ def get_hope_condition(
     user_id: int,
 ) -> HopeCondition | None:
     """正式保存済みの単一値希望条件を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -264,6 +267,7 @@ def get_hope_condition_items(
     user_id: int,
 ) -> list[HopeConditionItem]:
     """正式保存済みの複数値希望条件を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

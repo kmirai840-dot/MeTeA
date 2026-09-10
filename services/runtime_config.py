@@ -21,6 +21,9 @@ SECRET_KEYS = (
     "APP_PASSWORD",
     "APP_ENV",
     "METEA_DATABASE_PATH",
+    "METEA_REQUIRE_AUTH",
+    "METEA_AUTH_MODE",
+    "METEA_DATABASE_BACKEND",
 )
 
 AUTH_COOKIE_NAME = "metea_demo_auth"
@@ -166,6 +169,9 @@ def require_app_password() -> None:
 def clear_app_authentication() -> None:
     """ブラウザとStreamlitセッションのデモ認証情報を削除する。"""
 
+    from services.current_user_service import clear_current_user_id
+
+    clear_current_user_id()
     st.session_state.pop("app_authenticated", None)
     _cookie_manager().delete(
         AUTH_COOKIE_NAME,

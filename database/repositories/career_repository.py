@@ -1,5 +1,6 @@
 """職務経歴の保存・取得を担当する。"""
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import (
     Career,
@@ -17,6 +18,7 @@ def save_careers(
     ],
 ) -> None:
     """複数社の職務経歴をまとめて正式保存する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -135,6 +137,7 @@ def get_careers(
     ]
 ]:
     """利用者の職務経歴を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

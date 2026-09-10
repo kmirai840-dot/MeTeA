@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 
 
@@ -9,7 +10,8 @@ def save_draft(
     form_name: str,
     draft_data: dict[str, Any],
 ) -> None:
-    """入力途中の内容をSQLiteへ保存する。"""
+    """入力途中の内容を選択中のDBへ保存する。"""
+    user_id = require_user_id(user_id)
 
     draft_json = json.dumps(
         draft_data,
@@ -49,7 +51,8 @@ def get_draft(
     user_id: int,
     form_name: str,
 ) -> dict[str, Any] | None:
-    """SQLiteから入力途中の内容を取得する。"""
+    """選択中のDBから入力途中の内容を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -80,6 +83,7 @@ def delete_draft(
     form_name: str,
 ) -> None:
     """正式保存後に不要となった下書きを削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

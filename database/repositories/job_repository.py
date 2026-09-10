@@ -3,6 +3,7 @@
 import sqlite3
 
 from models import Job
+from database.access_control import require_user_id
 from database.connection import get_connection
 
 
@@ -221,6 +222,7 @@ def create_job(
     job: Job,
 ) -> int:
     """求人を新規登録し、求人IDを返す。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -288,6 +290,7 @@ def get_jobs(
     user_id: int,
 ) -> list[tuple[int, Job]]:
     """利用者の登録済み求人を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -326,6 +329,7 @@ def get_job(
     job_id: int,
 ) -> Job | None:
     """指定した求人を1件取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -362,6 +366,7 @@ def find_jobs_by_company(
     company_name: str,
 ) -> list[tuple[int, Job]]:
     """同じ会社の登録済み求人を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -404,6 +409,7 @@ def find_jobs_by_company_and_occupation(
     occupation: str,
 ) -> list[tuple[int, Job]]:
     """同じ会社・職種の登録済み求人を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -448,6 +454,7 @@ def update_job(
     job: Job,
 ) -> bool:
     """登録済み求人を更新する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -529,6 +536,7 @@ def delete_job(
     job_id: int,
 ) -> bool:
     """求人を論理削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

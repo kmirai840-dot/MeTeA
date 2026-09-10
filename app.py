@@ -10,7 +10,11 @@ import streamlit as st
 from database.initialize import initialize_database
 from database.repositories.home_activity_repository import get_home_activities
 from services.application_management_service import load_application_views, operational_summary
-from services.current_user_service import get_current_user_id
+from services.current_user_service import get_current_user_id, UserIdentityRequired
+from database.access_control import DataAccessDenied
+from services.google_auth_service import (
+    auth_mode, require_google_user, logout_google_user, LoginDenied, LoginConfigurationError,
+)
 from pages.job_layout import render_job_navigation
 from ui.design_system import apply_common_design_system
 from database.demo_seed import seed_demo_data
@@ -37,10 +41,24 @@ st.set_page_config(
 )
 
 configure_runtime_secrets()
-require_app_password()
-initialize_database()
-if is_demo_environment():
-    seed_demo_data()
+try:
+    google_login_enabled = auth_mode() == "google"
+except LoginConfigurationError:
+    st.error("ログイン設定を確認しています。運営者に連絡してください。")
+    st.stop()
+if google_login_enabled:
+    require_google_user()
+else:
+    require_app_password()
+try:
+    get_current_user_id()
+except UserIdentityRequired as error:
+    st.info(str(error))
+    st.stop()
+if not google_login_enabled:
+    initialize_database()
+    if is_demo_environment():
+        seed_demo_data()
 
 
 def render_reloaded_page(
@@ -53,7 +71,11 @@ def render_reloaded_page(
     importlib.invalidate_caches()
     module = importlib.import_module(module_name)
     module = importlib.reload(module)
-    return getattr(module, function_name)(*args, **kwargs)
+    try:
+        return getattr(module, function_name)(*args, **kwargs)
+    except (DataAccessDenied, UserIdentityRequired, LoginDenied, LoginConfigurationError) as error:
+        st.error(str(error))
+        st.stop()
 
 
 
@@ -87,6 +109,7 @@ valid_pages = {
     "milestones",
     "activity_history",
     "settings",
+    "operator",
     "help",
     "logout",
 }
@@ -169,13 +192,20 @@ elif current_page == "selection_preparation":
     render_reloaded_page("pages.application_management", "render_selection_preparation_page")
     st.stop()
 
+elif current_page == "operator":
+    render_reloaded_page("ui.operator_page", "render_operator_page")
+    st.stop()
+
 elif current_page == "settings":
     render_job_navigation("settings")
     st.title("設定")
 
-    st.write(
-        "設定画面は、今後この場所に実装します。"
-    )
+    from ui.data_notice import render_data_notice
+    from services.operator_service import is_operator
+    render_data_notice()
+    if is_operator() and st.button("運営者：利用者データ"):
+        st.query_params["page"] = "operator"
+        st.rerun()
 
     if st.button("トップ画面へ戻る"):
         st.query_params.clear()
@@ -205,9 +235,13 @@ elif current_page == "logout":
         "ログアウトしますか？"
     )
 
-    st.info("ログアウトすると、再度閲覧用パスワードの入力が必要になります。")
+    st.info("ログアウトすると、再度Googleでのログインが必要になります。" if google_login_enabled
+            else "ログアウトすると、再度閲覧用パスワードの入力が必要になります。")
 
     if st.button("ログアウトする", type="primary"):
+        if google_login_enabled:
+            logout_google_user()
+            st.stop()
         clear_app_authentication()
         st.query_params.clear()
         st.rerun()

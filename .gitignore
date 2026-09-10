@@ -188,3 +188,6 @@ database/metea.db-shm
 
 # Streamlit secrets
 .streamlit/secrets.toml
+
+# Operator database archives and migration reports
+/backups/

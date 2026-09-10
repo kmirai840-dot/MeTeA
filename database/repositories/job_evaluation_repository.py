@@ -1,5 +1,9 @@
 """求人のAI評価と応募判断を担当するRepository。"""
 
+from database.access_control import (
+    require_job_owner,
+    require_user_id,
+)
 from database.connection import get_connection
 from models import (
     JobApplicationDecision,
@@ -14,6 +18,7 @@ def get_job_match_evaluations(
     user_id: int,
 ) -> dict[int, JobMatchEvaluation]:
     """利用者の全求人に対するAI評価を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -49,6 +54,12 @@ def get_job_match_evaluations(
             WHERE
                 user_id = ?
                 AND deleted_at IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM user_jobs j
+                    WHERE j.id = user_job_match_evaluations.job_id
+                      AND j.user_id = user_job_match_evaluations.user_id
+                      AND j.deleted_at IS NULL
+                )
             ORDER BY
                 overall_score DESC,
                 evaluated_at DESC,
@@ -117,15 +128,18 @@ def get_job_match_evaluations(
     }
 
 
+
 def save_job_match_evaluation(
     user_id: int,
     evaluation: JobMatchEvaluation,
 ) -> None:
     """求人1件分のAI評価を登録または更新する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
     try:
+        require_job_owner(connection, evaluation.job_id, user_id)
         connection.execute(
             """
             INSERT INTO user_job_match_evaluations (
@@ -258,6 +272,7 @@ def mark_job_match_evaluations_stale(
     stale_reason: str,
 ) -> int:
     """利用者の保存済みAI評価を再評価待ちにする。"""
+    user_id = require_user_id(user_id)
 
     normalized_reason = stale_reason.strip()
 
@@ -279,6 +294,12 @@ def mark_job_match_evaluations_stale(
             WHERE
                 user_id = ?
                 AND deleted_at IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM user_jobs j
+                    WHERE j.id = user_job_match_evaluations.job_id
+                      AND j.user_id = user_job_match_evaluations.user_id
+                      AND j.deleted_at IS NULL
+                )
             """,
             (
                 normalized_reason,
@@ -301,12 +322,14 @@ def mark_job_match_evaluations_stale(
         connection.close()
 
 
+
 def mark_job_match_evaluation_stale(
     user_id: int,
     job_id: int,
     stale_reason: str,
 ) -> bool:
     """指定求人の保存済みAI評価を再評価待ちにする。"""
+    user_id = require_user_id(user_id)
 
     if user_id <= 0 or job_id <= 0:
         return False
@@ -321,6 +344,7 @@ def mark_job_match_evaluation_stale(
     connection = get_connection()
 
     try:
+        require_job_owner(connection, job_id, user_id)
         cursor = connection.execute(
             """
             UPDATE user_job_match_evaluations
@@ -356,6 +380,7 @@ def get_stale_job_match_evaluation_ids(
     user_id: int,
 ) -> list[int]:
     """再評価待ちになっている求人IDを取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -368,6 +393,12 @@ def get_stale_job_match_evaluation_ids(
                 user_id = ?
                 AND is_stale = 1
                 AND deleted_at IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM user_jobs j
+                    WHERE j.id = user_job_match_evaluations.job_id
+                      AND j.user_id = user_job_match_evaluations.user_id
+                      AND j.deleted_at IS NULL
+                )
             ORDER BY
                 updated_at ASC,
                 job_id ASC
@@ -384,6 +415,7 @@ def get_stale_job_match_evaluation_ids(
     ]
 
 
+
 # ========================================
 # 応募判断
 # ========================================
@@ -391,6 +423,7 @@ def get_job_application_decisions(
     user_id: int,
 ) -> dict[int, JobApplicationDecision]:
     """利用者の全求人に対する応募判断を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -407,6 +440,12 @@ def get_job_application_decisions(
             WHERE
                 user_id = ?
                 AND deleted_at IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM user_jobs j
+                    WHERE j.id = user_job_application_decisions.job_id
+                      AND j.user_id = user_job_application_decisions.user_id
+                      AND j.deleted_at IS NULL
+                )
             ORDER BY
                 updated_at DESC,
                 id DESC
@@ -429,15 +468,18 @@ def get_job_application_decisions(
     }
 
 
+
 def save_job_application_decision(
     user_id: int,
     decision: JobApplicationDecision,
 ) -> None:
     """求人1件分の応募判断を登録または更新する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
     try:
+        require_job_owner(connection, decision.job_id, user_id)
         connection.execute(
             """
             INSERT INTO user_job_application_decisions (
@@ -498,9 +540,11 @@ def set_job_match_evaluation_status(
     result_notice_pending: bool = False,
 ) -> None:
     """評価結果を維持したままバックグラウンド処理状態を更新する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
     try:
+        require_job_owner(connection, job_id, user_id)
         connection.execute(
             """
             INSERT INTO user_job_match_evaluations (
@@ -510,7 +554,7 @@ def set_job_match_evaluation_status(
             ) VALUES (
                 ?, ?, ?, ?,
                 CASE WHEN ? = 'failed' THEN CURRENT_TIMESTAMP ELSE NULL END,
-                CASE WHEN ? THEN 1 ELSE 0 END,
+                CASE WHEN ? = 1 THEN 1 ELSE 0 END,
                 ?, CURRENT_TIMESTAMP
             )
             ON CONFLICT (user_id, job_id) DO UPDATE SET
@@ -519,7 +563,7 @@ def set_job_match_evaluation_status(
                 failed_at = CASE
                     WHEN excluded.evaluation_status = 'failed'
                     THEN CURRENT_TIMESTAMP ELSE NULL END,
-                retry_count = CASE WHEN ?
+                retry_count = CASE WHEN ? = 1
                     THEN user_job_match_evaluations.retry_count + 1
                     ELSE user_job_match_evaluations.retry_count END,
                 result_notice_pending = excluded.result_notice_pending,
@@ -547,9 +591,11 @@ def set_job_match_evaluation_status(
 
 def mark_job_match_evaluation_result_seen(user_id: int, job_id: int) -> None:
     """評価完了通知を確認済みにする。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
     try:
+        require_job_owner(connection, job_id, user_id)
         connection.execute(
             """
             UPDATE user_job_match_evaluations

@@ -1,5 +1,6 @@
 """価値観回答の保存・取得を担当する。"""
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import (
     WorkStyleAnswer,
@@ -16,6 +17,7 @@ def save_work_values(
     draft_form_name: str,
 ) -> None:
     """価値観回答を正式保存し、同じ処理内で下書きを削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -148,6 +150,7 @@ def get_work_values(
     list[WorkStyleAnswer],
 ]:
     """正式保存済みの価値観回答を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

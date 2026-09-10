@@ -18,7 +18,7 @@ from database.repositories.job_evaluation_repository import (
     get_job_match_evaluations,
     set_job_match_evaluation_status,
 )
-from services.current_user_service import get_current_user_id
+from services.current_user_service import get_current_user_id, user_scope
 
 
 AI_EVALUATION_FAILURE_MESSAGE = (
@@ -126,36 +126,37 @@ def automatically_evaluate_and_save_job(
 def _run_background_evaluation(user_id: int, job_id: int) -> None:
     """1求人を評価し、完了または失敗状態を永続化する。"""
 
-    job_key = (user_id, job_id)
-    try:
-        set_job_match_evaluation_status(user_id, job_id, "running")
-        evaluation, error_message = automatically_evaluate_and_save_job(job_id)
-        if evaluation is None or error_message:
+    with user_scope(user_id):
+        job_key = (user_id, job_id)
+        try:
+            set_job_match_evaluation_status(user_id, job_id, "running")
+            evaluation, error_message = automatically_evaluate_and_save_job(job_id)
+            if evaluation is None or error_message:
+                set_job_match_evaluation_status(
+                    user_id,
+                    job_id,
+                    "failed",
+                    failure_reason=error_message or AI_EVALUATION_FAILURE_MESSAGE,
+                    increment_retry=True,
+                )
+                return
+            set_job_match_evaluation_status(
+                user_id,
+                job_id,
+                "completed",
+                result_notice_pending=True,
+            )
+        except Exception:
             set_job_match_evaluation_status(
                 user_id,
                 job_id,
                 "failed",
-                failure_reason=error_message or AI_EVALUATION_FAILURE_MESSAGE,
+                failure_reason=AI_EVALUATION_FAILURE_MESSAGE,
                 increment_retry=True,
             )
-            return
-        set_job_match_evaluation_status(
-            user_id,
-            job_id,
-            "completed",
-            result_notice_pending=True,
-        )
-    except Exception:
-        set_job_match_evaluation_status(
-            user_id,
-            job_id,
-            "failed",
-            failure_reason=AI_EVALUATION_FAILURE_MESSAGE,
-            increment_retry=True,
-        )
-    finally:
-        with _submission_lock:
-            _submitted_jobs.discard(job_key)
+        finally:
+            with _submission_lock:
+                _submitted_jobs.discard(job_key)
 
 
 def evaluate_job_now(

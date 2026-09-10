@@ -1,5 +1,9 @@
 """求人ごとの電車移動時間の保存・取得を担当する。"""
 
+from database.access_control import (
+    require_job_owner,
+    require_user_id,
+)
 from database.connection import get_connection
 from models import JobCommuteCheck
 
@@ -9,10 +13,12 @@ def save_job_commute_check(
     commute_check: JobCommuteCheck,
 ) -> None:
     """電車移動時間を新規保存または更新する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
     try:
+        require_job_owner(connection, commute_check.job_id, user_id)
         connection.execute(
             """
             INSERT INTO user_job_commute_checks (
@@ -71,10 +77,12 @@ def get_job_commute_check(
     job_id: int,
 ) -> JobCommuteCheck | None:
     """保存済みの電車移動時間を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
     try:
+        require_job_owner(connection, job_id, user_id)
         row = connection.execute(
             """
             SELECT
@@ -126,10 +134,12 @@ def delete_job_commute_check(
     job_id: int,
 ) -> None:
     """指定求人の電車移動時間を削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
     try:
+        require_job_owner(connection, job_id, user_id)
         connection.execute(
             """
             DELETE FROM user_job_commute_checks

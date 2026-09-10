@@ -18,15 +18,25 @@ OPENAI_API_KEY=
 GOOGLE_MAPS_API_KEY=
 ```
 
-## Streamlit Community Cloud
+## Googleログインによる招待制利用（設定作業中）
 
-1. GitHubリポジトリと`app.py`を指定してアプリを作成します。
-2. Advanced settingsのSecretsへ`.streamlit/secrets.toml.example`と同じキーを登録します。
-3. 公開デモでは`APP_ENV = "demo"`を設定します。初回起動時に架空のデモデータが生成されます。
-4. `APP_PASSWORD`を設定すると、アプリ本体を開く前に閲覧用パスワードを要求します。
+個別ログイン、許可メール、内部利用者ID、ユーザー別データ分離のコードを実装しています。
+設定手順は[docs/google_login_setup.md](docs/google_login_setup.md)、設計は[docs/account_access_spec.md](docs/account_access_spec.md)を参照してください。
 
-実際のAPIキーや`.streamlit/secrets.toml`、SQLite DBはGitへ登録しません。
+1. Google CloudでウェブアプリのOAuthクライアントを作成します。
+2. `.streamlit/secrets.toml.example`を参考に、Git管理対象外の`.streamlit/secrets.toml`へ認証設定と許可メールを設定します。
+3. `METEA_AUTH_MODE = "google"`で起動します。設定不足・未招待・無効アカウントは利用できません。
+4. Cloudへ反映する場合は管理画面のSecretsへ設定し、redirect_uriを公開URLの`/oauth2callback`に変更します。既存APIキーは保持してください。
+
+既存の共通パスワード付きデモを使う場合だけ`METEA_AUTH_MODE = "legacy"`、`APP_ENV = "demo"`を指定します。これは個別ユーザー向け提供ではありません。Googleモードではデモデータを自動生成しません。
+
+実際のAPIキー、OAuthクライアントシークレット、Cookie署名値、許可メール、SQLite DBはGitへ登録しません。
 
 ## データについて
 
-ローカル版は`database/metea.db`へ保存します。Community Cloud上のSQLiteはデモ用途であり、再起動・再デプロイ時に初期化される可能性があります。一般公開時は認証とユーザー単位のデータ分離を備えた外部DBへ移行する前提です。
+保存先は`METEA_DATABASE_BACKEND`でSQLiteまたはPostgreSQLを明示選択します。SQLiteでは`database/metea.db`へ保存します。外部接続はSecretsの`[storage] postgres_url`を設定し、移行を終えてから`postgresql`へ切り替えます。手順・バックアップ・検証範囲は[保存設計](docs/storage_persistence_spec.md)を参照してください。Community Cloud上のSQLiteはデモ用途であり、再起動・再デプロイ時に初期化される可能性があります。ローカルではNeonへの移行と全件照合を完了しました。テストユーザーへの提供には公開環境の切替・保存検証、運営者の閲覧・CSV出力、データ利用説明がまだ必要です。
+
+
+### 運営者による確認・出力
+
+Googleログインの運営者は設定画面から利用者別の保存内容を確認し、CSV・JSONのZIPを出力できます。Secretsの`access.admin_emails`と`access.allowed_emails`の両方に登録が必要です。ローカル実装・検証済みで、公開環境は未反映です。ログイン前と設定画面には保存情報・利用目的を表示します。詳細は[運営者データ設計](docs/operator_data_spec.md)を参照してください。

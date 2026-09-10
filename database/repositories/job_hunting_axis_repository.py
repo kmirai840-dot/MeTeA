@@ -1,3 +1,4 @@
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import JobHuntingAxis
 
@@ -8,6 +9,7 @@ def save_job_hunting_axes(
     draft_form_name: str,
 ) -> None:
     """就活の軸を正式保存し、同じ処理内で下書きを削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -74,6 +76,7 @@ def get_job_hunting_axes(
     user_id: int,
 ) -> list[JobHuntingAxis]:
     """保存済みの就活の軸を優先順位順に取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

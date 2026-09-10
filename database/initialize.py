@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from database.connection import get_connection
+from database.user_account_schema import ensure_user_account_schema
 
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
@@ -12,8 +13,17 @@ def initialize_database() -> None:
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     connection = get_connection()
 
+    if getattr(connection, 'dialect', '') == 'postgresql':
+        from database.postgres import initialize_postgres
+        try:
+            initialize_postgres(connection)
+        finally:
+            connection.close()
+        return
+
     try:
         connection.executescript(schema)
+        ensure_user_account_schema(connection)
 
         user_profile_columns = {
             row["name"]
@@ -54,6 +64,9 @@ def initialize_database() -> None:
         }
 
         required_job_columns = {
+            "train_commute_minutes": "TEXT NOT NULL DEFAULT ''",
+            "train_commute_checked_at": "TEXT NOT NULL DEFAULT ''",
+            "train_commute_source_type": "TEXT NOT NULL DEFAULT ''",
             "organizational_culture": (
                 "TEXT NOT NULL DEFAULT ''"
             ),

@@ -1054,3 +1054,35 @@ MeTeAのAIマッチングは、過去と同じ仕事を探すためだけの適�
 利用者が、これまでの経験から何を得て、何を大切にし、次の仕事で何を実現したいのかを求人情報と照らし合わせる。
 
 AIが答えを決めるのではなく、情報を整理し、利用者自身が納得して判断できることを最優先とする。
+
+
+## 非同期評価の利用者分離（2026-09-10更新）
+
+評価キューに登録する本人IDと求人IDを一組として扱う。ワーカーはuser_scopeで本人IDを引き継ぎ、入力取得、API評価、結果・進捗・失敗状態の保存まで同じ本人を使用する。Googleモードでは保存時にも利用権限を確認する。削除済み求人を再評価対象へ戻さない。
+
+```mermaid
+sequenceDiagram
+    participant U as 本人の画面
+    participant W as 評価ワーカー
+    participant R as Repository
+    participant AI as 外部AI
+    U->>W: 本人IDと求人ID
+    W->>W: 本人scopeを設定
+    W->>R: 利用権限・所有者を確認して取得
+    W->>AI: 本人の評価用情報
+    AI-->>W: 評価結果
+    W->>R: 本人を再確認して保存
+    W->>W: 例外時もscopeを解除
+```
+
+共通の認証・失効・データ分離仕様は[account_access_spec.md](account_access_spec.md)、設定手順は[google_login_setup.md](google_login_setup.md)を参照する。コード実装済みと公開検証済みは区別し、現時点ではOAuth設定・実Googleログイン・外部DBによる永続保存の検証が残る。
+
+
+## 保存基盤のPostgreSQL対応（2026年9月10日）
+
+本機能のRepositoryはSQLiteとPostgreSQLの共通接続境界を使用する。本人ID・親データの所有者チェックは両DBで維持する。保存先は`METEA_DATABASE_BACKEND`で明示選択し、外部DBの接続失敗時にSQLiteへ戻さない。As-Is／To-Be、移行・バックアップ、検証範囲は[保存設計](storage_persistence_spec.md)を参照する。公開環境への反映は別途必要である。
+
+
+## 2026年9月10日：運営者確認・出力とデータ説明
+
+As-Is：本人用画面とバックアップCLI。今回：通常利用者の分離を維持したまま、運営者に限り利用者別の保存データ確認・CSV/JSON出力を追加した。この機能の保存内容も対象となる。ログイン前・設定画面に保存情報と利用目的、外部送信の説明を追加した。To-Be：公開設定の反映と、別の実Googleアカウントを含む受入確認。詳細は[運営者データ設計](operator_data_spec.md)を参照。

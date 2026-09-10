@@ -1,11 +1,13 @@
 from datetime import date
 
+from database.access_control import require_user_id
 from database.connection import get_connection
 from models import BasicInfo
 
 
 def get_user_profile_updated_at(user_id: int) -> str | None:
     """基本情報の最終更新日時を取得する。"""
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
         row = connection.execute(
@@ -23,6 +25,7 @@ def save_user_profile(
     draft_form_name: str,
 ) -> None:
     """基本情報を正式保存し、同じ処理内で下書きを削除する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 
@@ -93,6 +96,7 @@ def get_user_profile(
     user_id: int,
 ) -> BasicInfo | None:
     """保存済みの基本情報を取得する。"""
+    user_id = require_user_id(user_id)
 
     connection = get_connection()
 

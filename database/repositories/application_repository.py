@@ -1,11 +1,19 @@
 """応募後管理に関するSQLite Repository。"""
 
+from database.access_control import (
+    require_application_owner,
+    require_child_owner,
+    require_job_owner,
+    require_template_owner,
+    require_user_id,
+)
 from database.connection import get_connection
 from models import (ApplicationActivity, ApplicationMilestone, ApplicationPreparation,
                     ApplicationRecord, UserPreparationTemplate)
 
 
 def get_applications(user_id: int, include_closed: bool = True) -> list[ApplicationRecord]:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
         rows = connection.execute(
@@ -23,6 +31,7 @@ def get_applications(user_id: int, include_closed: bool = True) -> list[Applicat
 
 
 def get_application(user_id: int, application_id: int) -> ApplicationRecord | None:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
         row = connection.execute(
@@ -35,6 +44,7 @@ def get_application(user_id: int, application_id: int) -> ApplicationRecord | No
 
 
 def get_application_by_job_route(user_id: int, job_id: int, actual_route: str) -> ApplicationRecord | None:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
         row = connection.execute(
@@ -48,8 +58,12 @@ def get_application_by_job_route(user_id: int, job_id: int, actual_route: str) -
 
 
 def save_application(application: ApplicationRecord) -> int:
+    user_id = require_user_id(application.user_id)
     connection = get_connection()
     try:
+        require_job_owner(connection, application.job_id, user_id)
+        if application.id:
+            require_application_owner(connection, application.id, user_id)
         if application.id:
             connection.execute(
                 """UPDATE user_applications SET actual_route = ?, current_phase = ?,
@@ -91,8 +105,10 @@ def save_application(application: ApplicationRecord) -> int:
 
 def add_phase_history(application_id: int, phase: str, category: str, result: str = "",
                       selection_stage: str = "") -> None:
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, application_id, user_id)
         connection.execute(
             """INSERT INTO application_phase_history
                (application_id, phase_name, phase_category, selection_result, selection_stage)
@@ -105,8 +121,11 @@ def add_phase_history(application_id: int, phase: str, category: str, result: st
 
 
 def get_milestones(application_id: int | None = None, user_id: int | None = None) -> list[ApplicationMilestone]:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
+        if application_id is not None:
+            require_application_owner(connection, application_id, user_id)
         if application_id is not None:
             rows = connection.execute(
                 "SELECT * FROM application_milestones WHERE application_id = ? AND deleted_at IS NULL ORDER BY scheduled_date, id",
@@ -126,8 +145,14 @@ def get_milestones(application_id: int | None = None, user_id: int | None = None
 
 
 def save_milestone(milestone: ApplicationMilestone) -> int:
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, milestone.application_id, user_id)
+        if milestone.id:
+            require_child_owner(connection, "application_milestones", milestone.id, user_id, milestone.application_id)
+        if milestone.rescheduled_from_id is not None:
+            require_child_owner(connection, "application_milestones", milestone.rescheduled_from_id, user_id, milestone.application_id)
         if milestone.id:
             connection.execute(
                 """UPDATE application_milestones SET milestone_type = ?, detail_name = ?, title = ?,
@@ -165,9 +190,11 @@ def save_milestone(milestone: ApplicationMilestone) -> int:
 
 def delete_milestone(milestone_id: int) -> bool:
     """誤登録の予定を物理削除する。延期先からの参照は先に解除する。"""
+    user_id = require_user_id()
 
     connection = get_connection()
     try:
+        require_child_owner(connection, "application_milestones", milestone_id, user_id)
         connection.execute(
             "UPDATE application_milestones SET rescheduled_from_id = NULL WHERE rescheduled_from_id = ?",
             (milestone_id,),
@@ -183,8 +210,11 @@ def delete_milestone(milestone_id: int) -> bool:
 
 
 def get_phase_history(application_id: int | None = None, user_id: int | None = None) -> list[dict]:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
+        if application_id is not None:
+            require_application_owner(connection, application_id, user_id)
         if application_id is not None:
             rows = connection.execute(
                 "SELECT * FROM application_phase_history WHERE application_id = ? ORDER BY changed_at, id",
@@ -204,8 +234,11 @@ def get_phase_history(application_id: int | None = None, user_id: int | None = N
 
 
 def get_activities(application_id: int | None = None, user_id: int | None = None, limit: int = 100) -> list[ApplicationActivity]:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
+        if application_id is not None:
+            require_application_owner(connection, application_id, user_id)
         if application_id is not None:
             rows = connection.execute(
                 "SELECT * FROM application_activities WHERE application_id = ? ORDER BY occurred_at DESC, id DESC LIMIT ?",
@@ -223,8 +256,10 @@ def get_activities(application_id: int | None = None, user_id: int | None = None
 
 
 def save_activity(activity: ApplicationActivity) -> int:
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, activity.application_id, user_id)
         cursor = connection.execute(
             """INSERT INTO application_activities
                (application_id, activity_type, occurred_at, title, detail, is_automatic)
@@ -242,8 +277,10 @@ def save_activity(activity: ApplicationActivity) -> int:
 
 
 def get_preparations(application_id: int) -> list[ApplicationPreparation]:
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, application_id, user_id)
         rows = connection.execute(
             "SELECT * FROM application_preparations WHERE application_id = ? ORDER BY scope, sort_order, id",
             (application_id,),
@@ -254,8 +291,12 @@ def get_preparations(application_id: int) -> list[ApplicationPreparation]:
 
 
 def save_preparation(item: ApplicationPreparation) -> int:
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, item.application_id, user_id)
+        if item.id:
+            require_child_owner(connection, "application_preparations", item.id, user_id, item.application_id)
         cursor = connection.execute(
             """INSERT INTO application_preparations
                (application_id, scope, selection_type, theme_key, title, description,
@@ -284,8 +325,11 @@ def save_preparation(item: ApplicationPreparation) -> int:
 
 def delete_preparation(preparation_id: int, application_id: int) -> bool:
     """応募に追加した準備テーマを物理削除する。"""
+    user_id = require_user_id()
     connection = get_connection()
     try:
+        require_application_owner(connection, application_id, user_id)
+        require_child_owner(connection, "application_preparations", preparation_id, user_id, application_id)
         cursor = connection.execute(
             "DELETE FROM application_preparations WHERE id = ? AND application_id = ? AND is_custom = 1",
             (preparation_id, application_id),
@@ -300,6 +344,7 @@ def delete_preparation(preparation_id: int, application_id: int) -> bool:
 
 
 def get_user_preparation_templates(user_id: int) -> list[UserPreparationTemplate]:
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
         rows = connection.execute(
@@ -312,8 +357,11 @@ def get_user_preparation_templates(user_id: int) -> list[UserPreparationTemplate
 
 
 def save_user_preparation_template(item: UserPreparationTemplate) -> int:
+    user_id = require_user_id(item.user_id)
     connection = get_connection()
     try:
+        if item.id:
+            require_template_owner(connection, item.id, user_id)
         cursor = connection.execute(
             """INSERT INTO user_preparation_templates
                (user_id, theme_key, title, description, content, is_completed, is_custom, sort_order)
@@ -339,8 +387,10 @@ def save_user_preparation_template(item: UserPreparationTemplate) -> int:
 
 def delete_user_preparation_template(template_id: int, user_id: int) -> bool:
     """利用者が追加した共通準備テーマを物理削除する。"""
+    user_id = require_user_id(user_id)
     connection = get_connection()
     try:
+        require_template_owner(connection, template_id, user_id)
         cursor = connection.execute(
             "DELETE FROM user_preparation_templates WHERE id = ? AND user_id = ? AND is_custom = 1",
             (template_id, user_id),
