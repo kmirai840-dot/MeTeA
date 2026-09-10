@@ -74,11 +74,9 @@ def render_reloaded_page(
     *args,
     **kwargs,
 ):
-    """開発中の画面修正を、サーバー再起動なしで確実に反映する。"""
-    importlib.invalidate_caches()
-    module = importlib.import_module(module_name)
-    module = importlib.reload(module)
+    """画面を通常のimportで読み込む。更新はアプリ再起動で反映する。"""
     try:
+        module = importlib.import_module(module_name)
         return getattr(module, function_name)(*args, **kwargs)
     except (DataAccessDenied, UserIdentityRequired, LoginDenied, LoginConfigurationError) as error:
         st.error(str(error))

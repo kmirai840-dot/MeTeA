@@ -2,5 +2,5 @@
 primaryColor = "#1268F3"
 
 [server]
-runOnSave = true
-fileWatcherType = "poll"
+runOnSave = false
+fileWatcherType = "none"
