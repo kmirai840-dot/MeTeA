@@ -71,6 +71,7 @@ def translate_sql(statement: str, parameters: bool = False) -> str:
 @lru_cache(maxsize=2)
 def _pool(url):
     pool = ConnectionPool(url, min_size=1, max_size=6, timeout=20,
+                          check=ConnectionPool.check_connection,
                           kwargs={'connect_timeout': 15, 'prepare_threshold': None,
                                   'row_factory': row_factory}, open=True)
     atexit.register(pool.close)
@@ -142,14 +143,23 @@ class PostgresConnection:
         self.ready = False
 
     def rollback(self):
-        self.raw.rollback()
-        self.ready = False
+        try:
+            if not self.raw.closed:
+                self.raw.rollback()
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            # 接続切れ後の後片付けで、元の処理エラーを上書きしない。
+            self.raw.close()
+        finally:
+            self.ready = False
 
     def close(self):
         if not self.closed:
-            self.raw.rollback()
-            self.pool.putconn(self.raw)
             self.closed = True
+            try:
+                self.rollback()
+            finally:
+                # 壊れた接続も返却し、プールに破棄・補充させる。
+                self.pool.putconn(self.raw)
 
     def __enter__(self):
         return self

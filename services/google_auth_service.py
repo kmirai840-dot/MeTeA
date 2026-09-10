@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import psycopg
 from collections.abc import Mapping
 from urllib.parse import urlparse
 
@@ -167,6 +168,13 @@ def require_google_user() -> None:
         initialize_database()
         user_id = resolve_google_user(dict(st.user), invitations)
         set_current_user_id(user_id)
+    except (ConnectionError, psycopg.OperationalError, psycopg.InterfaceError):
+        clear_current_user_id()
+        st.title("MeTeA")
+        st.error("保存先との接続が切れました。少し待ってから再試行してください。")
+        if st.button("再試行"):
+            st.rerun()
+        st.stop()
     except LoginDenied as error:
         clear_current_user_id()
         st.title("MeTeA")
