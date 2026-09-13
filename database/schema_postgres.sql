@@ -616,3 +616,8 @@ CREATE UNIQUE INDEX ux_users_auth_identity ON users(auth_provider, auth_subject)
 WHERE auth_provider IS NOT NULL AND TRIM(auth_provider) <> '' AND auth_subject IS NOT NULL AND TRIM(auth_subject) <> '';
 CREATE TABLE metea_schema_version (version INTEGER PRIMARY KEY CHECK (version = 1));
 INSERT INTO metea_schema_version(version) VALUES (1);
+CREATE TABLE IF NOT EXISTS user_skills (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    skills_text TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+);

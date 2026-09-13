@@ -92,6 +92,7 @@ def load_ai_matching_context(
     )
 
     careers = load_career_data()
+    from services.user_skill_service import load_skills
 
     return build_ai_matching_context(
         job=job,
@@ -108,6 +109,7 @@ def load_ai_matching_context(
         ),
         job_hunting_axes=job_hunting_axes,
         careers=careers,
+        user_skills=load_skills(),
     )
 
 

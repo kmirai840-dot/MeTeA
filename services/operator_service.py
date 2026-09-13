@@ -52,6 +52,7 @@ def list_users():
 
 # 固定された表名だけを使用する。ブラウザからSQLや表名を受け取らない。
 DIRECT_TABLES = (
+    'user_skills',
     'user_profiles', 'user_hope_conditions', 'user_hope_condition_items',
     'user_job_hunting_axes', 'form_drafts', 'user_work_value_rankings',
     'user_work_value_details', 'user_work_style_answers', 'user_careers',
@@ -85,7 +86,8 @@ def read_user_data(user_id):
             raise DataAccessDenied('利用者が見つかりません。')
         tables = {'users': [dict(user)]}
         for table in DIRECT_TABLES:
-            tables[table] = [dict(r) for r in c.execute(f'SELECT * FROM {table} WHERE user_id=? ORDER BY id', (user_id,)).fetchall()]
+            order_key = 'user_id' if table == 'user_skills' else 'id'
+            tables[table] = [dict(r) for r in c.execute(f'SELECT * FROM {table} WHERE user_id=? ORDER BY {order_key}', (user_id,)).fetchall()]
         for table, (parent, key) in CHILD_TABLES.items():
             tables[table] = [dict(r) for r in c.execute(f'SELECT child.* FROM {table} child JOIN {parent} parent ON child.{key}=parent.id WHERE parent.user_id=? ORDER BY child.id', (user_id,)).fetchall()]
         return {'exported_at': datetime.now(timezone.utc).isoformat(), 'operator_id': operator_id,

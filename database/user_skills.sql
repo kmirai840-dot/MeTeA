@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS user_skills (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    skills_text TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

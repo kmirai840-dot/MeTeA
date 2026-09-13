@@ -363,6 +363,7 @@ def build_ai_matching_context(
             list[CareerHistory],
         ]
     ],
+    user_skills: str = "",
 ) -> dict[str, Any]:
     """AIマッチングに渡す入力情報全体を作成する。"""
 
@@ -372,6 +373,12 @@ def build_ai_matching_context(
                 job
             ),
             "user_matching_information": {
+                "self_reported_tools_and_skills": user_skills,
+                "skills_interpretation": (
+                    "本人が申告したツール・スキルです。学習・個人活動の経験を実務経験とみなさず、"
+                    "具体的に記載された能力と経験の範囲で求人の必須条件を判定してください。"
+                    if user_skills else ""
+                ),
                 "hope_conditions": (
                     build_hope_condition_context(
                         hope_condition=(

@@ -611,3 +611,8 @@ CREATE INDEX IF NOT EXISTS idx_preparation_templates_user ON user_preparation_te
 CREATE INDEX IF NOT EXISTS idx_general_activities_user_date ON user_general_activities (user_id, occurred_at);
 INSERT OR IGNORE INTO users (id)
 VALUES (1);
+CREATE TABLE IF NOT EXISTS user_skills (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    skills_text TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

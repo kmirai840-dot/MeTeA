@@ -2473,6 +2473,9 @@ def show_page() -> None:
 
     st.title("職務経歴・スキル")
 
+    from ui.user_skills import render_user_skills
+    render_user_skills()
+
     st.caption(
         "これまでの職務経歴を会社ごとに登録します。"
     )

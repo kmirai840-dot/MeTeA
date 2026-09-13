@@ -65,7 +65,7 @@ class OperatorTest(unittest.TestCase):
         self.assertEqual(len(operator.list_users()), 2)
         for uid in (1, 2):
             data = operator.read_user_data(uid)
-            self.assertEqual(len(data['tables']), 25)
+            self.assertEqual(len(data['tables']), 26)
             for rows in data['tables'].values():
                 self.assertTrue(rows)
                 self.assertNotIn(f'person-{3-uid}', json.dumps(rows))

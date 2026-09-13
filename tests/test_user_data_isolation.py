@@ -62,6 +62,8 @@ class UserDataIsolationTest(unittest.TestCase):
         for uid in (1, 2):
             with identity.user_scope(uid):
                 label = f"person-{uid}"
+                from database.repositories.user_skill_repository import save_user_skills
+                save_user_skills(uid, label + " Excel")
                 profile.save_user_profile(uid, model(m.BasicInfo, label), "basic")
                 hope.save_hope_conditions(uid, model(m.HopeCondition, label),
                                           [model(m.HopeConditionItem, label)], "hope")
@@ -102,7 +104,7 @@ class UserDataIsolationTest(unittest.TestCase):
         try:
             tables = [r[0] for r in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
-            self.assertEqual(len(tables), 25)
+            self.assertEqual(len(tables), 26)
             for table in tables:
                 with self.subTest(table=table):
                     self.assertGreaterEqual(db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0], 2)

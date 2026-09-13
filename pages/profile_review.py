@@ -650,6 +650,8 @@ def _render_axis() -> None:
 
 
 def _render_career() -> None:
+    from ui.user_skills import render_user_skills
+    render_user_skills()
     careers=load_career_data();active=_consume_edit_query("career");history_count=sum(len(h) for _,h in careers);_dashboard_header("career","職務経歴・スキル","会社・部署・役割ごとに登録した経験を確認できます。",[])
     if not careers:st.markdown('<div class="metea-empty">職務経歴はまだ登録されていません。<br><a href="?page=career">職務経歴を登録する</a></div>',unsafe_allow_html=True);return
     company_groups=[]
