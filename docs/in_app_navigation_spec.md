@@ -25,3 +25,7 @@
 [Streamlit公式v2 component仕様](https://docs.streamlit.io/develop/api-reference/custom-components/st.components.v2.component)のリンクをPythonへ通知する方式を使用。
 
 公開初回確認で、認証前のコンポーネント登録は初回本人設定時のsession_state初期化に消され、1回目のクリックが反映されないことを確認。登録を認証後へ移して対応。未ログイン画面・データ説明単独画面は従来の通常遷移となる。
+
+## 2026-09-13 求人確認操作の部分更新
+
+確認不要・元に戻す・確認結果保存・取り消しは評価領域のfragment内だけを再実行する。navigation_bridgeは同領域の処理に遷移待ちバナーを出さない。AI完了は処理中だけの部分更新で取得する。入力フォーカスがある間はポーリングを延期する。実際のページリンク遷移は従来どおり。

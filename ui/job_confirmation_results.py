@@ -2,6 +2,7 @@
 import streamlit as st
 from services.job_confirmation_service import save_confirmation_result, restore_confirmation_item
 from services.confirmation_input_service import CHOICES, NUMBERS, OTHER, UNKNOWN, input_kind, restore_input, format_input
+from ui.job_evaluation_area import refresh_confirmation_area
 
 
 def render_result_form(job_id, item):
@@ -29,7 +30,7 @@ def render_result_form(job_id, item):
                 except ValueError as error:
                     st.error(str(error))
                 else:
-                    st.rerun()
+                    refresh_confirmation_area(job_id)
 
 
 def render_confirmed_results(job_id, records):
@@ -46,4 +47,4 @@ def render_confirmed_results(job_id, records):
             render_result_form(job_id, row)
             if st.button('確認結果を取り消す', key=f"undo_confirmed_{job_id}_{row['item_key']}"):
                 restore_confirmation_item(job_id, row['item_key'])
-                st.rerun()
+                refresh_confirmation_area(job_id)

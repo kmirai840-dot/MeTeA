@@ -1433,7 +1433,8 @@ def render_actionable_confirmation_group(
                             "",
                         ),
                     )
-                    st.rerun()
+                    from ui.job_evaluation_area import refresh_confirmation_area
+                    refresh_confirmation_area(job_id)
 
             from ui.job_confirmation_results import render_result_form
             render_result_form(job_id, item)
@@ -1486,7 +1487,8 @@ def render_dismissed_confirmation_items(
                         job_id=job_id,
                         item_key=item["item_key"],
                     )
-                    st.rerun()
+                    from ui.job_evaluation_area import refresh_confirmation_area
+                    refresh_confirmation_area(job_id)
 
             if index < len(items) - 1:
                 st.divider()
@@ -2782,7 +2784,7 @@ def show_page() -> None:
 
         return
 
-    evaluations = render_evaluation_progress(snapshot["evaluations"])
+    evaluations = snapshot["evaluations"]
 
     st.title(
         job.company_name
@@ -2795,16 +2797,8 @@ def show_page() -> None:
         or "求人名未入力"
     )
 
-    render_ai_matching_result(
-        job_id=job_id,
-        job=job,
-        evaluations=evaluations,
-        snapshot=snapshot,
-    )
-
-    st.divider()
-
-    render_matching_detail(job_id, evaluations=evaluations, snapshot=snapshot)
+    from ui.job_evaluation_area import render_evaluation_area
+    render_evaluation_area(job_id, snapshot, render_ai_matching_result, render_matching_detail)
 
     st.divider()
 

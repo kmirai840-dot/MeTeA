@@ -20,7 +20,7 @@ export default function({data, setTriggerValue}) {
   function hide() { clearTimeout(timer); banner.style.display = 'none'; pending = false; sawRunning = false; }
   function running() { return app?.getAttribute('data-test-script-state') === 'running'; }
   function stateChanged() {
-    if (running()) { sawRunning = true; show(); }
+    if (running()) { sawRunning = true; if (pending || !doc.querySelector('.st-key-local_job_evaluation')) show(); }
     else if (!pending || sawRunning) { clearTimeout(idleTimer); idleTimer = setTimeout(hide, 180); }
   }
   function click(event) {
@@ -43,6 +43,7 @@ export default function({data, setTriggerValue}) {
       clearTimeout(timer);
       timer = setTimeout(() => { if (pending) banner.textContent = '処理に時間がかかっています。接続状態をご確認ください。'; }, 15000);
     } else if (target?.closest('[data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button')) {
+      if (target.closest('.st-key-local_job_evaluation')) { hide(); return; }
       show();
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => { if (!running()) hide(); }, 500);
