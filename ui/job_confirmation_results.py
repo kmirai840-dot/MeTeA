@@ -54,19 +54,21 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
     """選択・入力・確認不要・復元を一回の送信にまとめる。"""
     from services.job_confirmation_service import save_confirmation_batch
     confirmed = [r for r in records if r['status'] == 'confirmed']
-    with st.form(f'confirmation_batch_{job_id}'):
+    with st.container(key=f'confirmation_batch_shell_{job_id}'), st.form(f'confirmation_batch_{job_id}', border=False):
         st.caption('入力内容は、最後の「確認結果をまとめて保存・評価を更新」を押すまで保存されません。未入力の項目は変更しません。')
         entries = []
         restores = []
         company_col, profile_col = st.columns(2, gap='medium')
         with company_col:
-            with st.container(border=True):
-                st.markdown('**● 企業・求人元へ確認**')
+            with st.container(border=True, key=f'company_confirmation_card_{job_id}'):
+                st.markdown('<div class="action-confirmation-heading company"><span>●</span><strong>企業・求人元へ確認</strong></div>', unsafe_allow_html=True)
                 st.caption('面談や応募前に、企業へ確認したい内容です。')
                 if not items:
                     st.success('現在、確認が必要な項目はありません。')
-                for item in items:
+                for index, item in enumerate(items):
                     entries.append(_batch_fields(job_id, item, False))
+                    if index < len(items) - 1:
+                        st.divider()
         with profile_col:
             render_profile()
         if dismissed:
@@ -119,7 +121,7 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
 def _batch_fields(job_id, item, confirmed):
     name = item['item_name']
     prefix = f"batch_{job_id}_{item['item_key']}"
-    with st.container(border=True):
+    with st.container(border=confirmed):
         st.markdown(f"**{'確認済み：' if confirmed else ''}{name}**")
         st.caption(item.get('reason', item.get('item_reason', '')))
         with st.expander('確認結果を入力・編集', key=f"confirmation_form_{job_id}_{item['item_key']}"):

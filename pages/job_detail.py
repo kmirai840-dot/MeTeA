@@ -1939,6 +1939,15 @@ def render_job_detail_styles() -> None:
             border-radius: 12px;
         }
 
+        /* 一括フォームは送信範囲だけを束ね、既存カードを囲む外枠を作らない。 */
+        [class*="st-key-confirmation_batch_shell_"] div[data-testid="stForm"] {
+            padding: 0;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
         div[data-testid="stAlert"] {
             border-radius: 10px;
         }
