@@ -12,7 +12,11 @@ export default function({data, setTriggerValue}) {
   function capture(event) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest('.st-key-local_job_evaluation [data-testid="stFormSubmitButton"]')) return;
-    if (target.closest('[class*=st-key-confirmation_batch_]')) return;
+    const batch = target.closest('[class*=st-key-confirmation_batch_shell_]');
+    if (batch) {
+      doc[stateKey] = {jobId:data.jobId, scrollTop:scroller()?.scrollTop || 0, open:[], started:Date.now()};
+      return;
+    }
     const form = target.closest(selector);
     if (!form) return;
     const forms = [...doc.querySelectorAll(selector)];

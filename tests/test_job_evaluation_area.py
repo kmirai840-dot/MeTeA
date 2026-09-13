@@ -44,3 +44,21 @@ class EvaluationAreaTest(unittest.TestCase):
             area.refresh_confirmation_area(10)
             self.assertTrue(area.st.session_state['confirmation_refresh_10'])
             rerun.assert_called_once()
+
+    def test_saved_confirmation_refreshes_only_detail_and_clears_actions(self):
+        fake=Mock(); fake.session_state={}; fake.container.return_value=nullcontext()
+        functions=[]
+        fake.fragment.side_effect=lambda fn:(functions.append(fn) or fn)
+        completed=SimpleNamespace(evaluation_status='completed',is_stale=False)
+        detail=Mock(); score=Mock()
+        rows=[dict(item_key='a',status='not_required')]
+        with patch.object(area,'st',fake), patch.object(area,'_poll'), patch.object(area,'load_confirmation_records',return_value=rows) as load, patch.object(area,'notify_evaluation_saved') as notify:
+            area.render_evaluation_area(10,dict(job=object(),evaluations={10:completed},confirmation_records=[]),score,detail)
+            fake.session_state.update(confirmation_detail_saved_10=1,batch_10_a_action=True,batch_10_b_notes='保持する入力')
+            functions[1]()
+            self.assertEqual(detail.call_args.kwargs['snapshot']['resolutions'],{'a':'not_required'})
+            self.assertNotIn('batch_10_a_action',fake.session_state)
+            self.assertEqual(fake.session_state['batch_10_b_notes'],'保持する入力')
+            score.assert_called_once()
+            load.assert_called_once_with(10)
+            notify.assert_called_once_with(10)

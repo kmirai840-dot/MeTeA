@@ -26,7 +26,7 @@ class ConfirmationBatchTest(unittest.TestCase):
 items=[dict(item_key='a',item_name='転勤条件',reason=''),dict(item_key='b',item_name='残業時間',reason=''),dict(item_key='c',item_name='夜勤',reason='')]
 render_batch_confirmation_form(10,items,[],[],lambda:None)
 '''
-        with patch.object(service, 'save_confirmation_batch', return_value=2) as save, patch('ui.job_evaluation_area.notify_evaluation_saved') as notify:
+        with patch.object(service, 'save_confirmation_batch', return_value=2) as save, patch('ui.job_evaluation_area.refresh_saved_confirmation_details') as notify:
             app=AppTest.from_string(script, default_timeout=30).run()
             self.assertFalse(app.exception)
             self.assertEqual(len(app.button),1)
@@ -37,7 +37,7 @@ render_batch_confirmation_form(10,items,[],[],lambda:None)
             self.assertFalse(app.exception)
             self.assertEqual(len(save.call_args.args[1]),2)
             self.assertEqual(app.number_input[0].value,10)
-            notify.assert_called_once_with(10)
+            notify.assert_called_once_with(10, 2)
 
     def test_invalid_batch_does_not_save_any(self):
         script = '''from ui.job_confirmation_results import render_batch_confirmation_form

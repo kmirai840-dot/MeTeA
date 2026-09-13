@@ -111,11 +111,9 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
                 except ValueError as error:
                     st.error(str(error))
                 else:
-                    st.success(f'{count}項目を保存しました。' if count else '保存済みの内容から変更はありません。')
-                    if count:
-                        # フォームを再生成せず、評価領域だけに更新を通知する。
-                        from ui.job_evaluation_area import notify_evaluation_saved
-                        notify_evaluation_saved(job_id)
+                    from ui.job_evaluation_area import refresh_saved_confirmation_details
+                    refresh_saved_confirmation_details(job_id, count)
+
 
 
 def _batch_fields(job_id, item, confirmed):

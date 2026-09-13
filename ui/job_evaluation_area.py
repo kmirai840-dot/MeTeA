@@ -54,7 +54,19 @@ def render_evaluation_area(job_id, snapshot, render_score, render_detail):
     # 詳細フォームは別fragment。スコアのポーリングでは再実行しない。
     @st.fragment
     def detail():
+        saved = st.session_state.pop(f'confirmation_detail_saved_{job_id}', None)
+        if saved is not None:
+            records = load_confirmation_records(job_id)
+            detail_snapshot.update(confirmation_records=records,
+                                   resolutions={r['item_key']: r['status'] for r in records})
+            # 送信済みの操作チェックを次回の保存へ持ち越さない。
+            for key in list(st.session_state):
+                if (key.startswith(f'batch_{job_id}_') and key.endswith('_action')) or key.startswith(f'batch_restore_{job_id}_'):
+                    del st.session_state[key]
         render_detail(job_id, evaluations=detail_snapshot['evaluations'], snapshot=detail_snapshot)
+        if saved is not None:
+            st.success(f'{saved}項目を保存し、確認欄に反映しました。' if saved else '保存済みの内容を確認欄に反映しました。')
+            notify_evaluation_saved(job_id)
 
     with st.container(key='local_job_evaluation'):
         area()
@@ -66,3 +78,8 @@ def notify_evaluation_saved(job_id):
     st.session_state[f'confirmation_refresh_{job_id}'] = True
     # 保存完了の通知だけを描画。フォームの再生成は要求しない。
     st.html(f'<span data-metea-saved="{job_id}" data-sequence="{monotonic()}" style="display:none"></span>')
+
+
+def refresh_saved_confirmation_details(job_id, count):
+    st.session_state[f'confirmation_detail_saved_{job_id}'] = count
+    rerun_current_page()
