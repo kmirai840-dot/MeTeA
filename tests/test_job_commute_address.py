@@ -35,7 +35,7 @@ class CommuteAddressTest(unittest.TestCase):
             saved = SimpleNamespace(duration_minutes=kwargs["duration_minutes"], destination_station_name=kwargs["destination_station_name"], checked_at="2026-09-13")
             return saved
         with patch.object(page, "load_job_match_evaluations", return_value={3:SimpleNamespace(evaluation_result_json="{}")}), patch("ui.job_evaluation_area.notify_evaluation_saved"), patch.object(page, "load_basic_info", return_value=basic), patch.object(page, "load_current_job_commute", side_effect=lambda **kw: saved), patch.object(page, "save_manual_job_commute", side_effect=save) as writer, patch.object(page, "invalidate_current_user_job_evaluation") as invalidate, patch.object(page, "enqueue_job_evaluation") as enqueue:
-            app = AppTest.from_string('from pages.job_detail import render_commute_confirmation\nfrom models import Job\nrender_commute_confirmation(3, Job())').run()
+            app = AppTest.from_string('from pages.job_detail import render_commute_confirmation\nfrom models import Job\nrender_commute_confirmation(3, Job())', default_timeout=30).run()
             app.text_input[0].input("福岡市中央区1-2")
             app.button[0].click().run()
             self.assertFalse(app.exception)

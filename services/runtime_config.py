@@ -7,12 +7,8 @@ import hashlib
 import os
 from datetime import datetime, timedelta
 
-import extra_streamlit_components as stx
 import streamlit as st
 from dotenv import load_dotenv
-from extra_streamlit_components.CookieManager import (
-    _component_func as _cookie_component,
-)
 
 
 SECRET_KEYS = (
@@ -43,12 +39,14 @@ def _authentication_token(password: str) -> str:
 def _cookie_manager() -> stx.CookieManager:
     """全画面で同じキーを使うCookie管理部品を返す。"""
 
+    import extra_streamlit_components as stx
     return stx.CookieManager(key="metea_demo_cookie_manager")
 
 
 def _read_browser_cookies() -> dict[str, str] | None:
     """Cookie部品の読込完了後だけCookie一覧を返す。"""
 
+    from extra_streamlit_components.CookieManager import _component_func as _cookie_component
     cookies = _cookie_component(
         method="getAll",
         key="metea_demo_cookie_probe",

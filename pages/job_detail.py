@@ -845,7 +845,7 @@ def render_commute_confirmation(
             else:
                 if snapshot is not None:
                     snapshot["commute"] = saved_commute_result
-                evaluations = load_job_match_evaluations()
+                evaluations = load_job_match_evaluations(force_numeric_job_id=job_id)
                 evaluation = evaluations.get(job_id)
                 if evaluation and evaluation.evaluation_result_json:
                     save_message = "通勤時間を保存し、確認済みの時間を評価に反映しました。"

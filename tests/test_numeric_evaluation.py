@@ -39,3 +39,12 @@ class NumericEvaluationTest(unittest.TestCase):
   for payload in ['[]','{}','bad']:
    e=JobMatchEvaluation(1,evaluation_result_json=payload)
    self.assertIs(rebuild_numeric_evaluation(e,Job(),None,None,[],None,set()),e)
+
+ def test_unchanged_view_does_not_reload_numeric_inputs(self):
+  from services.job_numeric_evaluation_service import refresh_numeric_evaluations
+  from services.job_matching_rule_service import EVALUATION_RULE_VERSION
+  from unittest.mock import patch
+  e=JobMatchEvaluation(1,rule_version=EVALUATION_RULE_VERSION,evaluation_result_json='{"_numeric_signature":"cached"}')
+  with patch('services.basic_info_service.load_basic_info') as load:
+   self.assertIs(refresh_numeric_evaluations({1:e})[1],e)
+   load.assert_not_called()

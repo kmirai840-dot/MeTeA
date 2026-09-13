@@ -52,13 +52,14 @@ def is_job_match_evaluation_ready(
 # ========================================
 @database_operation
 def load_job_match_evaluations(
+    *, force_numeric_job_id: int | None = None,
 ) -> dict[int, JobMatchEvaluation]:
     """現在の利用者に紐づくAI評価を取得する。"""
 
     user_id = get_current_user_id()
     evaluations = get_job_match_evaluations(user_id)
     from services.job_numeric_evaluation_service import refresh_numeric_evaluations
-    evaluations = refresh_numeric_evaluations(evaluations)
+    evaluations = refresh_numeric_evaluations(evaluations, force_job_id=force_numeric_job_id)
     version_mismatch_found = False
     for evaluation in evaluations.values():
         if (

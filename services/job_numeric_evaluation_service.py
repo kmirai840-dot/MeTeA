@@ -38,8 +38,12 @@ def rebuild_numeric_evaluation(evaluation, job, basic, hope, hope_items, commute
         result_notice_pending=evaluation.result_notice_pending)
 
 
-def refresh_numeric_evaluations(evaluations):
-    candidates={jid:e for jid,e in evaluations.items() if e.evaluation_result_json}
+def refresh_numeric_evaluations(evaluations, force_job_id=None):
+    # プロフィール・求人の正式保存は既存の無効化処理で is_stale を立てる。
+    # 通勤保存は force_job_id を渡す。変更のない画面表示では追加のDB取得をしない。
+    candidates={jid:e for jid,e in evaluations.items() if e.evaluation_result_json and (
+        jid == force_job_id or e.is_stale or e.rule_version != EVALUATION_RULE_VERSION
+        or '"_numeric_signature"' not in e.evaluation_result_json)}
     if not candidates:
         return evaluations
     from services.current_user_service import get_current_user_id

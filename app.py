@@ -17,7 +17,8 @@ st.set_page_config(
 
 # 重いサービスのimport・認証・DB通信より先に表示する。
 _loading_notice = st.empty()
-_loading_notice.info("MeTeAを読み込んでいます。接続とログイン状態を確認しています…")
+if not st.session_state.get("metea_shell_initialized", False):
+    _loading_notice.info("MeTeAを読み込んでいます。接続とログイン状態を確認しています…")
 
 from database.initialize import initialize_database
 from database.repositories.home_activity_repository import get_home_activities
@@ -73,6 +74,7 @@ try:
 except UserIdentityRequired as error:
     st.info(str(error))
     st.stop()
+st.session_state["metea_shell_initialized"] = True
 # 認証時のセッション初期化より後に登録し、初回クリックも受け取る。
 from ui.navigation_bridge import install_navigation
 install_navigation()
@@ -90,7 +92,6 @@ def render_reloaded_page(
     **kwargs,
 ):
     """画面を通常のimportで読み込む。更新はアプリ再起動で反映する。"""
-    _loading_notice.info("画面を読み込んでいます。保存された情報を確認しています…")
     try:
         module = importlib.import_module(module_name)
         return getattr(module, function_name)(*args, **kwargs)
