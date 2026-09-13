@@ -1,5 +1,5 @@
 """Responsive schedule presentation using the already-loaded company snapshot."""
-from datetime import date
+from datetime import date, datetime
 from html import escape
 
 SCHEDULE_RESPONSIVE_CSS = """
@@ -48,7 +48,17 @@ def mobile_schedule_html(views, today=None):
                 day = date.fromisoformat(str(m.scheduled_date)) if m.scheduled_date else None
             except ValueError:
                 pass
+            date_label = ''
+            if m.status == 'completed':
+                date_label = '予定日：'
+                if m.completed_at:
+                    try:
+                        day = datetime.fromisoformat(str(m.completed_at)).date()
+                        date_label = '完了日：'
+                    except ValueError:
+                        pass
             deadline = f'{day.year}/{day.month}/{day.day}（{"月火水木金土日"[day.weekday()]}）' if day else '日程未定'
+            deadline = date_label + deadline
             state = {'completed':'完了', 'cancelled':'取消', 'postponed':'延期'}.get(m.status, '未完了')
             css = m.status
             if m.status == 'pending' and day:
