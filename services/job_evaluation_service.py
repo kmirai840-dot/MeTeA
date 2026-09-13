@@ -6,6 +6,9 @@ from database.repositories.job_evaluation_repository import (
     save_job_application_decision,
     save_job_match_evaluation,
 )
+from dataclasses import replace
+from services.job_evaluation_display_service import normalize_matching_points
+
 from models import (
     JobApplicationDecision,
     JobMatchEvaluation,
@@ -71,8 +74,9 @@ def load_job_match_evaluations(
             version_mismatch_found = True
 
     if version_mismatch_found:
-        return get_job_match_evaluations(user_id)
-    return evaluations
+        evaluations = get_job_match_evaluations(user_id)
+    return {job_id: replace(evaluation, matching_points=normalize_matching_points(evaluation.matching_points))
+            for job_id, evaluation in evaluations.items()}
 
 
 def save_job_match_evaluation_data(

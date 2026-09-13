@@ -1230,9 +1230,8 @@ def evaluate_employment_type_condition(
                 matched_item.priority
             ),
             reason=(
-                f"求人の雇用形態"
-                f"「{normalized_job_employment_type}」は、"
-                "希望する雇用形態に含まれています"
+                f"希望する雇用形態「{normalized_job_employment_type}」と"
+                f"求人の雇用形態「{normalized_job_employment_type}」が一致しています"
             ),
         )
 

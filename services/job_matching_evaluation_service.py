@@ -1,6 +1,7 @@
 """求人AIマッチング評価全体の流れを管理する。"""
 
 import json
+from services.job_evaluation_display_service import normalize_matching_points
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -342,7 +343,7 @@ def build_complete_job_matching_result(
                 "required_condition"
             )
         ),
-        matching_points=matching_points,
+        matching_points=normalize_matching_points(matching_points),
         concern_points=concern_points,
         confirmation_points=(
             confirmation_points
