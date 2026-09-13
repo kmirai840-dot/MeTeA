@@ -1,5 +1,7 @@
 """応募管理・選考通過率レポート画面（カード内編集対応）。"""
 
+from ui.schedule_responsive import SCHEDULE_RESPONSIVE_CSS, mobile_schedule_html
+
 import calendar
 import base64
 from datetime import date, datetime, timedelta
@@ -1837,6 +1839,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
                 # 同じ応募詳細を開いた状態に保つ。
                 st.session_state["schedule_dialog_application_id"] = application_id
 
+    st.html("<style>" + SCHEDULE_RESPONSIVE_CSS + "</style>")
     today = date.today()
     oldest_overdue_date = _oldest_overdue_milestone_date(views, today)
     offset_key = "application_schedule_period_offset"
@@ -1899,9 +1902,9 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
                 css_class = ""
             visual_category = _milestone_visual_category(milestone)
             title = escape(_milestone_title(milestone))
-            if milestone.status == "completed" and milestone.completed_at:
+            if milestone.status == "completed":
                 try:
-                    completed_date = datetime.fromisoformat(milestone.completed_at).date()
+                    completed_date = datetime.fromisoformat(milestone.completed_at).date() if milestone.completed_at else scheduled
                 except ValueError:
                     completed_date = scheduled
                 event_key = (completed_date, title, "completed")
@@ -1920,7 +1923,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
 
         timeline_cells = []
         for day in period:
-            day_events = events_by_date.get(day, [])
+            day_events = sorted(events_by_date.get(day, []), key=lambda e: {"overdue": 0, "": 1, "inactive": 2, "done": 3}.get(e["state"], 1))
             rendered = []
             for event in day_events[:3]:
                 state_class = event["state"]
@@ -1998,6 +2001,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         f'<th class="prep-cell">操作</th>{date_headers}</tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
         '</div>'
+        + mobile_schedule_html(views, today) +
         '<script>'
         'document.querySelectorAll("[data-schedule-application]").forEach(function(cell){'
         'cell.addEventListener("click", function(){'
