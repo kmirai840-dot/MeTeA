@@ -47,6 +47,27 @@ def _row_to_job_source(
     )
 
 
+def get_all_job_sources(user_id: int) -> dict[int, list[tuple[int, JobSource]]]:
+    """本人の有効な求人の紹介経路を一覧表示用に一括取得する。"""
+    user_id = require_user_id(user_id)
+    connection = get_connection()
+    try:
+        rows = connection.execute(
+            """SELECT source.* FROM user_job_sources AS source
+               INNER JOIN user_jobs AS job ON job.id = source.job_id
+               WHERE job.user_id = ? AND job.deleted_at IS NULL
+                 AND source.deleted_at IS NULL
+               ORDER BY source.job_id, source.is_primary DESC,
+                        source.created_at ASC, source.id ASC""", (user_id,),
+        ).fetchall()
+        grouped = {}
+        for row in rows:
+            grouped.setdefault(row['job_id'], []).append((row['id'], _row_to_job_source(row)))
+        return grouped
+    finally:
+        connection.close()
+
+
 def get_job_sources(
     user_id: int,
     job_id: int,

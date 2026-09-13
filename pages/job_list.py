@@ -206,17 +206,17 @@ def render_job_table_header() -> None:
             )
 
 
+from services.job_list_data_service import load_job_list_data
+
+
 def render_job_card(
     job_id: int,
     job,
     evaluation,
     decision,
+    sources,
 ) -> bool:
     """求人1件分をコンパクトな一覧行として表示する。"""
-
-    sources = load_job_sources(
-        job_id
-    )
 
     company_name = (
         job.company_name
@@ -761,8 +761,10 @@ def show_page() -> None:
             JOB_LIST_PAGE_KEY
         ] = 1
 
-    jobs = load_jobs()
-    evaluations = render_evaluation_progress()
+    snapshot = load_job_list_data()
+    jobs = snapshot['jobs']
+    sources_by_job = snapshot['sources']
+    evaluations = render_evaluation_progress(snapshot['evaluations'])
 
     for evaluated_job_id, current_evaluation in evaluations.items():
         if current_evaluation.evaluation_status == "failed":
@@ -780,9 +782,7 @@ def show_page() -> None:
                     enqueue_job_evaluation(evaluated_job_id, retry=True)
                     st.rerun()
 
-    decisions = (
-        load_job_application_decisions()
-    )
+    decisions = snapshot['decisions']
 
     st.markdown(
         """
@@ -2664,7 +2664,7 @@ def show_page() -> None:
         {
             source.source_name
             for job_id, _ in jobs
-            for _, source in load_job_sources(job_id)
+            for _, source in sources_by_job.get(job_id, [])
             if source.source_name
         }
     )
@@ -2788,7 +2788,7 @@ def show_page() -> None:
             for job_id, job in filtered_jobs
             if any(
                 source.source_name == selected_source_name
-                for _, source in load_job_sources(job_id)
+                for _, source in sources_by_job.get(job_id, [])
             )
         ]
 
@@ -2971,6 +2971,7 @@ def show_page() -> None:
         for job_id, job in visible_jobs:
             render_job_card(
                 job_id=job_id,
+                sources=sources_by_job.get(job_id, []),
                 job=job,
                 evaluation=(
                     evaluations.get(job_id)

@@ -1,5 +1,7 @@
 # ホーム「次の一歩」設計
 
+2026-09-13：応募情報・次の一歩・活動を`load_home_data`で一括取得。判断ルールは維持し、描画では取得済みの値を再利用。[As-Is / To-Beと実測](streamlit_release_performance.md)。
+
 更新日：2026年9月13日
 
 ## As-Is / To-Be

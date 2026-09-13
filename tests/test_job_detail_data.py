@@ -11,7 +11,7 @@ class DetailDataTest(unittest.TestCase):
         job = SimpleNamespace(nearest_station="駅")
         basic = SimpleNamespace(nearest_station_place_id="place")
         values = {"load_job":job, "load_basic_info":basic, "load_current_job_commute":None,
-                  "load_job_match_evaluations":{}, "load_job_confirmation_resolutions":{}, "load_job_application_decisions":{}, 'load_confirmation_records':[]}
+                  "load_job_match_evaluations":{}, "load_job_application_decisions":{}, 'load_confirmation_records':[{'item_key':'test', 'status':'dismissed'}]}
         connection = MagicMock()
         with ExitStack() as stack:
             connect = stack.enter_context(patch("database.connection._open_connection", return_value=connection))
@@ -28,6 +28,7 @@ class DetailDataTest(unittest.TestCase):
             connection.close.assert_called_once()
         self.assertIsNone(current_operation())
         self.assertIs(result['job'], job)
+        self.assertEqual(result['resolutions'], {'test':'dismissed'})
 
     def test_progress_reuses_supplied_evaluations(self):
         from ui import job_evaluation_progress as progress

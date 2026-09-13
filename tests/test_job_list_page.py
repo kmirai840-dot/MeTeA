@@ -10,10 +10,11 @@ class JobListPageTest(unittest.TestCase):
             with self.subTest(status=status):
                 jobs = [] if status == 'empty' else [(10, Job(company_name='Test'))]
                 evaluations = {} if not jobs else {10: JobMatchEvaluation(job_id=10, overall_score=70, evaluation_status=status)}
-                with patch.object(job_list, 'load_jobs', return_value=jobs), patch.object(job_list, 'load_job_sources', return_value=[]), patch.object(job_list, 'load_job_application_decisions', return_value={}), patch.object(job_list, 'render_evaluation_progress', return_value=evaluations) as progress:
+                snapshot = dict(jobs=jobs, evaluations=evaluations, decisions={}, sources={})
+                with patch.object(job_list, 'load_job_list_data', return_value=snapshot), patch.object(job_list, 'load_job_sources', side_effect=AssertionError('描画中の再取得')), patch.object(job_list, 'render_evaluation_progress', return_value=evaluations) as progress:
                     app=AppTest.from_string('from pages.job_list import show_page\nshow_page()').run(timeout=30)
                     self.assertEqual(list(app.exception), [])
-                    progress.assert_called_once_with()
+                    progress.assert_called_once_with(evaluations)
                     if status == 'failed':
                         self.assertTrue(any(b.label == '再試行' for b in app.button))
 

@@ -2,6 +2,7 @@
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from database.operation import database_operation
 
 from database.repositories.application_repository import (
     add_phase_history, get_activities, get_application, get_application_by_job_route, get_phase_history,
@@ -14,7 +15,7 @@ from models import (ApplicationActivity, ApplicationMilestone, ApplicationPrepar
                     ApplicationRecord, UserPreparationTemplate)
 from services.current_user_service import get_current_user_id
 from services.job_evaluation_service import load_job_application_decisions
-from services.job_service import load_job, load_job_sources
+from services.job_service import load_job, load_jobs, load_job_sources
 
 
 ACTIVE_DECISIONS = {"応募する", "他経路から応募する"}
@@ -304,14 +305,22 @@ def ensure_application_from_decision(job_id: int, decision_status: str, next_act
     return application_id
 
 
+@database_operation
 def load_application_views(include_closed: bool = True) -> list[dict]:
     user_id = get_current_user_id()
+    applications = get_applications(user_id, include_closed)
+    if not applications:
+        return []
+    jobs = dict(load_jobs())
+    milestones_by_application = defaultdict(list)
+    for milestone in get_milestones(user_id=user_id):
+        milestones_by_application[milestone.application_id].append(milestone)
     result = []
-    for application in get_applications(user_id, include_closed):
-        job = load_job(application.job_id)
+    for application in applications:
+        job = jobs.get(application.job_id)
         if not job:
             continue
-        milestones = get_milestones(application.id)
+        milestones = milestones_by_application[application.id]
         pending = [m for m in milestones if m.status == "pending"]
         next_milestone = min(pending, key=lambda m: (m.scheduled_date or "9999-12-31", m.id), default=None)
         result.append({"application": application, "job": job, "milestones": milestones,
@@ -319,6 +328,7 @@ def load_application_views(include_closed: bool = True) -> list[dict]:
     return result
 
 
+@database_operation
 def load_application_detail(application_id: int) -> dict | None:
     application = get_application(get_current_user_id(), application_id)
     if not application:

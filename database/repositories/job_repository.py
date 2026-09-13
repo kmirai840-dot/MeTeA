@@ -197,13 +197,12 @@ def _get_job_items(
 def _row_to_job(
     connection: sqlite3.Connection,
     row: sqlite3.Row,
+    multi_values: dict[str, list[str]] | None = None,
 ) -> Job:
     """DBの1行をJobへ変換する。"""
 
-    multi_values = _get_job_items(
-        connection,
-        row["id"],
-    )
+    if multi_values is None:
+        multi_values = _get_job_items(connection, row["id"])
 
     normal_values = {
         field_name: row[field_name]
@@ -309,12 +308,29 @@ def get_jobs(
             (user_id,),
         ).fetchall()
 
+        items_by_job = {row['id']: {field: [] for field in MULTI_VALUE_FIELDS} for row in rows}
+        if rows:
+            items = connection.execute(
+                """SELECT item.job_id, item.item_type, item.item_value
+                   FROM user_job_items AS item
+                   JOIN user_jobs AS job ON job.id = item.job_id
+                   WHERE job.user_id = ? AND job.deleted_at IS NULL
+                     AND item.deleted_at IS NULL
+                   ORDER BY item.job_id, item.item_type, item.display_order, item.id""",
+                (user_id,),
+            ).fetchall()
+            for item in items:
+                values = items_by_job.get(item['job_id'])
+                if values is not None and item['item_type'] in values:
+                    values[item['item_type']].append(item['item_value'])
+
         return [
             (
                 row["id"],
                 _row_to_job(
                     connection,
                     row,
+                    items_by_job[row['id']],
                 ),
             )
             for row in rows

@@ -388,7 +388,9 @@ ACTION_CARDS = [
 # ========================================
 
 
-HOME_APPLICATION_VIEWS = load_application_views(False)
+from services.home_data_service import load_home_data
+HOME_DATA = load_home_data()
+HOME_APPLICATION_VIEWS = HOME_DATA['application_views']
 
 
 def _home_task_items() -> list[TaskItem]:
@@ -428,7 +430,7 @@ def _home_task_items() -> list[TaskItem]:
 TASK_ITEMS = _home_task_items()
 
 from services.home_next_step_service import load_next_step, render_next_step_html
-NEXT_STEP_HTML = render_next_step_html(load_next_step(HOME_APPLICATION_VIEWS))
+NEXT_STEP_HTML = render_next_step_html(HOME_DATA['next_step'])
 
 # ========================================
 # 最近の活動
@@ -437,7 +439,7 @@ NEXT_STEP_HTML = render_next_step_html(load_next_step(HOME_APPLICATION_VIEWS))
 
 def _home_activity_items() -> list[ActivityItem]:
     items = []
-    for activity in get_home_activities(get_current_user_id(), limit=3):
+    for activity in HOME_DATA['activities']:
         occurred_at = activity["occurred_at"]
         try:
             parsed = datetime.fromisoformat(occurred_at)

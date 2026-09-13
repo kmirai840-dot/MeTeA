@@ -92,6 +92,55 @@ class UserDataIsolationTest(unittest.TestCase):
                 self.records[uid] = dict(job=job, source=src, application=application,
                                          milestone=milestone, preparation=preparation, template=template)
 
+    def test_bulk_screen_reads_preserve_ownership_order_and_updates(self):
+        for uid in (1, 2):
+            with identity.user_scope(uid):
+                own = self.records[uid]
+                self.assertEqual(source.get_all_job_sources(uid),
+                                 {own['job']: source.get_job_sources(uid, own['job'])})
+                self.assertEqual(dict(jobs.get_jobs(uid))[own['job']], jobs.get_job(uid, own['job']))
+                views = management.load_application_views()
+                self.assertEqual([v['application'].id for v in views], [own['application']])
+                self.assertEqual(views[0]['milestones'], app.get_milestones(own['application']))
+                jobs.update_job(uid, own['job'], m.Job(company_name='changed'))
+                self.assertEqual(management.load_application_views()[0]['job'].company_name, 'changed')
+                jobs.delete_job(uid, own['job'])
+                self.assertEqual(source.get_all_job_sources(uid), {})
+                self.assertEqual(jobs.get_jobs(uid), [])
+                self.assertEqual(management.load_application_views(), [])
+
+    def test_bulk_job_reads_do_not_issue_queries_per_job(self):
+        if getattr(self, 'database_backend', 'sqlite') != 'sqlite':
+            self.skipTest('SQLite trace checks SQL counts; PostgreSQL uses the same repository queries')
+        from database.operation import database_operation
+        import database.connection as connections
+        original = connections._open_connection
+        statements = []
+        def traced():
+            db = original()
+            db.set_trace_callback(statements.append)
+            return db
+        @database_operation
+        def read():
+            return jobs.get_jobs(1), source.get_all_job_sources(1), management.load_application_views()
+        with identity.user_scope(1):
+            with patch.object(connections, '_open_connection', side_effect=traced):
+                read()
+            initial = sum(s.lstrip().upper().startswith('SELECT') for s in statements)
+            for index in range(20):
+                jid = jobs.create_job(1, m.Job(company_name=f'bulk-{index}', job_details=['first','second']))
+                source.create_job_source(1, jid, m.JobSource(source_name='route'))
+                aid = app.save_application(m.ApplicationRecord(user_id=1, job_id=jid))
+                app.save_milestone(m.ApplicationMilestone(application_id=aid, title='next'))
+            statements.clear()
+            with patch.object(connections, '_open_connection', side_effect=traced) as opened:
+                result = read()
+                opened.assert_called_once()
+            self.assertEqual(sum(s.lstrip().upper().startswith('SELECT') for s in statements), initial)
+            self.assertEqual(len(result[0]), 21)
+            self.assertEqual(len(result[2]), 21)
+            self.assertEqual(result[0][0][1].job_details, ['first','second'])
+
     def dump(self):
         db = get_connection()
         try:
