@@ -5,6 +5,7 @@ from database.operation import database_operation
 from dataclasses import replace
 
 import streamlit as st
+from ui.batch_form import batch_button
 from ui.page_execution import navigate_to_page, rerun_current_page
 
 from pages.self_discovery_theme import apply_self_discovery_theme
@@ -1896,7 +1897,7 @@ def render_history_form() -> None:
             st.number_input("開始月", min_value=1, max_value=12, key="career_history_start_month")
     with period_columns[1]:
         is_current = st.checkbox("現在まで担当", key="career_history_is_current")
-        if not is_current:
+        with st.container(key="career_history_end_fields"):
             end_columns = st.columns(2)
             with end_columns[0]:
                 st.number_input("終了年", min_value=1950, max_value=2100, key="career_history_end_year")
@@ -2011,7 +2012,7 @@ def render_history_list() -> None:
             )
 
             with button_left:
-                st.button(
+                batch_button(
                     "編集",
                     key=(
                         "career_history_edit_"
@@ -2025,7 +2026,7 @@ def render_history_list() -> None:
                 )
 
             with button_right:
-                st.button(
+                batch_button(
                     "削除",
                     key=(
                         "career_history_delete_"
@@ -2053,7 +2054,7 @@ def render_history_list() -> None:
 
                 render_history_form()
 
-                st.button(
+                batch_button(
                     "✓ 変更を反映する",
                     key=(
                         "career_update_history_"
@@ -2199,7 +2200,7 @@ def render_company_form(ai_reviewing: bool) -> None:
             st.number_input("入社月", min_value=1, max_value=12, key="career_start_month")
 
         is_current = st.checkbox("現在も在職中", key="career_is_current")
-        if not is_current:
+        with st.container(key="career_company_end_fields"):
             end_columns = st.columns(2)
             with end_columns[0]:
                 st.number_input("退社年", min_value=1950, max_value=2100, key="career_end_year")
@@ -2231,7 +2232,7 @@ def render_company_list() -> None:
         )
 
     with header_mode:
-        if st.button(
+        if batch_button(
             "登録方法を変更",
             key="career_change_entry_mode",
             use_container_width=True,
@@ -2240,7 +2241,7 @@ def render_company_list() -> None:
             rerun_current_page()
 
     with header_right:
-        if st.button(
+        if batch_button(
             "＋会社を追加",
             key="career_add_company_top",
             use_container_width=True,
@@ -2312,7 +2313,7 @@ def render_company_list() -> None:
             )
 
             with button_left:
-                st.button(
+                batch_button(
                     "編集",
                     icon=":material/edit:",
                     key=(
@@ -2327,7 +2328,7 @@ def render_company_list() -> None:
                 )
 
             with button_right:
-                st.button(
+                batch_button(
                     "削除",
                     icon=":material/delete_outline:",
                     key=(
@@ -2388,7 +2389,7 @@ def render_career_review_summary() -> None:
                     unsafe_allow_html=True,
                 )
             with header_columns[1]:
-                if st.button(
+                if batch_button(
                     "編集する",
                     key=f"career_review_edit_{company_index}",
                     use_container_width=True,
@@ -2465,7 +2466,7 @@ def show_page() -> None:
     ):
         reset_current_career_form_state()
 
-    if st.button(
+    if batch_button(
         "← 就活の軸へ戻る",
         key="career_back_top",
     ):
@@ -2641,7 +2642,7 @@ def show_page() -> None:
                                 f'<div>{file_type_label}ファイルを読み取りました。</div></div>',
                                 unsafe_allow_html=True,
                             )
-                            if st.button(
+                            if batch_button(
                                 "AIで職務経歴を整理する",
                                 key="career_ai_parse",
                                 use_container_width=True,
@@ -2686,7 +2687,7 @@ def show_page() -> None:
                     "作る方向け"
                 )
 
-                if st.button(
+                if batch_button(
                     "入力を始める",
                     key="career_manual",
                     use_container_width=True,
@@ -2758,7 +2759,7 @@ def show_page() -> None:
                             st.write(f"業種：{career.industry}")
                         st.write(f"部署・役割：{len(career.histories)}件")
 
-                st.button(
+                batch_button(
                     "この内容を入力フォームに反映する",
                     key="career_ai_apply",
                     use_container_width=True,
@@ -2781,7 +2782,7 @@ def show_page() -> None:
 
         review_columns = st.columns([1, 2])
         with review_columns[0]:
-            st.button(
+            batch_button(
                 "＋ 会社を追加する",
                 key="career_review_add_company",
                 use_container_width=True,
@@ -2789,7 +2790,7 @@ def show_page() -> None:
             )
 
         with review_columns[1]:
-            st.button(
+            batch_button(
                 "この内容で登録する",
                 key="career_review_confirm",
                 type="primary",
@@ -2805,7 +2806,7 @@ def show_page() -> None:
             )
             job_column, top_column = st.columns(2)
             with job_column:
-                if st.button(
+                if batch_button(
                     "求人票を登録する",
                     key="career_complete_job",
                     type="primary",
@@ -2815,7 +2816,7 @@ def show_page() -> None:
                     st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
                     navigate_to_page("job_list")
             with top_column:
-                if st.button(
+                if batch_button(
                     "トップへ戻る",
                     key="career_complete_top",
                     use_container_width=True,
@@ -2988,106 +2989,160 @@ def show_page() -> None:
     # 会社情報
     # ======================================
 
-    render_company_form(ai_reviewing)
+    from ui.job_form_visibility import install_visibility
+    install_visibility([
+        dict(control='career_is_current',target='career_company_end_fields',value=None,invert=True),
+        dict(control='career_history_is_current',target='career_history_end_fields',value=None,invert=True),
+    ],key='career_field_visibility')
+    with st.form('career_edit_batch',border=False,enter_to_submit=False):
+        render_company_form(ai_reviewing)
 
-    # ======================================
-    # 部署・役割
-    # ======================================
+        # ======================================
+        # 部署・役割
+        # ======================================
 
-    st.subheader("部署・役割")
-    if not ai_reviewing:
-        st.caption("同じ会社で部署・役割が変わった場合は、担当期間ごとに分けて登録してください。")
+        st.subheader("部署・役割")
+        if not ai_reviewing:
+            st.caption("同じ会社で部署・役割が変わった場合は、担当期間ごとに分けて登録してください。")
 
-    if ai_reviewing:
+        if ai_reviewing:
 
-        render_ai_history_forms()
+            render_ai_history_forms()
 
-    else:
+        else:
 
-        render_history_list()
+            render_history_list()
 
-        history_edit_index = (
-            st.session_state.get(
-                CAREER_HISTORY_EDIT_INDEX_KEY
+            history_edit_index = (
+                st.session_state.get(
+                    CAREER_HISTORY_EDIT_INDEX_KEY
+                )
+            )
+
+            if history_edit_index is None:
+
+                if batch_button(
+                    "＋ 新しい部署・役割を追加",
+                    key="career_history_new",
+                    use_container_width=True,
+                ):
+
+                    st.session_state[
+                        CAREER_HISTORY_EDIT_INDEX_KEY
+                    ] = -1
+
+                    rerun_current_page()
+
+            elif history_edit_index == -1:
+
+                with st.container(
+                    border=True
+                ):
+
+                    st.markdown('<span class="metea-career-manual-history-form-marker"></span>', unsafe_allow_html=True)
+
+                    st.markdown("#### 新しい部署・役割")
+                    st.caption("担当した仕事と成果を、実際の内容に沿って入力してください。")
+
+                    render_history_form()
+
+                    batch_button(
+                        "＋ 部署・役割を追加する",
+                        key=(
+                            "career_add_history_new"
+                        ),
+                        use_container_width=True,
+                        on_click=(
+                            add_current_history
+                        ),
+                    )
+
+        # ======================================
+        # メッセージ
+        # ======================================
+
+        st.divider()
+
+        career_message = (
+            st.session_state.pop(
+                CAREER_MESSAGE_KEY,
+                None,
             )
         )
 
-        if history_edit_index is None:
+        if career_message:
+            st.toast(
+                career_message
+            )
 
-            if st.button(
-                "＋ 新しい部署・役割を追加",
-                key="career_history_new",
-                use_container_width=True,
+        # ======================================
+        # 最終操作ボタン
+        # ======================================
+
+        if ai_reviewing:
+
+            if (
+                existing_ai_company_index
+                is not None
             ):
 
-                st.session_state[
-                    CAREER_HISTORY_EDIT_INDEX_KEY
-                ] = -1
-
-                rerun_current_page()
-
-        elif history_edit_index == -1:
-
-            with st.container(
-                border=True
-            ):
-
-                st.markdown('<span class="metea-career-manual-history-form-marker"></span>', unsafe_allow_html=True)
-
-                st.markdown("#### 新しい部署・役割")
-                st.caption("担当した仕事と成果を、実際の内容に沿って入力してください。")
-
-                render_history_form()
-
-                st.button(
-                    "＋ 部署・役割を追加する",
-                    key=(
-                        "career_add_history_new"
-                    ),
-                    use_container_width=True,
-                    on_click=(
-                        add_current_history
-                    ),
+                update_column, skip_column = (
+                    st.columns(2)
                 )
 
-    # ======================================
-    # メッセージ
-    # ======================================
+                with update_column:
 
-    st.divider()
+                    batch_button(
+                        "既存情報を更新する",
+                        key="career_ai_update",
+                        type="primary",
+                        use_container_width=True,
+                        on_click=(
+                            save_current_company
+                        ),
+                    )
 
-    career_message = (
-        st.session_state.pop(
-            CAREER_MESSAGE_KEY,
-            None,
-        )
-    )
+                with skip_column:
 
-    if career_message:
-        st.toast(
-            career_message
-        )
+                    batch_button(
+                        "この会社をスキップする",
+                        key="career_ai_skip",
+                        use_container_width=True,
+                        on_click=(
+                            skip_ai_career
+                        ),
+                    )
 
-    # ======================================
-    # 最終操作ボタン
-    # ======================================
+            else:
 
-    if ai_reviewing:
+                save_column, skip_column = st.columns([2, 1])
+                with save_column:
+                    batch_button(
+                        "内容を保存して次へ",
+                        key="career_ai_save",
+                        type="primary",
+                        use_container_width=True,
+                        on_click=save_current_company,
+                    )
+                with skip_column:
+                    batch_button(
+                        "この会社をスキップ",
+                        key="career_ai_skip",
+                        use_container_width=True,
+                        on_click=skip_ai_career,
+                    )
 
-        if (
-            existing_ai_company_index
-            is not None
-        ):
+        elif edit_index is None:
 
-            update_column, skip_column = (
-                st.columns(2)
+            action_columns = st.columns(
+                [1, 1, 1]
             )
 
-            with update_column:
+            with action_columns[1]:
 
-                st.button(
-                    "既存情報を更新する",
-                    key="career_ai_update",
+                batch_button(
+                    "この会社を入力内容に追加する",
+                    key="career_save",
                     type="primary",
                     use_container_width=True,
                     on_click=(
@@ -3095,79 +3150,31 @@ def show_page() -> None:
                     ),
                 )
 
-            with skip_column:
+        else:
 
-                st.button(
-                    "この会社をスキップする",
-                    key="career_ai_skip",
+            cancel_column, save_column = (
+                st.columns(2)
+            )
+
+            with cancel_column:
+
+                batch_button(
+                    "編集をキャンセル",
+                    key="career_edit_cancel",
                     use_container_width=True,
                     on_click=(
-                        skip_ai_career
+                        cancel_company_edit
                     ),
                 )
 
-        else:
-
-            save_column, skip_column = st.columns([2, 1])
             with save_column:
-                st.button(
-                    "内容を保存して次へ",
-                    key="career_ai_save",
+
+                batch_button(
+                    "変更を反映して確認へ",
+                    key="career_update",
                     type="primary",
                     use_container_width=True,
-                    on_click=save_current_company,
+                    on_click=(
+                        save_current_company
+                    ),
                 )
-            with skip_column:
-                st.button(
-                    "この会社をスキップ",
-                    key="career_ai_skip",
-                    use_container_width=True,
-                    on_click=skip_ai_career,
-                )
-
-    elif edit_index is None:
-
-        action_columns = st.columns(
-            [1, 1, 1]
-        )
-
-        with action_columns[1]:
-
-            st.button(
-                "この会社を入力内容に追加する",
-                key="career_save",
-                type="primary",
-                use_container_width=True,
-                on_click=(
-                    save_current_company
-                ),
-            )
-
-    else:
-
-        cancel_column, save_column = (
-            st.columns(2)
-        )
-
-        with cancel_column:
-
-            st.button(
-                "編集をキャンセル",
-                key="career_edit_cancel",
-                use_container_width=True,
-                on_click=(
-                    cancel_company_edit
-                ),
-            )
-
-        with save_column:
-
-            st.button(
-                "変更を反映して確認へ",
-                key="career_update",
-                type="primary",
-                use_container_width=True,
-                on_click=(
-                    save_current_company
-                ),
-            )

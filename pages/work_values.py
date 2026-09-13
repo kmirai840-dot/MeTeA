@@ -7,6 +7,7 @@ from html import escape
 from pathlib import Path
 
 import streamlit as st
+from ui.batch_form import batch_button
 from ui.page_execution import (navigate_to_page, rerun_current_page, request_save, take_save_request, defer_save_failure, render_deferred_save_failure)
 
 from constants.work_values import (
@@ -524,7 +525,7 @@ def ranking_section(
                         len(selected_values) >= 3
                         and selected_rank is None
                     )
-                    if st.button(
+                    if batch_button(
                         label,
                         key=f"{key_prefix}_option_{row_start + offset}",
                         type="primary" if selected_rank else "secondary",
@@ -712,7 +713,7 @@ def ranking_section(
             )
             clear_space, clear_action = st.columns([6, 1.25])
             with clear_action:
-                st.button(
+                batch_button(
                     "すべてクリア",
                     key=f"{key_prefix}_rank_clear_all",
                     use_container_width=True,
@@ -735,7 +736,7 @@ def ranking_section(
                     with action_column:
                         controls = st.columns(3)
                         with controls[0]:
-                            st.button(
+                            batch_button(
                                 "上へ",
                                 key=f"{key_prefix}_rank_up_{rank_index}",
                                 disabled=rank_index == 0,
@@ -745,7 +746,7 @@ def ranking_section(
                                 args=(key_prefix, list(selected_values), rank_index, -1),
                             )
                         with controls[1]:
-                            st.button(
+                            batch_button(
                                 "下へ",
                                 key=f"{key_prefix}_rank_down_{rank_index}",
                                 disabled=rank_index == len(selected_values) - 1,
@@ -755,7 +756,7 @@ def ranking_section(
                                 args=(key_prefix, list(selected_values), rank_index, 1),
                             )
                         with controls[2]:
-                            st.button(
+                            batch_button(
                                 "外す",
                                 key=f"{key_prefix}_rank_remove_{rank_index}",
                                 use_container_width=True,
@@ -1425,7 +1426,7 @@ def show_page() -> None:
     if hope_conditions_message:
         st.toast(hope_conditions_message)
 
-    if st.button(
+    if batch_button(
         "← 希望条件へ戻る",
         key="work_values_back_top",
     ):
@@ -1485,80 +1486,81 @@ def show_page() -> None:
         unsafe_allow_html=True,
     )
 
-    ranking_section(
-        section_number=1,
-        title="仕事で大切にしたいこと",
-        options=IMPORTANT_VALUE_OPTIONS,
-        key_prefix="important_value",
-        errors=errors,
-    )
-
-    ranking_section(
-        section_number=2,
-        title="やりがいを感じる場面",
-        options=REWARDING_SCENE_OPTIONS,
-        key_prefix="rewarding_scene",
-        errors=errors,
-    )
-
-    rewarding_experience_section(section_number=3)
-
-    ranking_section(
-        section_number=4,
-        title="力を発揮しやすい環境",
-        options=STRENGTH_ENVIRONMENT_OPTIONS,
-        key_prefix="strength_environment",
-        errors=errors,
-    )
-
-    environment_reason_section(section_number=5)
-
-    work_style_section(section_number=6, errors=errors)
-
-    st.divider()
-
-    action_columns = st.columns(3)
-
-    with action_columns[0]:
-        if st.button(
-            "← 希望条件へ戻る",
-            key="work_values_back_bottom",
-            use_container_width=True,
-        ):
-            navigate_to_page("hope_conditions")
-
-    with action_columns[1]:
-        if st.button(
-            "一時保存",
-            key="work_values_draft_save",
-            use_container_width=True,
-        ):
-            try:
-                draft_data = (
-                    collect_work_values_draft()
-                )
-
-                save_work_values_draft(
-                    draft_data
-                )
-
-                st.toast(
-                    "入力内容を一時保存しました。"
-                )
-
-            except Exception:
-                render_save_failure(
-                    "価値観の一時保存",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
-                )
-
-    with action_columns[2]:
-        st.button(
-            "保存して次へ →",
-            key="work_values_save",
-            type="primary",
-            use_container_width=True,
-            on_click=request_save,
-            args=("work_values",),
+    with st.form("work_values_batch",border=False,enter_to_submit=False):
+        ranking_section(
+            section_number=1,
+            title="仕事で大切にしたいこと",
+            options=IMPORTANT_VALUE_OPTIONS,
+            key_prefix="important_value",
+            errors=errors,
         )
-        render_deferred_save_failure("work_values")
+
+        ranking_section(
+            section_number=2,
+            title="やりがいを感じる場面",
+            options=REWARDING_SCENE_OPTIONS,
+            key_prefix="rewarding_scene",
+            errors=errors,
+        )
+
+        rewarding_experience_section(section_number=3)
+
+        ranking_section(
+            section_number=4,
+            title="力を発揮しやすい環境",
+            options=STRENGTH_ENVIRONMENT_OPTIONS,
+            key_prefix="strength_environment",
+            errors=errors,
+        )
+
+        environment_reason_section(section_number=5)
+
+        work_style_section(section_number=6, errors=errors)
+
+        st.divider()
+
+        action_columns = st.columns(3)
+
+        with action_columns[0]:
+            if batch_button(
+                "← 希望条件へ戻る",
+                key="work_values_back_bottom",
+                use_container_width=True,
+            ):
+                navigate_to_page("hope_conditions")
+
+        with action_columns[1]:
+            if batch_button(
+                "一時保存",
+                key="work_values_draft_save",
+                use_container_width=True,
+            ):
+                try:
+                    draft_data = (
+                        collect_work_values_draft()
+                    )
+
+                    save_work_values_draft(
+                        draft_data
+                    )
+
+                    st.toast(
+                        "入力内容を一時保存しました。"
+                    )
+
+                except Exception:
+                    render_save_failure(
+                        "価値観の一時保存",
+                        recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
+                    )
+
+        with action_columns[2]:
+            batch_button(
+                "保存して次へ →",
+                key="work_values_save",
+                type="primary",
+                use_container_width=True,
+                on_click=request_save,
+                args=("work_values",),
+            )
+            render_deferred_save_failure("work_values")

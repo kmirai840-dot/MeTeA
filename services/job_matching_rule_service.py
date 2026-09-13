@@ -10,7 +10,7 @@ PARTIAL_MATCH = "一部一致"
 MISMATCH = "不一致"
 NEEDS_CONFIRMATION = "要確認"
 
-EVALUATION_RULE_VERSION = "job-matching-rules-v3"
+EVALUATION_RULE_VERSION = "job-matching-rules-v4"
 
 JUDGMENT_SCORES = {
     MATCH: 100,
@@ -359,6 +359,7 @@ def evaluate_salary_values(
     minimum_salary: int,
     desired_salary: int,
     ideal_salary: int,
+    job_annual_salary_max: int | None = None,
 ) -> MatchItemResult:
     """求人年収と利用者の希望年収を比較する。"""
 
@@ -400,18 +401,21 @@ def evaluate_salary_values(
             ),
         )
 
+    if job_annual_salary_max is not None and job_annual_salary_max < job_annual_salary_min:
+        return MatchItemResult(item_name="年収",judgment=NEEDS_CONFIRMATION,reason="求人年収の下限と上限の順序を確認してください")
     if job_annual_salary_min < minimum_salary:
-        return MatchItemResult(
-            item_name="年収",
-            judgment=MISMATCH,
-            reason=(
-                f"求人年収下限"
-                f"{job_annual_salary_min}万円は、"
-                f"最低許容年収"
-                f"{minimum_salary}万円を"
-                "下回っています"
-            ),
-        )
+        if job_annual_salary_max is None:
+            return MatchItemResult(item_name="年収",judgment=NEEDS_CONFIRMATION,
+                reason=f"求人年収下限{job_annual_salary_min}万円は最低許容年収{minimum_salary}万円未満ですが、上限が不明です。提示額を確認してください")
+        if job_annual_salary_max >= minimum_salary:
+            return MatchItemResult(item_name="年収",judgment=PARTIAL_MATCH,
+                reason=f"求人年収{job_annual_salary_min}〜{job_annual_salary_max}万円に最低許容年収{minimum_salary}万円が含まれます。希望額以上で提示されるか確認してください")
+        return MatchItemResult(item_name="年収",judgment=MISMATCH,
+            reason=f"求人年収上限{job_annual_salary_max}万円も最低許容年収{minimum_salary}万円を下回っています")
+
+    if job_annual_salary_min < desired_salary and job_annual_salary_max is not None and job_annual_salary_max >= desired_salary:
+        return MatchItemResult(item_name="年収", judgment=PARTIAL_MATCH,
+            reason=f"求人年収{job_annual_salary_min}〜{job_annual_salary_max}万円は最低許容年収{minimum_salary}万円以上です。希望年収{desired_salary}万円も範囲に含まれますが、提示額の確認が必要です")
 
     if job_annual_salary_min < desired_salary:
         return MatchItemResult(
@@ -464,10 +468,23 @@ def evaluate_salary_condition(
         salary_source,
     ) = get_job_minimum_annual_salary(job)
 
+    job_annual_salary_max = parse_positive_integer(job.expected_salary_max)
+    if job_annual_salary_max is None and not parse_positive_integer(job.expected_salary_min):
+        monthly_max = parse_positive_integer(job.monthly_salary_max)
+        if monthly_max is not None:
+            job_annual_salary_max = monthly_max * 12 // 10000
+    # 原文に明記された想定年収レンジを優先。月給×12だけで賞与を落とさない。
+    import re, unicodedata
+    source = unicodedata.normalize('NFKC',job.source_text or '')
+    found = re.search(r'(?:想定)?年収[：:\s]*([\d,]+)\s*万?円?\s*[~〜～－–—-]\s*([\d,]+)\s*万円',source)
+    if found and not parse_positive_integer(job.expected_salary_min) and not parse_positive_integer(job.expected_salary_max):
+        job_annual_salary_min, job_annual_salary_max = [int(v.replace(',','')) for v in found.groups()]
+        salary_source = '求人票原文に明記された年収範囲'
     result = evaluate_salary_values(
         job_annual_salary_min=(
             job_annual_salary_min
         ),
+        job_annual_salary_max=job_annual_salary_max,
         minimum_salary=minimum_salary,
         desired_salary=desired_salary,
         ideal_salary=ideal_salary,

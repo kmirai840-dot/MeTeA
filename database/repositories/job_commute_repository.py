@@ -161,3 +161,15 @@ def delete_job_commute_check(
 
     finally:
         connection.close()
+
+def get_job_commute_checks(user_id: int) -> dict[int, JobCommuteCheck]:
+    user_id = require_user_id(user_id)
+    connection = get_connection()
+    try:
+        rows = connection.execute("""SELECT c.job_id,c.origin_station_name,c.origin_station_place_id,
+            c.destination_station_name,c.duration_minutes,c.source_type,c.checked_at
+            FROM user_job_commute_checks c JOIN user_jobs j ON j.id=c.job_id AND j.user_id=c.user_id
+            WHERE c.user_id=? AND j.deleted_at IS NULL""",(user_id,)).fetchall()
+        return {int(r['job_id']): JobCommuteCheck(**dict(r)) for r in rows}
+    finally:
+        connection.close()

@@ -722,6 +722,7 @@ def render_recommendation_candidate(
     return card_html
 
 
+@st.fragment
 def show_page() -> None:
     """求人一覧画面を表示する。"""
 

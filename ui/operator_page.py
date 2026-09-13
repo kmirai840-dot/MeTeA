@@ -2,6 +2,7 @@ import streamlit as st
 from services.operator_service import require_operator, list_users, read_user_data, export_user_data
 
 
+@st.fragment
 def render_operator_page():
     require_operator()
     st.title('運営者：利用者データ')

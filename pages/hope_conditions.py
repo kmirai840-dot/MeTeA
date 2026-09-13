@@ -221,12 +221,12 @@ def initialize_hope_conditions_state() -> None:
             ):
                 rank = item.rank or fallback_rank
                 st.session_state[
-                    f"{key_prefix}_{rank}_{item.condition_value}"
+                    f"{key_prefix}_{item.condition_value}"
                 ] = item.priority
 
                 if condition_type == "location":
                     st.session_state[
-                        f"hope_city_{rank}_{item.condition_value}"
+                        f"hope_city_{item.condition_value}"
                     ] = item.detail_value or ""
 
         age_group_item = next(
@@ -287,7 +287,7 @@ def validate_hope_conditions() -> dict[str, str]:
         errors["hope_prefectures"] = "希望都道府県を1件以上選択してください"
 
     for rank, prefecture in enumerate(prefectures, start=1):
-        priority_key = f"hope_location_priority_{rank}_{prefecture}"
+        priority_key = f"hope_location_priority_{prefecture}"
         if st.session_state.get(priority_key) not in {
             "must",
             "want",
@@ -563,7 +563,7 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
                     condition_type="industry",
                     condition_value=value,
                     priority=st.session_state.get(
-                        f"hope_industry_priority_{rank}_{value}",
+                        f"hope_industry_priority_{value}",
                         "want",
                     ),
                     rank=rank,
@@ -580,7 +580,7 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
                 condition_type="occupation",
                 condition_value=value,
                 priority=st.session_state.get(
-                    f"hope_occupation_priority_{rank}_{value}",
+                    f"hope_occupation_priority_{value}",
                     "want",
                 ),
                 rank=rank,
@@ -597,12 +597,12 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
                 condition_type="location",
                 condition_value=value,
                 priority=st.session_state.get(
-                    f"hope_location_priority_{rank}_{value}",
+                    f"hope_location_priority_{value}",
                     "want",
                 ),
                 rank=rank,
                 detail_value=st.session_state.get(
-                    f"hope_city_{rank}_{value}",
+                    f"hope_city_{value}",
                     "",
                 ),
             )
@@ -621,7 +621,7 @@ def build_hope_condition_items() -> list[HopeConditionItem]:
                 condition_type="employment_type",
                 condition_value=value,
                 priority=st.session_state.get(
-                    f"hope_employment_priority_{rank}_{value}",
+                    f"hope_employment_priority_{value}",
                     "want",
                 ),
                 rank=rank,
@@ -754,29 +754,22 @@ def render_priority_select(
 # 複数選択した項目ごとの優先度
 # --------------------------------------------------
 
-def render_selected_item_priorities(
-    selected_values: list[str],
-    key_prefix: str,
-) -> None:
-    """選択された項目ごとに優先度を表示する。"""
-
-    if not selected_values:
-        st.caption("項目を選択すると、優先度を設定できます。")
-        return
-
-    for rank, value in enumerate(selected_values, start=1):
-        columns = st.columns([3, 2])
-
-        with columns[0]:
-            st.write(f"{rank}. {value}")
-
-        with columns[1]:
-            render_priority_select(
-                "優先度",
-                key=f"{key_prefix}_{rank}_{value}",
-                default="want",
-                label_visibility="collapsed",
-            )
+def render_selected_item_priorities(selected_values, key_prefix):
+    controls = {
+        'hope_industry_priority': ('hope_industries', INDUSTRY_OPTIONS),
+        'hope_occupation_priority': ('hope_occupations', OCCUPATION_OPTIONS),
+        'hope_employment_priority': ('hope_employment_types', EMPLOYMENT_TYPE_OPTIONS),
+    }
+    control, options = controls[key_prefix]
+    for index, value in enumerate(options):
+        target = f'hope_choice_{key_prefix}_{index}'
+        st.session_state['_hope_visibility_rules'].append(dict(control=control,target=target,kind='multi',value=value))
+        with st.container(key=target):
+            columns = st.columns([3,2])
+            with columns[0]:
+                st.write(value)
+            with columns[1]:
+                render_priority_select('優先度',key=f'{key_prefix}_{value}',default='want',label_visibility='collapsed')
 
 
 # --------------------------------------------------
@@ -1330,632 +1323,641 @@ def render_hope_conditions_page() -> None:
         unsafe_allow_html=True,
     )
 
-    # --------------------------------------------------
-    # 1. 希望する仕事
-    # --------------------------------------------------
+    import re
+    for old_key in list(st.session_state):
+        new_key=re.sub(r'^(hope_(?:industry_priority|occupation_priority|location_priority|employment_priority|city))_\d+_',r'\1_',old_key)
+        if new_key != old_key and new_key not in st.session_state:
+            st.session_state[new_key]=st.session_state[old_key]
+    st.session_state['_hope_visibility_rules']=[]
+    with st.form('hope_conditions_batch',border=False,enter_to_submit=False):
+        # --------------------------------------------------
+        # 1. 希望する仕事
+        # --------------------------------------------------
 
-    st.markdown(
-        '<span class="metea-hope-expander-boundary" aria-hidden="true"></span>',
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+            '<span class="metea-hope-expander-boundary" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
 
-    with st.expander(
-        "1　希望する仕事",
-        expanded=any(
-            key in errors
-            for key in (
-                "hope_occupations",
-                "hope_industries",
-            )
-        ),
-    ):
-        st.write("希望業種と希望職種を選択してください。")
-
-        job_columns = st.columns(2)
-
-        with job_columns[0]:
-            industry_no_preference = st.checkbox(
-                "企業の業種にはこだわらない",
-                key="hope_industry_no_preference",
-            )
-
-            selected_industries = st.multiselect(
-                "企業業種（最大3件）",
-                options=INDUSTRY_OPTIONS,
-                max_selections=3,
-                key="hope_industries",
-                disabled=industry_no_preference,
-                placeholder="項目を選択（複数選択可）",
-            )
-
-            if industry_no_preference:
-                st.caption(
-                    "企業業種はAIマッチングの評価対象にしません。"
+        with st.expander(
+            "1　希望する仕事",
+            expanded=any(
+                key in errors
+                for key in (
+                    "hope_occupations",
+                    "hope_industries",
                 )
-            else:
-                render_selected_item_priorities(
-                    selected_industries,
-                    "hope_industry_priority",
-                )
-
-        with job_columns[1]:
-            selected_occupations = st.multiselect(
-                required_input_label("希望職種（最大3件）"),
-                options=OCCUPATION_OPTIONS,
-                max_selections=3,
-                key="hope_occupations",
-                placeholder="項目を選択（複数選択可）",
-            )
-            render_hope_field_error(errors, "hope_occupations")
-
-            render_selected_item_priorities(
-                selected_occupations,
-                "hope_occupation_priority",
-            )
-
-        st.text_area(
-            "その他の希望業種・希望職種（任意）",
-            max_chars=100,
-            placeholder=(
-                "選択肢にない業種や職種があれば"
-                "入力してください"
             ),
-            key="hope_other_jobs",
-        )
-
-
-    # --------------------------------------------------
-    # 2. 勤務地・通勤
-    # --------------------------------------------------
-
-    with st.expander(
-        "2　勤務地・通勤",
-        expanded=any(
-            key == "hope_prefectures"
-            or key == "hope_commute_minutes"
-            or key.startswith("hope_location_priority_")
-            for key in errors
-        ),
-    ):
-        st.write(
-            "希望勤務地や通勤時間、"
-            "転勤の可否を入力してください。"
-        )
-
-        selected_prefectures = st.multiselect(
-            required_input_label("希望都道府県（最大2件）"),
-            options=PREFECTURES,
-            max_selections=2,
-            key="hope_prefectures",
-        )
-        render_hope_field_error(errors, "hope_prefectures")
-
-        for rank, prefecture in enumerate(
-            selected_prefectures,
-            start=1,
         ):
-            with st.container(border=True):
-                st.markdown(
-                    '<span class="metea-location-card-marker" '
-                    'aria-hidden="true"></span>',
-                    unsafe_allow_html=True,
+            st.write("希望業種と希望職種を選択してください。")
+
+            job_columns = st.columns(2)
+
+            with job_columns[0]:
+                industry_no_preference = st.checkbox(
+                    "企業の業種にはこだわらない",
+                    key="hope_industry_no_preference",
                 )
-                st.markdown(f"**{rank}. {prefecture}**")
 
-                location_columns = st.columns([3, 2])
+                selected_industries = st.multiselect(
+                    "企業業種（最大3件）",
+                    options=INDUSTRY_OPTIONS,
+                    max_selections=3,
+                    key="hope_industries",
+                    placeholder="項目を選択（複数選択可）",
+                )
 
-                with location_columns[0]:
-                    st.text_input(
-                        "希望市区町村（任意・複数入力可）",
-                        placeholder=(
-                            "例）福岡市中央区、福岡市博多区"
-                        ),
-                        key=f"hope_city_{rank}_{prefecture}",
+                with st.container(key='hope_industry_priorities'):
+                    render_selected_item_priorities(selected_industries,'hope_industry_priority')
+                st.session_state['_hope_visibility_rules'].append(dict(control='hope_industry_no_preference',target='hope_industry_priorities',value=None,invert=True))
+
+
+            with job_columns[1]:
+                selected_occupations = st.multiselect(
+                    required_input_label("希望職種（最大3件）"),
+                    options=OCCUPATION_OPTIONS,
+                    max_selections=3,
+                    key="hope_occupations",
+                    placeholder="項目を選択（複数選択可）",
+                )
+                render_hope_field_error(errors, "hope_occupations")
+
+                render_selected_item_priorities(
+                    selected_occupations,
+                    "hope_occupation_priority",
+                )
+
+            st.text_area(
+                "その他の希望業種・希望職種（任意）",
+                max_chars=100,
+                placeholder=(
+                    "選択肢にない業種や職種があれば"
+                    "入力してください"
+                ),
+                key="hope_other_jobs",
+            )
+
+
+        # --------------------------------------------------
+        # 2. 勤務地・通勤
+        # --------------------------------------------------
+
+        with st.expander(
+            "2　勤務地・通勤",
+            expanded=any(
+                key == "hope_prefectures"
+                or key == "hope_commute_minutes"
+                or key.startswith("hope_location_priority_")
+                for key in errors
+            ),
+        ):
+            st.write(
+                "希望勤務地や通勤時間、"
+                "転勤の可否を入力してください。"
+            )
+
+            selected_prefectures = st.multiselect(
+                required_input_label("希望都道府県（最大2件）"),
+                options=PREFECTURES,
+                max_selections=2,
+                key="hope_prefectures",
+            )
+            render_hope_field_error(errors, "hope_prefectures")
+
+            for rank, prefecture in enumerate(PREFECTURES, start=1):
+                target=f'hope_prefecture_fields_{rank}'
+                st.session_state['_hope_visibility_rules'].append(dict(control='hope_prefectures',target=target,kind='multi',value=prefecture))
+                with st.container(border=True,key=target):
+                    st.markdown(
+                        '<span class="metea-location-card-marker" '
+                        'aria-hidden="true"></span>',
+                        unsafe_allow_html=True,
                     )
+                    st.markdown(f"**{prefecture}**")
+
+                    location_columns = st.columns([3, 2])
+
+                    with location_columns[0]:
+                        st.text_input(
+                            "希望市区町村（任意・複数入力可）",
+                            placeholder=(
+                                "例）福岡市中央区、福岡市博多区"
+                            ),
+                            key=f"hope_city_{prefecture}",
+                        )
+                        st.caption(
+                            "複数入力する場合は「、」で区切ってください。"
+                            "未入力の場合は県内全域を希望として扱います。"
+                        )
+
+                    with location_columns[1]:
+                        render_priority_select(
+                            required_input_label("勤務地の優先度"),
+                            key=(
+                                f"hope_location_priority_"
+                                f"{prefecture}"
+                            ),
+                            default="want",
+                            priority_labels=(
+                                PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                            ),
+                        )
+                        render_hope_field_error(
+                            errors,
+                            f"hope_location_priority_{prefecture}",
+                        )
+
+            commute_columns = st.columns(2)
+
+            with commute_columns[0]:
+                st.number_input(
+                    required_input_label(
+                        "片道通勤時間の上限（分）",
+                        priority_requires_value("hope_commute_priority"),
+                    ),
+                    min_value=0,
+                    max_value=240,
+                    value=0,
+                    step=10,
+                    key="hope_commute_minutes",
+                    help="0分の場合は未設定として扱います。",
+                )
+                render_hope_field_error(errors, "hope_commute_minutes")
+
+            with commute_columns[1]:
+                render_priority_select(
+                    "通勤時間の優先度",
+                    key="hope_commute_priority",
+                )
+
+            transfer_columns = st.columns(2)
+
+            with transfer_columns[0]:
+                transfer_condition = st.selectbox(
+                    "転勤の可否",
+                    options=(
+                        "こだわらない",
+                        "転勤不可",
+                        "条件次第で可",
+                        "転勤可",
+                    ),
+                    key="hope_transfer",
+                )
+
+            with transfer_columns[1]:
+                st.session_state["_hope_visibility_rules"].extend([dict(control="hope_transfer",target="hope_transfer_hint",value="こだわらない"),dict(control="hope_transfer",target="hope_transfer_fields",value="こだわらない",invert=True)])
+                with st.container(key="hope_transfer_hint"):
                     st.caption(
-                        "複数入力する場合は「、」で区切ってください。"
-                        "未入力の場合は県内全域を希望として扱います。"
+                        "転勤条件を選択すると優先度を設定できます。"
                     )
-
-                with location_columns[1]:
+                with st.container(key="hope_transfer_fields"):
                     render_priority_select(
-                        required_input_label("勤務地の優先度"),
-                        key=(
-                            f"hope_location_priority_"
-                            f"{rank}_{prefecture}"
-                        ),
+                        "転勤条件の優先度",
+                        key="hope_transfer_priority",
                         default="want",
                         priority_labels=(
                             PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
                         ),
                     )
-                    render_hope_field_error(
-                        errors,
-                        f"hope_location_priority_{rank}_{prefecture}",
+
+
+        # --------------------------------------------------
+        # 3. 年収・雇用条件
+        # --------------------------------------------------
+
+        with st.expander(
+            "3　年収・雇用条件",
+            expanded=any(
+                key in errors
+                for key in (
+                    "hope_minimum_salary",
+                    "hope_desired_salary",
+                    "hope_ideal_salary",
+                    "hope_employment_types",
+                )
+            ),
+        ):
+            st.write(
+                "希望する年収と雇用形態を"
+                "入力してください。"
+            )
+
+            salary_columns = st.columns(3)
+
+            with salary_columns[0]:
+                st.number_input(
+                    required_input_label("最低許容年収（万円）"),
+                    min_value=0,
+                    max_value=5000,
+                    value=0,
+                    step=10,
+                    key="hope_minimum_salary",
+                    help=(
+                        "この金額を下回ると難しい"
+                        "最低ラインです。"
+                    ),
+                )
+                render_hope_field_error(errors, "hope_minimum_salary")
+
+            with salary_columns[1]:
+                st.number_input(
+                    required_input_label("希望年収（万円）"),
+                    min_value=0,
+                    max_value=5000,
+                    value=0,
+                    step=10,
+                    key="hope_desired_salary",
+                )
+                render_hope_field_error(errors, "hope_desired_salary")
+
+            with salary_columns[2]:
+                st.number_input(
+                    "理想年収（万円・任意）",
+                    min_value=0,
+                    max_value=5000,
+                    value=0,
+                    step=10,
+                    key="hope_ideal_salary",
+                )
+                render_hope_field_error(errors, "hope_ideal_salary")
+
+            st.caption(
+                "最低許容年収は必須条件、"
+                "希望年収は希望条件、"
+                "理想年収は上振れ評価として扱います。"
+            )
+
+            selected_employment_types = st.multiselect(
+                required_input_label("希望する雇用形態"),
+                options=EMPLOYMENT_TYPE_OPTIONS,
+                key="hope_employment_types",
+            )
+            render_hope_field_error(errors, "hope_employment_types")
+
+            render_selected_item_priorities(
+                selected_employment_types,
+                "hope_employment_priority",
+            )
+
+
+        # --------------------------------------------------
+        # 4. 勤務時間・休日
+        # --------------------------------------------------
+
+        with st.expander(
+            "4　勤務時間・休日",
+            expanded=any(
+                key in errors
+                for key in (
+                    "hope_overtime_limit",
+                    "hope_holidays",
+                    "hope_annual_holidays",
+                )
+            ),
+        ):
+            st.write(
+                "勤務時間や休日に関する希望を"
+                "入力してください。"
+            )
+
+            overtime_columns = st.columns(2)
+
+            with overtime_columns[0]:
+                st.number_input(
+                    required_input_label(
+                        "月間残業時間の上限",
+                        priority_requires_value("hope_overtime_priority"),
+                    ),
+                    min_value=0,
+                    max_value=200,
+                    value=0,
+                    step=5,
+                    key="hope_overtime_limit",
+                    help="0時間の場合は未設定として扱います。",
+                )
+                render_hope_field_error(errors, "hope_overtime_limit")
+
+            with overtime_columns[1]:
+                render_priority_select(
+                    "残業時間の優先度",
+                    key="hope_overtime_priority",
+                )
+
+            start_time_columns = st.columns(2)
+
+            with start_time_columns[0]:
+                start_time = st.selectbox(
+                    required_input_label(
+                        "希望始業時刻",
+                        priority_requires_value("hope_start_time_priority"),
+                    ),
+                    options=(
+                        "こだわらない",
+                        "8:00以降",
+                        "9:00以降",
+                        "10:00以降",
+                        "11:00以降",
+                    ),
+                    key="hope_start_time",
+                )
+
+            with start_time_columns[1]:
+                st.session_state["_hope_visibility_rules"].extend([dict(control="hope_start_time",target="hope_start_time_hint",value="こだわらない"),dict(control="hope_start_time",target="hope_start_time_fields",value="こだわらない",invert=True)])
+                with st.container(key="hope_start_time_hint"):
+                    st.caption(
+                        "希望始業時刻を選択すると"
+                        "優先度を設定できます。"
+                    )
+                with st.container(key="hope_start_time_fields"):
+                    render_priority_select(
+                        "始業時刻の優先度",
+                        key="hope_start_time_priority",
+                        default="want",
+                        priority_labels=(
+                            PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                        ),
                     )
 
-        commute_columns = st.columns(2)
+            end_time_columns = st.columns(2)
 
-        with commute_columns[0]:
-            st.number_input(
-                required_input_label(
-                    "片道通勤時間の上限（分）",
-                    priority_requires_value("hope_commute_priority"),
-                ),
-                min_value=0,
-                max_value=240,
-                value=0,
-                step=10,
-                key="hope_commute_minutes",
-                help="0分の場合は未設定として扱います。",
+            with end_time_columns[0]:
+                end_time = st.selectbox(
+                    required_input_label(
+                        "希望終業時刻",
+                        priority_requires_value("hope_end_time_priority"),
+                    ),
+                    options=(
+                        "こだわらない",
+                        "17:00まで",
+                        "18:00まで",
+                        "19:00まで",
+                        "20:00まで",
+                    ),
+                    key="hope_end_time",
+                )
+
+            with end_time_columns[1]:
+                st.session_state["_hope_visibility_rules"].extend([dict(control="hope_end_time",target="hope_end_time_hint",value="こだわらない"),dict(control="hope_end_time",target="hope_end_time_fields",value="こだわらない",invert=True)])
+                with st.container(key="hope_end_time_hint"):
+                    st.caption(
+                        "希望終業時刻を選択すると"
+                        "優先度を設定できます。"
+                    )
+                with st.container(key="hope_end_time_fields"):
+                    render_priority_select(
+                        "終業時刻の優先度",
+                        key="hope_end_time_priority",
+                        default="want",
+                        priority_labels=(
+                            PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                        ),
+                    )
+
+            st.markdown("**勤務制度**")
+
+            time_system_conditions = (
+                ("flex_time", "フレックスタイム制"),
+                ("short_time", "時短勤務制度"),
             )
-            render_hope_field_error(errors, "hope_commute_minutes")
 
-        with commute_columns[1]:
+            render_condition_priorities(
+                time_system_conditions,
+                "hope_time_system",
+            )
+
+            shift_columns = st.columns(2)
+
+            with shift_columns[0]:
+                shift_work = st.selectbox(
+                    "シフト勤務",
+                    options=(
+                        "こだわらない",
+                        "不可",
+                        "条件次第で可",
+                        "可",
+                    ),
+                    key="hope_shift_work",
+                )
+
+                st.session_state["_hope_visibility_rules"].extend([dict(control="hope_shift_work",target="hope_shift_work_hint",value="こだわらない"),dict(control="hope_shift_work",target="hope_shift_work_fields",value="こだわらない",invert=True)])
+                with st.container(key="hope_shift_work_hint"):
+                    st.caption(
+                        "シフト勤務の条件を選択すると"
+                        "優先度を設定できます。"
+                    )
+                with st.container(key="hope_shift_work_fields"):
+                    render_priority_select(
+                        "シフト勤務の優先度",
+                        key="hope_shift_work_priority",
+                        default="want",
+                        priority_labels=(
+                            PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                        ),
+                    )
+
+            with shift_columns[1]:
+                night_work = st.selectbox(
+                    "夜勤",
+                    options=(
+                        "こだわらない",
+                        "不可",
+                        "条件次第で可",
+                        "可",
+                    ),
+                    key="hope_night_work",
+                )
+
+                st.session_state["_hope_visibility_rules"].extend([dict(control="hope_night_work",target="hope_night_work_hint",value="こだわらない"),dict(control="hope_night_work",target="hope_night_work_fields",value="こだわらない",invert=True)])
+                with st.container(key="hope_night_work_hint"):
+                    st.caption(
+                        "夜勤の条件を選択すると"
+                        "優先度を設定できます。"
+                    )
+                with st.container(key="hope_night_work_fields"):
+                    render_priority_select(
+                        "夜勤の優先度",
+                        key="hope_night_work_priority",
+                        default="want",
+                        priority_labels=(
+                            PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                        ),
+                    )
+
+            st.multiselect(
+                required_input_label(
+                    "希望する休日",
+                    priority_requires_value("hope_holiday_priority"),
+                ),
+                options=HOLIDAY_OPTIONS,
+                key="hope_holidays",
+            )
+            render_hope_field_error(errors, "hope_holidays")
+
             render_priority_select(
-                "通勤時間の優先度",
-                key="hope_commute_priority",
+                "休日条件の優先度",
+                key="hope_holiday_priority",
             )
 
-        transfer_columns = st.columns(2)
+            annual_holiday_columns = st.columns(2)
 
-        with transfer_columns[0]:
-            transfer_condition = st.selectbox(
-                "転勤の可否",
-                options=(
-                    "こだわらない",
-                    "転勤不可",
-                    "条件次第で可",
-                    "転勤可",
-                ),
-                key="hope_transfer",
-            )
-
-        with transfer_columns[1]:
-            if transfer_condition == "こだわらない":
-                st.caption(
-                    "転勤条件を選択すると優先度を設定できます。"
-                )
-            else:
-                render_priority_select(
-                    "転勤条件の優先度",
-                    key="hope_transfer_priority",
-                    default="want",
-                    priority_labels=(
-                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+            with annual_holiday_columns[0]:
+                st.number_input(
+                    required_input_label(
+                        "希望する年間休日数",
+                        priority_requires_value("hope_annual_holiday_priority"),
                     ),
+                    min_value=0,
+                    max_value=365,
+                    value=0,
+                    step=1,
+                    key="hope_annual_holidays",
+                    help="0日の場合は未設定として扱います。",
                 )
+                render_hope_field_error(errors, "hope_annual_holidays")
 
-
-    # --------------------------------------------------
-    # 3. 年収・雇用条件
-    # --------------------------------------------------
-
-    with st.expander(
-        "3　年収・雇用条件",
-        expanded=any(
-            key in errors
-            for key in (
-                "hope_minimum_salary",
-                "hope_desired_salary",
-                "hope_ideal_salary",
-                "hope_employment_types",
-            )
-        ),
-    ):
-        st.write(
-            "希望する年収と雇用形態を"
-            "入力してください。"
-        )
-
-        salary_columns = st.columns(3)
-
-        with salary_columns[0]:
-            st.number_input(
-                required_input_label("最低許容年収（万円）"),
-                min_value=0,
-                max_value=5000,
-                value=0,
-                step=10,
-                key="hope_minimum_salary",
-                help=(
-                    "この金額を下回ると難しい"
-                    "最低ラインです。"
-                ),
-            )
-            render_hope_field_error(errors, "hope_minimum_salary")
-
-        with salary_columns[1]:
-            st.number_input(
-                required_input_label("希望年収（万円）"),
-                min_value=0,
-                max_value=5000,
-                value=0,
-                step=10,
-                key="hope_desired_salary",
-            )
-            render_hope_field_error(errors, "hope_desired_salary")
-
-        with salary_columns[2]:
-            st.number_input(
-                "理想年収（万円・任意）",
-                min_value=0,
-                max_value=5000,
-                value=0,
-                step=10,
-                key="hope_ideal_salary",
-            )
-            render_hope_field_error(errors, "hope_ideal_salary")
-
-        st.caption(
-            "最低許容年収は必須条件、"
-            "希望年収は希望条件、"
-            "理想年収は上振れ評価として扱います。"
-        )
-
-        selected_employment_types = st.multiselect(
-            required_input_label("希望する雇用形態"),
-            options=EMPLOYMENT_TYPE_OPTIONS,
-            key="hope_employment_types",
-        )
-        render_hope_field_error(errors, "hope_employment_types")
-
-        render_selected_item_priorities(
-            selected_employment_types,
-            "hope_employment_priority",
-        )
-
-
-    # --------------------------------------------------
-    # 4. 勤務時間・休日
-    # --------------------------------------------------
-
-    with st.expander(
-        "4　勤務時間・休日",
-        expanded=any(
-            key in errors
-            for key in (
-                "hope_overtime_limit",
-                "hope_holidays",
-                "hope_annual_holidays",
-            )
-        ),
-    ):
-        st.write(
-            "勤務時間や休日に関する希望を"
-            "入力してください。"
-        )
-
-        overtime_columns = st.columns(2)
-
-        with overtime_columns[0]:
-            st.number_input(
-                required_input_label(
-                    "月間残業時間の上限",
-                    priority_requires_value("hope_overtime_priority"),
-                ),
-                min_value=0,
-                max_value=200,
-                value=0,
-                step=5,
-                key="hope_overtime_limit",
-                help="0時間の場合は未設定として扱います。",
-            )
-            render_hope_field_error(errors, "hope_overtime_limit")
-
-        with overtime_columns[1]:
-            render_priority_select(
-                "残業時間の優先度",
-                key="hope_overtime_priority",
-            )
-
-        start_time_columns = st.columns(2)
-
-        with start_time_columns[0]:
-            start_time = st.selectbox(
-                required_input_label(
-                    "希望始業時刻",
-                    priority_requires_value("hope_start_time_priority"),
-                ),
-                options=(
-                    "こだわらない",
-                    "8:00以降",
-                    "9:00以降",
-                    "10:00以降",
-                    "11:00以降",
-                ),
-                key="hope_start_time",
-            )
-
-        with start_time_columns[1]:
-            if start_time == "こだわらない":
-                st.caption(
-                    "希望始業時刻を選択すると"
-                    "優先度を設定できます。"
-                )
-            else:
+            with annual_holiday_columns[1]:
                 render_priority_select(
-                    "始業時刻の優先度",
-                    key="hope_start_time_priority",
-                    default="want",
-                    priority_labels=(
-                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
-                    ),
+                    "年間休日数の優先度",
+                    key="hope_annual_holiday_priority",
                 )
 
-        end_time_columns = st.columns(2)
 
-        with end_time_columns[0]:
-            end_time = st.selectbox(
-                required_input_label(
-                    "希望終業時刻",
-                    priority_requires_value("hope_end_time_priority"),
-                ),
-                options=(
-                    "こだわらない",
-                    "17:00まで",
-                    "18:00まで",
-                    "19:00まで",
-                    "20:00まで",
-                ),
-                key="hope_end_time",
+        # --------------------------------------------------
+        # 5. 働き方・職場環境
+        # --------------------------------------------------
+
+        with st.expander("5　働き方・職場環境"):
+            st.write(
+                "働き方や職場環境に関する希望を"
+                "入力してください。"
             )
 
-        with end_time_columns[1]:
-            if end_time == "こだわらない":
-                st.caption(
-                    "希望終業時刻を選択すると"
-                    "優先度を設定できます。"
-                )
-            else:
-                render_priority_select(
-                    "終業時刻の優先度",
-                    key="hope_end_time_priority",
-                    default="want",
-                    priority_labels=(
-                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
-                    ),
-                )
+            st.subheader("働き方")
 
-        st.markdown("**勤務制度**")
-
-        time_system_conditions = (
-            ("flex_time", "フレックスタイム制"),
-            ("short_time", "時短勤務制度"),
-        )
-
-        render_condition_priorities(
-            time_system_conditions,
-            "hope_time_system",
-        )
-
-        shift_columns = st.columns(2)
-
-        with shift_columns[0]:
-            shift_work = st.selectbox(
-                "シフト勤務",
-                options=(
-                    "こだわらない",
-                    "不可",
-                    "条件次第で可",
-                    "可",
-                ),
-                key="hope_shift_work",
+            render_condition_priorities(
+                WORKSTYLE_CONDITIONS,
+                "hope_workstyle",
             )
 
-            if shift_work == "こだわらない":
-                st.caption(
-                    "シフト勤務の条件を選択すると"
-                    "優先度を設定できます。"
-                )
-            else:
-                render_priority_select(
-                    "シフト勤務の優先度",
-                    key="hope_shift_work_priority",
-                    default="want",
-                    priority_labels=(
-                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
-                    ),
-                )
+            st.subheader("キャリア・組織風土")
 
-        with shift_columns[1]:
-            night_work = st.selectbox(
-                "夜勤",
-                options=(
-                    "こだわらない",
-                    "不可",
-                    "条件次第で可",
-                    "可",
-                ),
-                key="hope_night_work",
-            )
-
-            if night_work == "こだわらない":
-                st.caption(
-                    "夜勤の条件を選択すると"
-                    "優先度を設定できます。"
-                )
-            else:
-                render_priority_select(
-                    "夜勤の優先度",
-                    key="hope_night_work_priority",
-                    default="want",
-                    priority_labels=(
-                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
-                    ),
-                )
-
-        st.multiselect(
-            required_input_label(
-                "希望する休日",
-                priority_requires_value("hope_holiday_priority"),
-            ),
-            options=HOLIDAY_OPTIONS,
-            key="hope_holidays",
-        )
-        render_hope_field_error(errors, "hope_holidays")
-
-        render_priority_select(
-            "休日条件の優先度",
-            key="hope_holiday_priority",
-        )
-
-        annual_holiday_columns = st.columns(2)
-
-        with annual_holiday_columns[0]:
-            st.number_input(
-                required_input_label(
-                    "希望する年間休日数",
-                    priority_requires_value("hope_annual_holiday_priority"),
-                ),
-                min_value=0,
-                max_value=365,
-                value=0,
-                step=1,
-                key="hope_annual_holidays",
-                help="0日の場合は未設定として扱います。",
-            )
-            render_hope_field_error(errors, "hope_annual_holidays")
-
-        with annual_holiday_columns[1]:
-            render_priority_select(
-                "年間休日数の優先度",
-                key="hope_annual_holiday_priority",
-            )
-
-
-    # --------------------------------------------------
-    # 5. 働き方・職場環境
-    # --------------------------------------------------
-
-    with st.expander("5　働き方・職場環境"):
-        st.write(
-            "働き方や職場環境に関する希望を"
-            "入力してください。"
-        )
-
-        st.subheader("働き方")
-
-        render_condition_priorities(
-            WORKSTYLE_CONDITIONS,
-            "hope_workstyle",
-        )
-
-        st.subheader("キャリア・組織風土")
-
-        st.caption(
-            "避けたい条件は「希望しない」、"
-            "受け入れられない条件は「不可」を選択してください。"
-        )
-
-        render_condition_priorities(
-            CAREER_CONDITIONS,
-            "hope_career",
-            priority_labels=CAREER_PRIORITY_LABELS,
-        )
-
-        selected_age_groups = st.multiselect(
-            "希望する職場の年齢層",
-            options=AGE_GROUP_OPTIONS,
-            key="hope_age_groups",
-        )
-
-        if selected_age_groups:
-            render_priority_select(
-                "年齢層の優先度",
-                key="hope_age_group_priority",
-                default="want",
-                priority_labels=(
-                    PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
-                ),
-            )
-        else:
             st.caption(
-                "希望する年齢層を選択すると"
-                "優先度を設定できます。"
+                "避けたい条件は「希望しない」、"
+                "受け入れられない条件は「不可」を選択してください。"
             )
 
+            render_condition_priorities(
+                CAREER_CONDITIONS,
+                "hope_career",
+                priority_labels=CAREER_PRIORITY_LABELS,
+            )
 
-    # --------------------------------------------------
-    # 6. 入社条件
-    # --------------------------------------------------
+            selected_age_groups = st.multiselect(
+                "希望する職場の年齢層",
+                options=AGE_GROUP_OPTIONS,
+                key="hope_age_groups",
+            )
 
-    with st.expander("6　入社条件"):
-        st.write(
-            "入社可能日と、その他の希望・"
-            "NG条件を入力してください。"
-        )
-
-        st.date_input(
-            "入社可能日",
-            value=None,
-            min_value=date.today(),
-            key="hope_available_date",
-        )
-
-        st.text_area(
-            "その他の希望・NG条件（任意）",
-            max_chars=500,
-            placeholder=(
-                "求人を比較するときに確認したいことや、"
-                "受け入れられない条件を入力してください"
-            ),
-            key="hope_other_conditions",
-        )
-
-    st.markdown(
-        '<span class="metea-hope-expander-boundary" aria-hidden="true"></span>',
-        unsafe_allow_html=True,
-    )
-
-
-
-       # --------------------------------------------------
-    # 画面下部の操作
-    # --------------------------------------------------
-
-    st.divider()
-
-    action_columns = st.columns(3)
-
-    with action_columns[0]:
-        if st.button(
-            "← 基本情報へ戻る",
-            key="hope_conditions_back_bottom",
-            use_container_width=True,
-        ):
-            navigate_to_page("basic_info")
-
-    with action_columns[1]:
-        if st.button(
-            "一時保存",
-            key="hope_conditions_temporary_save",
-            use_container_width=True,
-        ):
-            try:
-                draft_data = collect_hope_conditions_draft()
-                save_hope_conditions_draft(draft_data)
-
-                st.toast("入力内容を一時保存しました。")
-
-            except Exception:
-                render_save_failure(
-                    "希望条件の一時保存",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
+            st.session_state['_hope_visibility_rules'].extend([dict(control='hope_age_groups',target='hope_age_priority_fields',kind='multi_any'),dict(control='hope_age_groups',target='hope_age_priority_hint',kind='multi_any',invert=True)])
+            with st.container(key='hope_age_priority_fields'):
+                render_priority_select(
+                    "年齢層の優先度",
+                    key="hope_age_group_priority",
+                    default="want",
+                    priority_labels=(
+                        PRIORITY_LABELS_WITHOUT_NO_PREFERENCE
+                    ),
+                )
+            with st.container(key='hope_age_priority_hint'):
+                st.caption(
+                    "希望する年齢層を選択すると"
+                    "優先度を設定できます。"
                 )
 
-    with action_columns[2]:
-        st.button(
-            "保存して次へ →",
-            key="hope_conditions_save",
-            use_container_width=True,
-            type="primary",
-            on_click=request_save,
-            args=("hope_conditions",),
-        )
-        render_deferred_save_failure("hope_conditions")
 
-    st.caption(
-        "一時保存した内容はSQLiteへ保存されます。"
-        "正式保存が完了すると、下書きデータは削除されます。"
-    )
+        # --------------------------------------------------
+        # 6. 入社条件
+        # --------------------------------------------------
+
+        with st.expander("6　入社条件"):
+            st.write(
+                "入社可能日と、その他の希望・"
+                "NG条件を入力してください。"
+            )
+
+            st.date_input(
+                "入社可能日",
+                value=None,
+                min_value=date.today(),
+                key="hope_available_date",
+            )
+
+            st.text_area(
+                "その他の希望・NG条件（任意）",
+                max_chars=500,
+                placeholder=(
+                    "求人を比較するときに確認したいことや、"
+                    "受け入れられない条件を入力してください"
+                ),
+                key="hope_other_conditions",
+            )
+
+        st.markdown(
+            '<span class="metea-hope-expander-boundary" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+
+
+
+           # --------------------------------------------------
+        # 画面下部の操作
+        # --------------------------------------------------
+
+        st.divider()
+
+        action_columns = st.columns(3)
+
+        with action_columns[0]:
+            if st.form_submit_button(
+                "← 基本情報へ戻る",
+                key="hope_conditions_back_bottom",
+                use_container_width=True,
+            ):
+                navigate_to_page("basic_info")
+
+        with action_columns[1]:
+            if st.form_submit_button(
+                "一時保存",
+                key="hope_conditions_temporary_save",
+                use_container_width=True,
+            ):
+                try:
+                    draft_data = collect_hope_conditions_draft()
+                    save_hope_conditions_draft(draft_data)
+
+                    st.toast("入力内容を一時保存しました。")
+
+                except Exception:
+                    render_save_failure(
+                        "希望条件の一時保存",
+                        recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「一時保存」を押してください。",
+                    )
+
+        with action_columns[2]:
+            st.form_submit_button(
+                "保存して次へ →",
+                key="hope_conditions_save",
+                use_container_width=True,
+                type="primary",
+                on_click=request_save,
+                args=("hope_conditions",),
+            )
+            render_deferred_save_failure("hope_conditions")
+
+        st.caption(
+            "一時保存した内容はSQLiteへ保存されます。"
+            "正式保存が完了すると、下書きデータは削除されます。"
+        )
+
+    from ui.job_form_visibility import install_visibility
+    install_visibility(st.session_state['_hope_visibility_rules'],key='hope_dynamic_fields')

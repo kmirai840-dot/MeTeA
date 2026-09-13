@@ -629,69 +629,70 @@ def render_job_hunting_axis_page() -> None:
                 )
                 == index
             ):
-                st.markdown(
-                     f"### {axis.priority_rank}位を編集中"
-                )
+                with st.form(f"axis_edit_batch_{index}",border=False,enter_to_submit=False):
+                    st.markdown(
+                         f"### {axis.priority_rank}位を編集中"
+                    )
 
-                edit_title_key = f"job_hunting_axis_edit_title_{index}"
-                edit_description_key = f"job_hunting_axis_edit_description_{index}"
-                st.markdown("**軸の名称** :red[*]")
-                edit_title = st.text_input(
-                    "軸の名称（必須）",
-                     value=axis.axis_title,
-                      max_chars=50,
-                      key=edit_title_key,
-                      label_visibility="collapsed",
-                )
-                render_axis_field_error(edit_title_key)
+                    edit_title_key = f"job_hunting_axis_edit_title_{index}"
+                    edit_description_key = f"job_hunting_axis_edit_description_{index}"
+                    st.markdown("**軸の名称** :red[*]")
+                    edit_title = st.text_input(
+                        "軸の名称（必須）",
+                         value=axis.axis_title,
+                          max_chars=50,
+                          key=edit_title_key,
+                          label_visibility="collapsed",
+                    )
+                    render_axis_field_error(edit_title_key)
 
-                st.markdown("**具体的な判断基準** :red[*]")
-                edit_description = st.text_area(
-                    "具体的な判断基準（必須）",
-                    value=axis.axis_description,
-                    max_chars=200,
-                    key=edit_description_key,
-                    label_visibility="collapsed",
-                )
-                render_axis_field_error(edit_description_key)
+                    st.markdown("**具体的な判断基準** :red[*]")
+                    edit_description = st.text_area(
+                        "具体的な判断基準（必須）",
+                        value=axis.axis_description,
+                        max_chars=200,
+                        key=edit_description_key,
+                        label_visibility="collapsed",
+                    )
+                    render_axis_field_error(edit_description_key)
 
-                edit_columns = st.columns(2)
+                    edit_columns = st.columns(2)
 
-                with edit_columns[0]:
-                    if st.button(
-                        "変更を保存",
-                        key=f"job_hunting_axis_edit_save_{index}",
-                        use_container_width=True,
-                    ):
-                        errors = update_axis(
-                            index,
-                            edit_title,
-                            edit_description,
-                        )
-
-                        if errors:
-                            set_axis_form_errors(
-                                errors,
-                                edit_title_key,
-                                edit_description_key,
+                    with edit_columns[0]:
+                        if st.form_submit_button(
+                            "変更を保存",
+                            key=f"job_hunting_axis_edit_save_{index}",
+                            use_container_width=True,
+                        ):
+                            errors = update_axis(
+                                index,
+                                edit_title,
+                                edit_description,
                             )
-                            rerun_current_page()
 
-                        else:
-                            clear_axis_errors()
-                            st.session_state[MESSAGE_KEY] = (
-                                "就活の軸を下書きへ反映しました。"
-                            )
-                            rerun_current_page()
+                            if errors:
+                                set_axis_form_errors(
+                                    errors,
+                                    edit_title_key,
+                                    edit_description_key,
+                                )
+                                rerun_current_page()
 
-                with edit_columns[1]:
-                    if st.button(
-                        "キャンセル",
-                        key=f"job_hunting_axis_edit_cancel_{index}",
-                        use_container_width=True,
-                    ):
-                        st.session_state[EDITING_INDEX_KEY] = None
-                        rerun_current_page()
+                            else:
+                                clear_axis_errors()
+                                st.session_state[MESSAGE_KEY] = (
+                                    "就活の軸を下書きへ反映しました。"
+                                )
+                                rerun_current_page()
+
+                    with edit_columns[1]:
+                        if st.form_submit_button(
+                            "キャンセル",
+                            key=f"job_hunting_axis_edit_cancel_{index}",
+                            use_container_width=True,
+                        ):
+                            st.session_state[EDITING_INDEX_KEY] = None
+                            rerun_current_page()
 
             else:
                 st.markdown(
@@ -847,71 +848,72 @@ def render_job_hunting_axis_page() -> None:
         ADD_FORM_VISIBLE_KEY
     ):
         with st.container(border=True):
-            st.subheader("新しい軸を追加")
+            with st.form("axis_add_batch",border=False,enter_to_submit=False):
+                st.subheader("新しい軸を追加")
 
-            new_title_key = "job_hunting_axis_new_title"
-            new_description_key = "job_hunting_axis_new_description"
-            st.markdown("**軸の名称** :red[*]")
-            axis_title = st.text_input(
-                "軸の名称（必須）",
-                max_chars=50,
-                placeholder="例）転勤がないこと",
-                key=new_title_key,
-                label_visibility="collapsed",
-            )
-            render_axis_field_error(new_title_key)
+                new_title_key = "job_hunting_axis_new_title"
+                new_description_key = "job_hunting_axis_new_description"
+                st.markdown("**軸の名称** :red[*]")
+                axis_title = st.text_input(
+                    "軸の名称（必須）",
+                    max_chars=50,
+                    placeholder="例）転勤がないこと",
+                    key=new_title_key,
+                    label_visibility="collapsed",
+                )
+                render_axis_field_error(new_title_key)
 
-            st.markdown("**具体的な判断基準** :red[*]")
-            axis_description = st.text_area(
-                "具体的な判断基準（必須）",
-                max_chars=200,
-                placeholder=(
-                    "例）福岡県内で長期的に"
-                    "働ける環境を重視する"
-                ),
-                key=new_description_key,
-                label_visibility="collapsed",
-            )
-            render_axis_field_error(new_description_key)
+                st.markdown("**具体的な判断基準** :red[*]")
+                axis_description = st.text_area(
+                    "具体的な判断基準（必須）",
+                    max_chars=200,
+                    placeholder=(
+                        "例）福岡県内で長期的に"
+                        "働ける環境を重視する"
+                    ),
+                    key=new_description_key,
+                    label_visibility="collapsed",
+                )
+                render_axis_field_error(new_description_key)
 
-            add_columns = st.columns(2)
+                add_columns = st.columns(2)
 
-            with add_columns[0]:
-                if st.button(
-                    "追加する",
-                    key="job_hunting_axis_add",
-                    use_container_width=True,
-                ):
-                    errors = add_axis(
-                        axis_title,
-                        axis_description,
-                    )
-
-                    if errors:
-                        set_axis_form_errors(
-                            errors,
-                            new_title_key,
-                            new_description_key,
+                with add_columns[0]:
+                    if st.form_submit_button(
+                        "追加する",
+                        key="job_hunting_axis_add",
+                        use_container_width=True,
+                    ):
+                        errors = add_axis(
+                            axis_title,
+                            axis_description,
                         )
-                        rerun_current_page()
 
-                    else:
-                        clear_axis_errors()
-                        st.session_state[MESSAGE_KEY] = (
-                            "就活の軸を下書きへ追加しました。"
-                        )
-                        rerun_current_page()
+                        if errors:
+                            set_axis_form_errors(
+                                errors,
+                                new_title_key,
+                                new_description_key,
+                            )
+                            rerun_current_page()
 
-            with add_columns[1]:
-                if st.button(
-                    "キャンセル",
-                    key="job_hunting_axis_add_cancel",
-                    use_container_width=True,
-                ):
-                    st.session_state[
-                        ADD_FORM_VISIBLE_KEY
-                    ] = False
-                    rerun_current_page()
+                        else:
+                            clear_axis_errors()
+                            st.session_state[MESSAGE_KEY] = (
+                                "就活の軸を下書きへ追加しました。"
+                            )
+                            rerun_current_page()
+
+                with add_columns[1]:
+                    if st.form_submit_button(
+                        "キャンセル",
+                        key="job_hunting_axis_add_cancel",
+                        use_container_width=True,
+                    ):
+                        st.session_state[
+                            ADD_FORM_VISIBLE_KEY
+                        ] = False
+                        rerun_current_page()
 
     st.divider()
 

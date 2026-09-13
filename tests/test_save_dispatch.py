@@ -23,6 +23,7 @@ class SaveDispatchTest(unittest.TestCase):
         ]
         for module,entry,button,target,save_name,mocks in cases:
             with self.subTest(page=module.__name__),ExitStack() as stack:
+                stack.enter_context(patch('ui.job_form_visibility.install_visibility'))
                 for name,value in mocks.items():stack.enter_context(patch.object(module,name,return_value=value))
                 if module is b:stack.enter_context(patch.object(b,'format_station_candidate',side_effect=lambda value:value))
                 theme=stack.enter_context(patch.object(module,'apply_self_discovery_theme'))

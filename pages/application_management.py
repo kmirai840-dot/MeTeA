@@ -2204,6 +2204,7 @@ def _report_heatmap(rows: dict, stages: tuple[str, ...], axis_name: str) -> str:
     )
 
 
+@st.fragment
 def render_application_dashboard_page() -> None:
     render_job_navigation("application_dashboard")
     _inject_css()
@@ -2382,6 +2383,7 @@ def _rerun_application_detail(*, embedded: bool) -> None:
     st.rerun()
 
 
+@st.fragment
 def render_application_detail_page(
     application_id_override: int | None = None,
     *,
@@ -2558,17 +2560,18 @@ def render_application_detail_page(
                     st.markdown("---")
                     st.markdown("**別の日程へ延期する**")
                     st.caption("実際に延期が発生した場合に使用します。元の予定は延期履歴として残ります。")
-                    new_date = st.date_input("変更後の日付", value=date.today(), key=f"unified_postpone_date_{milestone.id}")
-                    reason = st.text_input("理由（任意）", key=f"unified_milestone_reason_{milestone.id}")
-                    p1, p2 = st.columns(2)
-                    if p1.button("日程を変更", key=f"unified_postpone_{milestone.id}"):
-                        postpone_milestone(milestone, new_date.isoformat(), reason)
-                        st.session_state[phase_confirmation_key] = True
-                        _rerun_application_detail(embedded=embedded)
-                    if p2.button("中止", key=f"unified_cancel_{milestone.id}"):
-                        cancel_milestone(milestone, reason)
-                        st.session_state[phase_confirmation_key] = True
-                        _rerun_application_detail(embedded=embedded)
+                    with st.form(f"postpone_batch_{milestone.id}",border=False,enter_to_submit=False):
+                        new_date = st.date_input("変更後の日付", value=date.today(), key=f"unified_postpone_date_{milestone.id}")
+                        reason = st.text_input("理由（任意）", key=f"unified_milestone_reason_{milestone.id}")
+                        p1, p2 = st.columns(2)
+                        if p1.form_submit_button("日程を変更", key=f"unified_postpone_{milestone.id}"):
+                            postpone_milestone(milestone, new_date.isoformat(), reason)
+                            st.session_state[phase_confirmation_key] = True
+                            _rerun_application_detail(embedded=embedded)
+                        if p2.form_submit_button("中止", key=f"unified_cancel_{milestone.id}"):
+                            cancel_milestone(milestone, reason)
+                            st.session_state[phase_confirmation_key] = True
+                            _rerun_application_detail(embedded=embedded)
                     st.markdown("---")
                     st.caption("誤って登録した予定だけを削除してください。削除した予定は元に戻せません。")
                     confirm = st.checkbox("誤登録のため完全に削除する", key=f"unified_delete_confirm_{milestone.id}")
@@ -2613,86 +2616,93 @@ def render_application_detail_page(
         expanded=show_result_guidance,
     ):
         st.caption("結果と次回選考を登録すると、次の予定と現在フェーズへ反映されます。")
-        r1, r2, r3 = st.columns(3)
-        stage_index = SELECTION_STAGES.index(app.selection_stage) if app.selection_stage in SELECTION_STAGES else 0
-        stage = r1.selectbox("対象選考", SELECTION_STAGES, index=stage_index)
-        result_index = RESULT_OPTIONS.index(app.selection_result) if app.selection_result in RESULT_OPTIONS else 0
-        result = r2.selectbox("結果", RESULT_OPTIONS, index=result_index)
-        next_stage = r3.selectbox("次回選考（通過時）", ("未定",) + SELECTION_STAGES)
-        next_date_value = ""
-        next_start_value = next_end_value = None
-        if result == "通過" and next_stage != "未定":
-            date_decided = st.checkbox("次回選考の日程も決まっている", key=f"next_date_decided_{app.id}")
-            if date_decided:
-                nd1, nd2, nd3 = st.columns(3)
-                next_date_value = nd1.date_input("次回選考日", value=date.today(), key=f"next_selection_date_{app.id}").isoformat()
-                next_start_value = nd2.time_input("開始時刻", value=None, key=f"next_selection_start_{app.id}")
-                next_end_value = nd3.time_input("終了時刻（任意）", value=None, key=f"next_selection_end_{app.id}")
-        st.caption(f"画面上では「{stage}{result}」として扱います。現在フェーズと次回選考の予定は登録内容から自動更新されます。")
-        closes_application = result in CLOSING_SELECTION_RESULTS
-        if closes_application:
-            st.warning(
-                "この結果を登録すると、この企業の選考管理をクローズします。"
-                "登録済みの結果と活動履歴は保持されます。",
-                icon="⚠️",
-            )
-        submit_result_label = (
-            "結果を登録してクローズ"
-            if closes_application
-            else "結果を登録"
-        )
-        if st.button(
-            submit_result_label,
-            type="primary",
-            use_container_width=True,
-        ):
-            try:
-                register_selection_result(
-                    app.id, stage, result,
-                    "" if next_stage == "未定" else next_stage,
-                    next_date_value,
-                    next_start_value.strftime("%H:%M") if next_start_value else "",
-                    next_end_value.strftime("%H:%M") if next_end_value else "",
+        from ui.job_form_visibility import install_visibility
+        install_visibility([
+            dict(control=f'selection_result_{app.id}',target=f'selection_next_fields_{app.id}',value='通過',andControl=f'selection_next_stage_{app.id}',notValue='未定'),
+            dict(control=f'next_date_decided_{app.id}',target=f'selection_date_fields_{app.id}',value=None),
+            dict(control=f'selection_result_{app.id}',target=f'selection_close_notice_{app.id}',values=list(CLOSING_SELECTION_RESULTS)),
+        ],key=f'selection_result_visibility_{app.id}')
+        with st.form(f'selection_result_batch_{app.id}',border=False,enter_to_submit=False):
+            r1, r2, r3 = st.columns(3)
+            stage_index = SELECTION_STAGES.index(app.selection_stage) if app.selection_stage in SELECTION_STAGES else 0
+            stage = r1.selectbox("対象選考", SELECTION_STAGES, index=stage_index,key=f"selection_stage_{app.id}")
+            result_index = RESULT_OPTIONS.index(app.selection_result) if app.selection_result in RESULT_OPTIONS else 0
+            result = r2.selectbox("結果", RESULT_OPTIONS, index=result_index,key=f"selection_result_{app.id}")
+            next_stage = r3.selectbox("次回選考（通過時）", ("未定",) + SELECTION_STAGES,key=f"selection_next_stage_{app.id}")
+            next_date_value = ""
+            next_start_value = next_end_value = None
+            with st.container(key=f"selection_next_fields_{app.id}"):
+                date_decided = st.checkbox("次回選考の日程も決まっている", key=f"next_date_decided_{app.id}")
+                with st.container(key=f"selection_date_fields_{app.id}"):
+                    nd1, nd2, nd3 = st.columns(3)
+                    next_date_value = nd1.date_input("次回選考日", value=date.today(), key=f"next_selection_date_{app.id}").isoformat()
+                    next_start_value = nd2.time_input("開始時刻", value=None, key=f"next_selection_start_{app.id}")
+                    next_end_value = nd3.time_input("終了時刻（任意）", value=None, key=f"next_selection_end_{app.id}")
+            if not (result == "通過" and next_stage != "未定" and date_decided):
+                next_date_value = ""
+                next_start_value = next_end_value = None
+            st.caption("現在フェーズと次回選考の予定は登録内容から自動更新されます。")
+            closes_application = result in CLOSING_SELECTION_RESULTS
+            with st.container(key=f"selection_close_notice_{app.id}"):
+                st.warning(
+                    "この結果を登録すると、この企業の選考管理をクローズします。"
+                    "登録済みの結果と活動履歴は保持されます。",
+                    icon="⚠️",
                 )
-            except ApplicationManagementError as exc:
-                st.error(str(exc))
-            except Exception:
-                render_save_failure(
-                    "選考結果",
-                    recovery="入力内容は画面に残っています。時間をおいて、もう一度「結果を登録」を押してください。",
-                )
-            else:
-                updated_detail = load_application_detail(app.id)
-                updated_application = (
-                    updated_detail["application"]
-                    if updated_detail
-                    else None
-                )
-                updated_phase = (
-                    updated_application.current_phase
-                    if updated_application
-                    else "更新後のフェーズ"
-                )
-                st.session_state[result_notice_key] = (
-                    f"{stage}の結果「{result}」を登録しました。"
-                    f"現在フェーズを「{updated_phase}」へ更新しました。"
-                )
-                st.session_state[phase_confirmation_key] = True
-                _rerun_application_detail(embedded=embedded)
+            submit_result_label = "結果を登録"
+            if st.form_submit_button(
+                submit_result_label,
+                type="primary",
+                use_container_width=True,
+            ):
+                try:
+                    register_selection_result(
+                        app.id, stage, result,
+                        "" if next_stage == "未定" else next_stage,
+                        next_date_value,
+                        next_start_value.strftime("%H:%M") if next_start_value else "",
+                        next_end_value.strftime("%H:%M") if next_end_value else "",
+                    )
+                except ApplicationManagementError as exc:
+                    st.error(str(exc))
+                except Exception:
+                    render_save_failure(
+                        "選考結果",
+                        recovery="入力内容は画面に残っています。時間をおいて、もう一度「結果を登録」を押してください。",
+                    )
+                else:
+                    updated_detail = load_application_detail(app.id)
+                    updated_application = (
+                        updated_detail["application"]
+                        if updated_detail
+                        else None
+                    )
+                    updated_phase = (
+                        updated_application.current_phase
+                        if updated_application
+                        else "更新後のフェーズ"
+                    )
+                    st.session_state[result_notice_key] = (
+                        f"{stage}の結果「{result}」を登録しました。"
+                        f"現在フェーズを「{updated_phase}」へ更新しました。"
+                    )
+                    st.session_state[phase_confirmation_key] = True
+                    _rerun_application_detail(embedded=embedded)
 
     if app.status != "closed":
         with st.expander("＋ 次の予定を登録する", expanded=not upcoming_milestones):
-            a, b = st.columns([1, 2])
-            kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
-            title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
-            d1, d2, d3 = st.columns(3)
-            scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
-            start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
-            end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
-            if st.button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
-                add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
-                st.session_state[phase_confirmation_key] = True
-                _rerun_application_detail(embedded=embedded)
+            with st.form(f"next_schedule_batch_{app.id}",border=False,enter_to_submit=False):
+                a, b = st.columns([1, 2])
+                kind = a.selectbox("予定の種類", MILESTONE_TYPES, key=f"unified_milestone_kind_{app.id}")
+                title = b.text_input("予定名", placeholder="例：一次面接", key=f"unified_milestone_title_{app.id}")
+                d1, d2, d3 = st.columns(3)
+                scheduled_date = d1.date_input("実施日・期限", value=date.today(), key=f"unified_milestone_date_{app.id}")
+                start_at = d2.time_input("開始時刻（任意）", value=None, key=f"unified_milestone_start_{app.id}")
+                end_at = d3.time_input("終了時刻（任意）", value=None, key=f"unified_milestone_end_{app.id}")
+                if st.form_submit_button("予定を登録", type="primary", key=f"unified_milestone_add_{app.id}"):
+                    add_milestone_data(ApplicationMilestone(application_id=app.id, milestone_type=kind, title=title.strip() or kind, scheduled_date=scheduled_date.isoformat(), start_time=start_at.strftime("%H:%M") if start_at else "", end_time=end_at.strftime("%H:%M") if end_at else ""))
+                    st.session_state[phase_confirmation_key] = True
+                    _rerun_application_detail(embedded=embedded)
 
     if not st.session_state.get(phase_confirmation_key, False):
         if st.button(
@@ -2712,14 +2722,15 @@ def render_application_detail_page(
                 unsafe_allow_html=True,
             )
             with correction_col.expander("実際と異なる場合は修正"):
-                phase = st.selectbox(
-                    "修正後の現在地", PHASE_OPTIONS,
-                    index=PHASE_OPTIONS.index(app.current_phase) if app.current_phase in PHASE_OPTIONS else 0,
-                )
-                if st.button("現在地を修正", use_container_width=True):
-                    app.current_phase = phase
-                    update_application_data(app)
-                    _rerun_application_detail(embedded=embedded)
+                with st.form(f"phase_correction_batch_{app.id}",border=False,enter_to_submit=False):
+                    phase = st.selectbox(
+                        "修正後の現在地", PHASE_OPTIONS,
+                        index=PHASE_OPTIONS.index(app.current_phase) if app.current_phase in PHASE_OPTIONS else 0,
+                    )
+                    if st.form_submit_button("現在地を修正", use_container_width=True):
+                        app.current_phase = phase
+                        update_application_data(app)
+                        _rerun_application_detail(embedded=embedded)
 
 
 @st.dialog(
@@ -2755,6 +2766,7 @@ def _render_application_detail_dialog(application_id: int) -> None:
     )
 
 
+@st.fragment
 def render_selection_preparation_page() -> None:
     render_job_navigation("selection_preparation")
     _inject_css()
@@ -2875,35 +2887,36 @@ def render_selection_preparation_page() -> None:
                     pending_content_key = f"prep_pending_content_{active_tab}_{item.id}"
                     if pending_content_key in st.session_state:
                         st.session_state[content_key] = st.session_state.pop(pending_content_key)
-                    content = st.text_area(
-                        "整理した内容",
-                        value=item.content,
-                        key=content_key,
-                        height=230,
-                        placeholder="考えたことや確認したい内容を、自分の言葉で直接入力します。",
-                    )
-                    done = st.checkbox(
-                        "準備完了",
-                        value=item.is_completed,
-                        key=f"prep_done_{active_tab}_{item.id}",
-                    )
-                    st.markdown(
-                        f'<div class="prep-theme-updated">最終更新：{escape(updated)}</div>',
-                        unsafe_allow_html=True,
-                    )
-                    if st.button(
-                        "保存",
-                        key=f"prep_save_{active_tab}_{item.id}",
-                        type="primary",
-                        use_container_width=True,
-                    ):
-                        item.content, item.is_completed = content, done
-                        if active_tab == "common":
-                            save_global_preparation_template(item)
-                        else:
-                            save_preparation_item(item)
-                        st.toast("準備内容を保存しました。")
-                        st.rerun()
+                    with st.form(f"prep_notes_batch_{active_tab}_{item.id}",border=False,enter_to_submit=False):
+                        content = st.text_area(
+                            "整理した内容",
+                            value=item.content,
+                            key=content_key,
+                            height=230,
+                            placeholder="考えたことや確認したい内容を、自分の言葉で直接入力します。",
+                        )
+                        done = st.checkbox(
+                            "準備完了",
+                            value=item.is_completed,
+                            key=f"prep_done_{active_tab}_{item.id}",
+                        )
+                        st.markdown(
+                            f'<div class="prep-theme-updated">最終更新：{escape(updated)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if st.form_submit_button(
+                            "保存",
+                            key=f"prep_save_{active_tab}_{item.id}",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            item.content, item.is_completed = content, done
+                            if active_tab == "common":
+                                save_global_preparation_template(item)
+                            else:
+                                save_preparation_item(item)
+                            st.toast("準備内容を保存しました。")
+                            st.rerun()
                     if item.is_custom:
                         delete_confirmed = st.checkbox(
                             "この追加テーマを削除する",
@@ -2965,32 +2978,33 @@ def render_selection_preparation_page() -> None:
                     except Exception:
                         st.error("AI材料の取得処理でエラーが発生しました。画面を再読み込みして、もう一度お試しください。")
                 if result_key in st.session_state:
-                    generated_text = st.text_area(
-                        "AIが提示した材料",
-                        value=st.session_state[result_key],
-                        height=260,
-                        key=f"prep_ai_text_v7_{app.id}_{active_tab}_{selected_item.id}",
-                    )
-                    st.caption("AIの内容には誤りが含まれる場合があります。事実と異なる箇所を修正してから追加してください。")
-                    if st.button(
-                        "このテーマの準備メモに追加",
-                        type="primary",
-                        key=f"prep_ai_apply_v7_{app.id}_{active_tab}_{selected_item.id}",
-                        use_container_width=True,
-                    ):
-                        selected_item.content = "\n\n".join(
-                            row for row in (selected_item.content.strip(), generated_text.strip()) if row
+                    with st.form(f"prep_ai_edit_batch_{active_tab}_{selected_item.id}",border=False,enter_to_submit=False):
+                        generated_text = st.text_area(
+                            "AIが提示した材料",
+                            value=st.session_state[result_key],
+                            height=260,
+                            key=f"prep_ai_text_v7_{app.id}_{active_tab}_{selected_item.id}",
                         )
-                        if active_tab == "common":
-                            save_global_preparation_template(selected_item)
-                        else:
-                            save_preparation_item(selected_item)
-                        st.session_state[
-                            f"prep_pending_content_{active_tab}_{selected_item.id}"
-                        ] = selected_item.content
-                        st.session_state.pop(result_key, None)
-                        st.toast("AIの材料を準備メモへ追加しました。")
-                        st.rerun()
+                        st.caption("AIの内容には誤りが含まれる場合があります。事実と異なる箇所を修正してから追加してください。")
+                        if st.form_submit_button(
+                            "このテーマの準備メモに追加",
+                            type="primary",
+                            key=f"prep_ai_apply_v7_{app.id}_{active_tab}_{selected_item.id}",
+                            use_container_width=True,
+                        ):
+                            selected_item.content = "\n\n".join(
+                                row for row in (selected_item.content.strip(), generated_text.strip()) if row
+                            )
+                            if active_tab == "common":
+                                save_global_preparation_template(selected_item)
+                            else:
+                                save_preparation_item(selected_item)
+                            st.session_state[
+                                f"prep_pending_content_{active_tab}_{selected_item.id}"
+                            ] = selected_item.content
+                            st.session_state.pop(result_key, None)
+                            st.toast("AIの材料を準備メモへ追加しました。")
+                            st.rerun()
             else:
                 st.info("材料を取得するテーマがありません。先にテーマを追加してください。")
     custom_form_key = f"custom_theme_form_open_{app.id}_{active_tab}"
@@ -2998,32 +3012,35 @@ def render_selection_preparation_page() -> None:
         with st.container(border=True, key=f"custom_theme_form_{app.id}_{active_tab}"):
             st.markdown("### 自由テーマを追加")
             st.caption(f"「{scope_labels[active_tab]}」に新しい準備テーマを追加します。")
-            custom_title = st.text_input(
-                "テーマ名",
-                key=f"custom_theme_title_{app.id}_{active_tab}",
-                placeholder="例：面接で確認したいこと",
-            )
-            add_col, cancel_col = st.columns(2)
-            if add_col.button(
-                "このテーマを追加",
-                key=f"add_custom_theme_{app.id}_{active_tab}",
-                type="primary",
-                disabled=not custom_title.strip(),
-                use_container_width=True,
-            ):
-                add_custom_preparation(
-                    app.id,
-                    selection_type,
-                    custom_title,
-                    scope=active_tab,
+            with st.form(f"prep_custom_batch_{app.id}_{active_tab}",border=False,enter_to_submit=False):
+                custom_title = st.text_input(
+                    "テーマ名",
+                    key=f"custom_theme_title_{app.id}_{active_tab}",
+                    placeholder="例：面接で確認したいこと",
                 )
-                st.session_state[custom_form_key] = False
-                st.toast("準備テーマを追加しました。")
-                st.rerun()
-            if cancel_col.button(
-                "キャンセル",
-                key=f"cancel_custom_theme_{app.id}_{active_tab}",
-                use_container_width=True,
-            ):
-                st.session_state[custom_form_key] = False
-                st.rerun()
+                add_col, cancel_col = st.columns(2)
+                if add_col.form_submit_button(
+                    "このテーマを追加",
+                    key=f"add_custom_theme_{app.id}_{active_tab}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    if not custom_title.strip():
+                        st.error("テーマ名を入力してください。")
+                        st.stop()
+                    add_custom_preparation(
+                        app.id,
+                        selection_type,
+                        custom_title,
+                        scope=active_tab,
+                    )
+                    st.session_state[custom_form_key] = False
+                    st.toast("準備テーマを追加しました。")
+                    st.rerun()
+                if cancel_col.form_submit_button(
+                    "キャンセル",
+                    key=f"cancel_custom_theme_{app.id}_{active_tab}",
+                    use_container_width=True,
+                ):
+                    st.session_state[custom_form_key] = False
+                    st.rerun()

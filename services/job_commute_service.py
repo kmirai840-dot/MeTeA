@@ -152,6 +152,10 @@ def load_current_job_commute(
         job_id=job_id,
     )
 
+    return validate_saved_commute_context(commute_check,current_origin_station_place_id,current_destination_station_name,job)
+
+
+def validate_saved_commute_context(commute_check,current_origin_station_place_id,current_destination_station_name,job=None):
     if commute_check is None:
         return None
 

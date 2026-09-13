@@ -644,6 +644,7 @@ def render_evaluation_point_card(
 
 
 
+@st.fragment
 def render_commute_confirmation(
     job_id: int,
     job,
@@ -651,6 +652,9 @@ def render_commute_confirmation(
 ) -> None:
     """必要な場合だけ通勤時間の確認欄を表示する。"""
 
+    if st.session_state.pop(f"commute_notify_{job_id}", False):
+        from ui.job_evaluation_area import notify_evaluation_saved
+        notify_evaluation_saved(job_id)
     basic_info = snapshot["basic"] if snapshot is not None else load_basic_info()
 
     save_message_key = (
@@ -718,11 +722,13 @@ def render_commute_confirmation(
                 "勤務地の最寄駅が未登録でも、求人票の勤務地の住所から経路を確認できます。"
                 "会社の本社所在地ではなく、実際に働く場所の住所を入力してください。"
             )
-            destination_station_name = st.text_input(
-                "実際の勤務地の住所（建物名・番地まで）",
-                value=saved_commute.destination_station_name if saved_commute else "",
-                key=f"commute_address_{job_id}",
-            ).strip()
+            with st.form(f"commute_address_form_{job_id}",border=False,enter_to_submit=False):
+                destination_station_name = st.text_input(
+                    "実際の勤務地の住所（建物名・番地まで）",
+                    value=saved_commute.destination_station_name if saved_commute else "",
+                    key=f"commute_address_{job_id}",
+                ).strip()
+                st.form_submit_button("この住所で経路を確認する")
             if saved_commute and destination_station_name != saved_commute.destination_station_name:
                 saved_commute = None
             if not destination_station_name:
@@ -837,41 +843,20 @@ def render_commute_confirmation(
                 st.error(str(error))
 
             else:
-                commute_changed = (
-                    saved_commute is None
-                    or saved_commute.duration_minutes
-                    != saved_commute_result.duration_minutes
-                )
+                if snapshot is not None:
+                    snapshot["commute"] = saved_commute_result
+                evaluations = load_job_match_evaluations()
+                evaluation = evaluations.get(job_id)
+                if evaluation and evaluation.evaluation_result_json:
+                    save_message = "通勤時間を保存し、確認済みの時間を評価に反映しました。"
+                else:
+                    enqueue_job_evaluation(job_id=job_id)
+                    save_message = "通勤時間を保存しました。AIがマッチ度を確認しています。"
+                st.session_state[save_message_key] = save_message
+                st.session_state[f"commute_notify_{job_id}"] = True
+                from ui.page_execution import rerun_current_page
+                rerun_current_page()
 
-                if not commute_changed:
-                    st.session_state[
-                        save_message_key
-                    ] = (
-                        "通勤時間を保存しました。"
-                        "内容に変更がないため、"
-                        "AI評価は更新していません。"
-                    )
-
-                    st.rerun()
-
-                invalidate_current_user_job_evaluation(
-                    job_id=job_id,
-                    reason=(
-                        "電車移動時間が変更されました。"
-                    ),
-                )
-
-                enqueue_job_evaluation(job_id=job_id)
-                save_message = (
-                    "通勤時間を保存しました。AIがマッチ度を確認しています。"
-                    "ほかの操作を続けられます。"
-                )
-
-                st.session_state[
-                    save_message_key
-                ] = save_message
-
-                st.rerun()
 
 
 def render_section_heading(

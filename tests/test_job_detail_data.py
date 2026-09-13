@@ -41,6 +41,7 @@ class DetailDataTest(unittest.TestCase):
         snapshot = dict(job=SimpleNamespace(company_name='test', job_title='title'), evaluations={})
         with ExitStack() as stack:
             stack.enter_context(patch.object(data, 'load_job_detail_data', return_value=snapshot))
+            stack.enter_context(patch('ui.job_evaluation_area._poll'))
             renders = {}
             for name in ('render_ai_matching_result','render_matching_detail','render_application_decision'):
                 renders[name] = stack.enter_context(patch.object(page, name))

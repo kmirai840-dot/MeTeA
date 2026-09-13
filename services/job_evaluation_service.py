@@ -7,6 +7,7 @@ from database.repositories.job_evaluation_repository import (
     save_job_match_evaluation,
 )
 from dataclasses import replace
+from database.operation import database_operation
 from services.job_evaluation_display_service import normalize_matching_points
 
 from models import (
@@ -49,12 +50,15 @@ def is_job_match_evaluation_ready(
 # ========================================
 # AIマッチング評価
 # ========================================
+@database_operation
 def load_job_match_evaluations(
 ) -> dict[int, JobMatchEvaluation]:
     """現在の利用者に紐づくAI評価を取得する。"""
 
     user_id = get_current_user_id()
     evaluations = get_job_match_evaluations(user_id)
+    from services.job_numeric_evaluation_service import refresh_numeric_evaluations
+    evaluations = refresh_numeric_evaluations(evaluations)
     version_mismatch_found = False
     for evaluation in evaluations.values():
         if (

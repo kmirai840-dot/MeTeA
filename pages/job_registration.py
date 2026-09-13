@@ -351,8 +351,6 @@ def comma_number_input(label: str, key: str, placeholder: str = "") -> int | Non
         label,
         key=key,
         placeholder=placeholder,
-        on_change=_format_comma_input,
-        args=(key,),
     )
     digits = str(value or "").replace(",", "").strip()
     return int(digits) if digits.isdigit() else None
@@ -1570,7 +1568,7 @@ def render_pdf_registration() -> None:
 def render_url_registration() -> None:
     """URL入力欄を表示する。"""
 
-    with st.container(border=True):
+    with st.form("render_url_registration_batch",border=True,enter_to_submit=False):
 
         st.markdown(
             """
@@ -1596,7 +1594,7 @@ def render_url_registration() -> None:
             key="job_registration_url",
         )
 
-        if st.button(
+        if st.form_submit_button(
             "求人URLから情報を取得する",
             key="job_registration_url_button",
             type="primary",
@@ -2042,7 +2040,7 @@ def apply_new_extracted_job_data(
 def render_text_registration() -> None:
     """求人票本文入力欄を表示する。"""
 
-    with st.container(border=True):
+    with st.form("render_text_registration_batch",border=True,enter_to_submit=False):
 
         st.markdown(
             """
@@ -2066,7 +2064,7 @@ def render_text_registration() -> None:
             key="job_registration_text",
         )
 
-        if st.button(
+        if st.form_submit_button(
             "求人票から情報を抽出する",
             key="job_registration_text_button",
             type="primary",
@@ -3188,1227 +3186,1211 @@ def render_job_form() -> None:
                 height=0,
             )
 
-    with st.container(border=True):
+    from ui.job_form_visibility import install_job_form_visibility
+    install_job_form_visibility()
+    with st.form("job_registration_fields", border=False, enter_to_submit=False):
+        with st.container(border=True):
 
-        st.markdown("### 求人基本情報")
+            st.markdown("### 求人基本情報")
 
-        with st.container():
-            company_name = st.text_input(
-                "会社名 :red[*]",
-                key="job_form_company_name",
-                on_change=clear_job_form_error,
-                args=("company_name",),
-            )
-            render_required_field_error("company_name")
-
-        job_title = st.text_input(
-            "求人名",
-            key="job_form_job_title",
-        )
-
-        st.markdown(
-            '<div class="job-source-required-note">'
-            '<strong>紹介経路を入力してください</strong>'
-            '紹介経路は求人票から自動判定できないため、保存前に必ず入力してください。'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        source_col1, source_col2 = st.columns(2)
-        with source_col1:
             with st.container():
-                source_type = st.selectbox(
-                    "紹介経路の種別 :red[*]",
-                    SOURCE_TYPES,
-                    key="job_form_source_type",
-                    on_change=clear_job_form_error,
-                    args=("source_type",),
+                company_name = st.text_input(
+                    "会社名 :red[*]",
+                    key="job_form_company_name",
                 )
-                render_required_field_error("source_type")
+                render_required_field_error("company_name")
 
-        with source_col2:
-            with st.container():
-                source_name = st.text_input(
-                    "紹介経路の具体名 :red[*]",
-                    placeholder=(
-                        "例：リクルートエージェント、"
-                        "Indeed、企業採用ページ"
+            job_title = st.text_input(
+                "求人名",
+                key="job_form_job_title",
+            )
+
+            st.markdown(
+                '<div class="job-source-required-note">'
+                '<strong>紹介経路を入力してください</strong>'
+                '紹介経路は求人票から自動判定できないため、保存前に必ず入力してください。'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            source_col1, source_col2 = st.columns(2)
+            with source_col1:
+                with st.container():
+                    source_type = st.selectbox(
+                        "紹介経路の種別 :red[*]",
+                        SOURCE_TYPES,
+                        key="job_form_source_type",
+                    )
+                    render_required_field_error("source_type")
+
+            with source_col2:
+                with st.container():
+                    source_name = st.text_input(
+                        "紹介経路の具体名 :red[*]",
+                        placeholder=(
+                            "例：リクルートエージェント、"
+                            "Indeed、企業採用ページ"
+                        ),
+                        key="job_form_source_name",
+                    )
+                    render_required_field_error("source_name")
+
+            job_number = st.text_input(
+                "求人番号",
+                key="job_form_job_number",
+            )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                publication_start_date = st.date_input(
+                    "掲載開始日",
+                    value=None,
+                    format="YYYY/MM/DD",
+                    key="job_form_publication_start",
+                )
+
+            with col2:
+                publication_end_date = st.date_input(
+                    "掲載終了日",
+                    value=None,
+                    format="YYYY/MM/DD",
+                    key="job_form_publication_end",
+                )
+
+            industry = st.text_input(
+                "業種",
+                key="job_form_industry",
+            )
+
+            business_description = st.text_area(
+                "事業内容",
+                key="job_form_business_description",
+            )
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+                has_employee_count = st.checkbox(
+                    "従業員数の記載あり",
+                    key="job_form_has_employee_count",
+                )
+
+                with st.container(key="job_conditional_has_employee_count"):
+                    employee_count_col1, employee_count_col2 = (
+                        st.columns(2)
+                    )
+
+                    with employee_count_col1:
+                        employee_count_min = st.number_input(
+                            "従業員数（下限）",
+                            min_value=1,
+                            step=1,
+                            value=None,
+                            placeholder="例：51",
+                            key="job_form_employee_count_min",
+                        )
+
+                    with employee_count_col2:
+                        employee_count_max = st.number_input(
+                            "従業員数（上限）",
+                            min_value=1,
+                            step=1,
+                            value=None,
+                            placeholder="例：100",
+                            key="job_form_employee_count_max",
+                        )
+
+                    st.caption(
+                        "単位：名。単一の人数が記載されている場合は、"
+                        "下限と上限へ同じ人数を入力します。"
+                    )
+                if not (has_employee_count):
+                    employee_count_min = None
+                    employee_count_max = None
+
+                established_date = st.text_input(
+                    "設立",
+                    key="job_form_established_date",
+                )
+
+            with col4:
+                capital = st.text_input(
+                    "資本金",
+                    key="job_form_capital",
+                )
+
+                listing_status = st.selectbox(
+                    "上場区分",
+                    options_with_current(
+                        LISTING_STATUSES,
+                        st.session_state.get(
+                            "job_form_listing_status",
+                            "",
+                        ),
                     ),
-                    key="job_form_source_name",
-                    on_change=clear_job_form_error,
-                    args=("source_name",),
-                )
-                render_required_field_error("source_name")
-
-        job_number = st.text_input(
-            "求人番号",
-            key="job_form_job_number",
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            publication_start_date = st.date_input(
-                "掲載開始日",
-                value=None,
-                format="YYYY/MM/DD",
-                key="job_form_publication_start",
-            )
-
-        with col2:
-            publication_end_date = st.date_input(
-                "掲載終了日",
-                value=None,
-                format="YYYY/MM/DD",
-                key="job_form_publication_end",
-            )
-
-        industry = st.text_input(
-            "業種",
-            key="job_form_industry",
-        )
-
-        business_description = st.text_area(
-            "事業内容",
-            key="job_form_business_description",
-        )
-
-        col3, col4 = st.columns(2)
-
-        with col3:
-            has_employee_count = st.checkbox(
-                "従業員数の記載あり",
-                key="job_form_has_employee_count",
-            )
-
-            if has_employee_count:
-                employee_count_col1, employee_count_col2 = (
-                    st.columns(2)
+                    key="job_form_listing_status",
                 )
 
-                with employee_count_col1:
-                    employee_count_min = st.number_input(
-                        "従業員数（下限）",
-                        min_value=1,
-                        step=1,
-                        value=None,
-                        placeholder="例：51",
-                        key="job_form_employee_count_min",
+        with st.container(border=True):
+
+            st.markdown("### 募集内容")
+
+            col5, col6 = st.columns(2)
+
+            with col5:
+                with st.container():
+                    occupation = st.text_input(
+                        "募集ポジション（職種） :red[*]",
+                        key="job_form_occupation",
                     )
+                    render_required_field_error("occupation")
 
-                with employee_count_col2:
-                    employee_count_max = st.number_input(
-                        "従業員数（上限）",
-                        min_value=1,
-                        step=1,
-                        value=None,
-                        placeholder="例：100",
-                        key="job_form_employee_count_max",
-                    )
-
-                st.caption(
-                    "単位：名。単一の人数が記載されている場合は、"
-                    "下限と上限へ同じ人数を入力します。"
+                department = st.text_input(
+                    "配属部署",
+                    key="job_form_department",
                 )
 
-            else:
-                employee_count_min = None
-                employee_count_max = None
-
-            established_date = st.text_input(
-                "設立",
-                key="job_form_established_date",
-            )
-
-        with col4:
-            capital = st.text_input(
-                "資本金",
-                key="job_form_capital",
-            )
-
-            listing_status = st.selectbox(
-                "上場区分",
-                options_with_current(
-                    LISTING_STATUSES,
-                    st.session_state.get(
-                        "job_form_listing_status",
-                        "",
-                    ),
-                ),
-                key="job_form_listing_status",
-            )
-
-    with st.container(border=True):
-
-        st.markdown("### 募集内容")
-
-        col5, col6 = st.columns(2)
-
-        with col5:
-            with st.container():
-                occupation = st.text_input(
-                    "募集ポジション（職種） :red[*]",
-                    key="job_form_occupation",
-                    on_change=clear_job_form_error,
-                    args=("occupation",),
-                )
-                render_required_field_error("occupation")
-
-            department = st.text_input(
-                "配属部署",
-                key="job_form_department",
-            )
-
-        with col6:
-            has_planned_hires = st.checkbox(
-                "採用予定人数の記載あり",
-                value=(
-                    st.session_state.get(
-                        "job_form_planned_hires"
-                    )
-                    is not None
-                ),
-                key="job_form_has_planned_hires",
-            )
-
-            if has_planned_hires:
-                planned_hires = st.number_input(
-                    "採用予定人数",
-                    min_value=1,
-                    step=1,
+            with col6:
+                has_planned_hires = st.checkbox(
+                    "採用予定人数の記載あり",
                     value=(
                         st.session_state.get(
                             "job_form_planned_hires"
                         )
-                        or 1
+                        is not None
                     ),
-                    key="job_form_planned_hires_value",
+                    key="job_form_has_planned_hires",
                 )
 
-                st.caption("単位：名")
+                with st.container(key="job_conditional_has_planned_hires"):
+                    planned_hires = st.number_input(
+                        "採用予定人数",
+                        min_value=1,
+                        step=1,
+                        value=(
+                            st.session_state.get(
+                                "job_form_planned_hires"
+                            )
+                            or 1
+                        ),
+                        key="job_form_planned_hires_value",
+                    )
 
-            else:
-                planned_hires = None
+                    st.caption("単位：名")
+                if not (has_planned_hires):
+                    planned_hires = None
 
-        recruitment_reason = st.text_area(
-            "募集背景・採用理由",
-            key="job_form_recruitment_reason",
-        )
-
-    with st.container(border=True):
-
-        st.markdown("### 仕事内容")
-
-        with st.container():
-            job_summary = st.text_area(
-                "仕事内容・業務概要 :red[*]",
-                height=140,
-                key="job_form_job_summary",
-                on_change=clear_job_form_error,
-                args=("job_summary",),
-            )
-            render_required_field_error("job_summary")
-
-        responsibility_scope = st.text_area(
-            "担当範囲・役割",
-            height=100,
-            key="job_form_responsibility_scope",
-        )
-
-        col7, col8 = st.columns(2)
-
-        with col7:
-            customers = st.text_area(
-                "顧客・対象者",
-                key="job_form_customers",
+            recruitment_reason = st.text_area(
+                "募集背景・採用理由",
+                key="job_form_recruitment_reason",
             )
 
-            internal_stakeholders = st.text_area(
-                "社内の関係者",
-                key="job_form_internal_stakeholders",
+        with st.container(border=True):
+
+            st.markdown("### 仕事内容")
+
+            with st.container():
+                job_summary = st.text_area(
+                    "仕事内容・業務概要 :red[*]",
+                    height=140,
+                    key="job_form_job_summary",
+                )
+                render_required_field_error("job_summary")
+
+            responsibility_scope = st.text_area(
+                "担当範囲・役割",
+                height=100,
+                key="job_form_responsibility_scope",
             )
 
-        with col8:
-            external_partners = st.text_area(
-                "社外の関係者",
-                key="job_form_external_partners",
-            )
+            col7, col8 = st.columns(2)
 
-            goals_kpi = st.text_area(
-                "目標・KPI",
-                key="job_form_goals_kpi",
-            )
-
-        expected_results = st.text_area(
-            "期待される成果",
-            key="job_form_expected_results",
-        )
-
-        organizational_culture = st.text_area(
-            "組織風土・企業文化",
-            height=120,
-            placeholder=(
-                "例：チームで相談しながら進める文化、"
-                "週次で相互フィードバックを行う"
-            ),
-            key="job_form_organizational_culture",
-            help=(
-                "求人票に明記された相談・協働・評価・"
-                "フィードバックなどの特徴を入力します。"
-            ),
-        )
-
-    with st.container(border=True):
-
-        st.markdown("### 勤務条件")
-
-        col9, col10 = st.columns(2)
-
-        with col9:
-            employment_type = st.selectbox(
-                "雇用形態",
-                options_with_current(
-                    EMPLOYMENT_TYPES,
-                    st.session_state.get(
-                        "job_form_employment_type",
-                        "",
-                    ),
-                ),
-                key="job_form_employment_type",
-            )
-
-            probation_period_status = st.selectbox(
-                "試用期間",
-                options_with_current(
-                    PROBATION_PERIOD_OPTIONS,
-                    st.session_state.get(
-                        "job_form_probation_period_status",
-                        "",
-                    ),
-                ),
-                key="job_form_probation_period_status",
-            )
-
-            if probation_period_status == "あり":
-                probation_period_months = st.number_input(
-                    "試用期間の月数",
-                    min_value=1,
-                    max_value=60,
-                    step=1,
-                    value=None,
-                    placeholder="例：3",
-                    key="job_form_probation_period_months",
+            with col7:
+                customers = st.text_area(
+                    "顧客・対象者",
+                    key="job_form_customers",
                 )
 
-                st.caption(
-                    "単位：か月。期間が日数で記載されている場合や、"
-                    "条件に補足がある場合は下の補足欄へ入力します。"
+                internal_stakeholders = st.text_area(
+                    "社内の関係者",
+                    key="job_form_internal_stakeholders",
                 )
 
-            else:
-                probation_period_months = None
+            with col8:
+                external_partners = st.text_area(
+                    "社外の関係者",
+                    key="job_form_external_partners",
+                )
 
-            probation_period = st.text_input(
-                "試用期間の補足",
+                goals_kpi = st.text_area(
+                    "目標・KPI",
+                    key="job_form_goals_kpi",
+                )
+
+            expected_results = st.text_area(
+                "期待される成果",
+                key="job_form_expected_results",
+            )
+
+            organizational_culture = st.text_area(
+                "組織風土・企業文化",
+                height=120,
                 placeholder=(
-                    "例：試用期間中も待遇変更なし、"
-                    "試用期間14日間"
+                    "例：チームで相談しながら進める文化、"
+                    "週次で相互フィードバックを行う"
                 ),
-                key="job_form_probation_period",
-            )
-
-            prefecture = st.selectbox(
-                "都道府県",
-                options_with_current(
-                    PREFECTURES,
-                    st.session_state.get(
-                        "job_form_prefecture",
-                        "",
-                    ),
+                key="job_form_organizational_culture",
+                help=(
+                    "求人票に明記された相談・協働・評価・"
+                    "フィードバックなどの特徴を入力します。"
                 ),
-                key="job_form_prefecture",
             )
 
-            municipality = st.text_input(
-                "市区町村",
-                key="job_form_municipality",
-            )
+        with st.container(border=True):
 
-            nearest_station = st.text_input(
-                "最寄駅",
-                key="job_form_nearest_station",
-            )
+            st.markdown("### 勤務条件")
 
-        with col10:
-            transfer_required = st.selectbox(
-                "転勤",
-                options_with_current(
-                    TRANSFER_OPTIONS,
-                    st.session_state.get(
-                        "job_form_transfer_required",
-                        "",
-                    ),
-                ),
-                key="job_form_transfer_required",
-            )
+            col9, col10 = st.columns(2)
 
-            work_style = st.selectbox(
-                "勤務形態・働き方",
-                options_with_current(
-                    WORK_STYLE_OPTIONS,
-                    st.session_state.get(
-                        "job_form_work_style",
-                        "",
-                    ),
-                ),
-                key="job_form_work_style",
-            )
-
-            flextime = st.selectbox(
-                "フレックスタイム",
-                options_with_current(
-                    FLEXTIME_OPTIONS,
-                    st.session_state.get(
-                        "job_form_flextime",
-                        "",
-                    ),
-                ),
-                key="job_form_flextime",
-            )
-
-            has_overtime = st.checkbox(
-                "月平均残業時間の記載あり",
-                key="job_form_has_overtime",
-            )
-
-            if has_overtime:
-                overtime = st.number_input(
-                    "月平均残業時間",
-                    min_value=0,
-                    max_value=744,
-                    step=1,
-                    value=(
+            with col9:
+                employment_type = st.selectbox(
+                    "雇用形態",
+                    options_with_current(
+                        EMPLOYMENT_TYPES,
                         st.session_state.get(
-                            "job_form_overtime_value"
-                        )
-                        if st.session_state.get(
-                            "job_form_overtime_value"
-                        )
-                        is not None
-                        else 20
+                            "job_form_employment_type",
+                            "",
+                        ),
                     ),
-                    key="job_form_overtime_value",
+                    key="job_form_employment_type",
                 )
 
-                st.caption(
-                    "単位：時間／月。"
-                    "求人票に記載された月平均時間を"
-                    "0～744時間で入力してください。"
-                )
-
-            else:
-                overtime = None
-
-        col11, col12 = st.columns(2)
-
-        with col11:
-            start_time = st.time_input(
-                "始業時間",
-                value=None,
-                step=900,
-                key="job_form_start_time",
-            )
-
-            has_break_minutes = st.checkbox(
-                "休憩時間の記載あり",
-                key="job_form_has_break_minutes",
-            )
-
-            if has_break_minutes:
-                break_minutes = st.number_input(
-                    "休憩時間",
-                    min_value=0,
-                    max_value=1440,
-                    step=1,
-                    value=(
+                probation_period_status = st.selectbox(
+                    "試用期間",
+                    options_with_current(
+                        PROBATION_PERIOD_OPTIONS,
                         st.session_state.get(
-                            "job_form_break_minutes_value"
-                        )
-                        if st.session_state.get(
-                            "job_form_break_minutes_value"
-                        )
-                        is not None
-                        else 60
+                            "job_form_probation_period_status",
+                            "",
+                        ),
                     ),
-                    key="job_form_break_minutes_value",
+                    key="job_form_probation_period_status",
                 )
 
-                st.caption(
-                    "単位：分。0～1440分の範囲で"
-                    "入力してください。"
+                with st.container(key="job_conditional_probation_period_status"):
+                    probation_period_months = st.number_input(
+                        "試用期間の月数",
+                        min_value=1,
+                        max_value=60,
+                        step=1,
+                        value=None,
+                        placeholder="例：3",
+                        key="job_form_probation_period_months",
+                    )
+
+                    st.caption(
+                        "単位：か月。期間が日数で記載されている場合や、"
+                        "条件に補足がある場合は下の補足欄へ入力します。"
+                    )
+                if not (probation_period_status == 'あり'):
+                    probation_period_months = None
+
+                probation_period = st.text_input(
+                    "試用期間の補足",
+                    placeholder=(
+                        "例：試用期間中も待遇変更なし、"
+                        "試用期間14日間"
+                    ),
+                    key="job_form_probation_period",
                 )
 
-            else:
-                break_minutes = None
-
-        with col12:
-            end_time = st.time_input(
-                "終業時間",
-                value=None,
-                step=900,
-                key="job_form_end_time",
-            )
-
-            has_scheduled_work_hours = st.checkbox(
-                "所定労働時間の記載あり",
-                key="job_form_has_scheduled_work_hours",
-            )
-
-            if has_scheduled_work_hours:
-                scheduled_work_hours = st.number_input(
-                    "所定労働時間",
-                    min_value=0.0,
-                    max_value=24.0,
-                    step=0.25,
-                    value=(
+                prefecture = st.selectbox(
+                    "都道府県",
+                    options_with_current(
+                        PREFECTURES,
                         st.session_state.get(
-                            "job_form_scheduled_work_hours_value"
-                        )
-                        if st.session_state.get(
-                            "job_form_scheduled_work_hours_value"
-                        )
-                        is not None
-                        else 8.0
+                            "job_form_prefecture",
+                            "",
+                        ),
                     ),
-                    key=(
-                        "job_form_"
-                        "scheduled_work_hours_value"
+                    key="job_form_prefecture",
+                )
+
+                municipality = st.text_input(
+                    "市区町村",
+                    key="job_form_municipality",
+                )
+
+                nearest_station = st.text_input(
+                    "最寄駅",
+                    key="job_form_nearest_station",
+                )
+
+            with col10:
+                transfer_required = st.selectbox(
+                    "転勤",
+                    options_with_current(
+                        TRANSFER_OPTIONS,
+                        st.session_state.get(
+                            "job_form_transfer_required",
+                            "",
+                        ),
                     ),
+                    key="job_form_transfer_required",
                 )
 
-                st.caption(
-                    "単位：時間／日。"
-                    "例：7時間30分の場合は7.5と入力します。"
+                work_style = st.selectbox(
+                    "勤務形態・働き方",
+                    options_with_current(
+                        WORK_STYLE_OPTIONS,
+                        st.session_state.get(
+                            "job_form_work_style",
+                            "",
+                        ),
+                    ),
+                    key="job_form_work_style",
                 )
 
-            else:
-                scheduled_work_hours = None
-
-        holidays = st.text_input(
-            "休日・休暇",
-            key="job_form_holidays",
-        )
-
-        has_annual_holidays = st.checkbox(
-            "年間休日数の記載あり",
-            value=(
-                st.session_state.get(
-                    "job_form_annual_holidays"
+                flextime = st.selectbox(
+                    "フレックスタイム",
+                    options_with_current(
+                        FLEXTIME_OPTIONS,
+                        st.session_state.get(
+                            "job_form_flextime",
+                            "",
+                        ),
+                    ),
+                    key="job_form_flextime",
                 )
-                is not None
-            ),
-            key="job_form_has_annual_holidays",
-        )
 
-        if has_annual_holidays:
-            annual_holidays = st.number_input(
-                "年間休日数",
-                min_value=1,
-                max_value=366,
-                step=1,
+                has_overtime = st.checkbox(
+                    "月平均残業時間の記載あり",
+                    key="job_form_has_overtime",
+                )
+
+                with st.container(key="job_conditional_has_overtime"):
+                    overtime = st.number_input(
+                        "月平均残業時間",
+                        min_value=0,
+                        max_value=744,
+                        step=1,
+                        value=(
+                            st.session_state.get(
+                                "job_form_overtime_value"
+                            )
+                            if st.session_state.get(
+                                "job_form_overtime_value"
+                            )
+                            is not None
+                            else 20
+                        ),
+                        key="job_form_overtime_value",
+                    )
+
+                    st.caption(
+                        "単位：時間／月。"
+                        "求人票に記載された月平均時間を"
+                        "0～744時間で入力してください。"
+                    )
+                if not (has_overtime):
+                    overtime = None
+
+            col11, col12 = st.columns(2)
+
+            with col11:
+                start_time = st.time_input(
+                    "始業時間",
+                    value=None,
+                    step=900,
+                    key="job_form_start_time",
+                )
+
+                has_break_minutes = st.checkbox(
+                    "休憩時間の記載あり",
+                    key="job_form_has_break_minutes",
+                )
+
+                with st.container(key="job_conditional_has_break_minutes"):
+                    break_minutes = st.number_input(
+                        "休憩時間",
+                        min_value=0,
+                        max_value=1440,
+                        step=1,
+                        value=(
+                            st.session_state.get(
+                                "job_form_break_minutes_value"
+                            )
+                            if st.session_state.get(
+                                "job_form_break_minutes_value"
+                            )
+                            is not None
+                            else 60
+                        ),
+                        key="job_form_break_minutes_value",
+                    )
+
+                    st.caption(
+                        "単位：分。0～1440分の範囲で"
+                        "入力してください。"
+                    )
+                if not (has_break_minutes):
+                    break_minutes = None
+
+            with col12:
+                end_time = st.time_input(
+                    "終業時間",
+                    value=None,
+                    step=900,
+                    key="job_form_end_time",
+                )
+
+                has_scheduled_work_hours = st.checkbox(
+                    "所定労働時間の記載あり",
+                    key="job_form_has_scheduled_work_hours",
+                )
+
+                with st.container(key="job_conditional_has_scheduled_work_hours"):
+                    scheduled_work_hours = st.number_input(
+                        "所定労働時間",
+                        min_value=0.0,
+                        max_value=24.0,
+                        step=0.25,
+                        value=(
+                            st.session_state.get(
+                                "job_form_scheduled_work_hours_value"
+                            )
+                            if st.session_state.get(
+                                "job_form_scheduled_work_hours_value"
+                            )
+                            is not None
+                            else 8.0
+                        ),
+                        key=(
+                            "job_form_"
+                            "scheduled_work_hours_value"
+                        ),
+                    )
+
+                    st.caption(
+                        "単位：時間／日。"
+                        "例：7時間30分の場合は7.5と入力します。"
+                    )
+                if not (has_scheduled_work_hours):
+                    scheduled_work_hours = None
+
+            holidays = st.text_input(
+                "休日・休暇",
+                key="job_form_holidays",
+            )
+
+            has_annual_holidays = st.checkbox(
+                "年間休日数の記載あり",
                 value=(
                     st.session_state.get(
                         "job_form_annual_holidays"
                     )
-                    or 120
+                    is not None
                 ),
-                key="job_form_annual_holidays_value",
+                key="job_form_has_annual_holidays",
             )
 
-            st.caption(
-                "1年間の休日数を"
-                "1～366日の範囲で入力してください。"
-            )
-
-        else:
-            annual_holidays = None
-    with st.container(border=True):
-
-        st.markdown("### 給与・待遇")
-
-        wage_type = st.selectbox(
-            "賃金形態",
-            options_with_current(
-                WAGE_TYPES,
-                st.session_state.get(
-                    "job_form_wage_type",
-                    "",
-                ),
-            ),
-            key="job_form_wage_type",
-        )
-
-        st.caption(
-            "月給・基本給は円単位、"
-            "想定年収は万円単位で入力します。"
-        )
-
-        col13, col14 = st.columns(2)
-
-        with col13:
-            monthly_salary_min = comma_number_input(
-                "月給最低額（円）",
-                key="job_form_monthly_salary_min",
-                placeholder="例：280,000",
-            )
-
-            base_salary_min = comma_number_input(
-                "基本給最低額（円）",
-                key="job_form_base_salary_min",
-                placeholder="例：240,000",
-            )
-
-            expected_salary_min = comma_number_input(
-                "想定年収最低額（万円）",
-                key="job_form_expected_salary_min",
-                placeholder="例：400",
-            )
-
-            bonus = st.text_input(
-                "賞与",
-                key="job_form_bonus",
-            )
-
-        with col14:
-            monthly_salary_max = comma_number_input(
-                "月給最高額（円）",
-                key="job_form_monthly_salary_max",
-                placeholder="例：350,000",
-            )
-
-            base_salary_max = comma_number_input(
-                "基本給最高額（円）",
-                key="job_form_base_salary_max",
-                placeholder="例：300,000",
-            )
-
-            expected_salary_max = comma_number_input(
-                "想定年収最高額（万円）",
-                key="job_form_expected_salary_max",
-                placeholder="例：550",
-            )
-
-            salary_increase = st.text_input(
-                "昇給",
-                key="job_form_salary_increase",
-            )
-
-        st.divider()
-
-        fixed_overtime_system = st.selectbox(
-            "固定残業制",
-            options_with_current(
-                FIXED_OVERTIME_OPTIONS,
-                st.session_state.get(
-                    "job_form_fixed_overtime_system",
-                    "",
-                ),
-            ),
-            key="job_form_fixed_overtime_system",
-        )
-
-        if fixed_overtime_system == "あり":
-            st.caption(
-                "求人票に記載された固定残業時間と"
-                "固定残業代を入力してください。"
-            )
-
-            fixed_col1, fixed_col2 = st.columns(2)
-
-            with fixed_col1:
-                fixed_overtime_hours = st.number_input(
-                    "固定残業時間（時間／月）",
-                    min_value=0,
+            with st.container(key="job_conditional_has_annual_holidays"):
+                annual_holidays = st.number_input(
+                    "年間休日数",
+                    min_value=1,
+                    max_value=366,
                     step=1,
-                    value=None,
-                    placeholder="例：20",
-                    key="job_form_fixed_overtime_hours",
-                )
-
-                fixed_overtime_pay_min = comma_number_input(
-                    "固定残業代最低額（円）",
-                    key="job_form_fixed_overtime_pay_min",
-                    placeholder="例：40,000",
-                )
-
-            with fixed_col2:
-                fixed_overtime_pay_max = comma_number_input(
-                    "固定残業代最高額（円）",
-                    key="job_form_fixed_overtime_pay_max",
-                    placeholder="例：60,000",
-                )
-
-                overtime_extra_pay = st.selectbox(
-                    "固定残業時間の超過分を追加支給",
-                    options_with_current(
-                        FIXED_OVERTIME_OPTIONS,
+                    value=(
                         st.session_state.get(
-                            "job_form_overtime_extra_pay",
-                            "",
-                        ),
+                            "job_form_annual_holidays"
+                        )
+                        or 120
                     ),
-                    key="job_form_overtime_extra_pay",
+                    key="job_form_annual_holidays_value",
                 )
+
+                st.caption(
+                    "1年間の休日数を"
+                    "1～366日の範囲で入力してください。"
+                )
+            if not (has_annual_holidays):
+                annual_holidays = None
+        with st.container(border=True):
+
+            st.markdown("### 給与・待遇")
+
+            wage_type = st.selectbox(
+                "賃金形態",
+                options_with_current(
+                    WAGE_TYPES,
+                    st.session_state.get(
+                        "job_form_wage_type",
+                        "",
+                    ),
+                ),
+                key="job_form_wage_type",
+            )
 
             st.caption(
-                "固定残業代について求人票に記載がない項目は、"
-                "未入力のままで保存できます。"
+                "月給・基本給は円単位、"
+                "想定年収は万円単位で入力します。"
             )
 
-        else:
-            fixed_overtime_hours = None
-            fixed_overtime_pay_min = None
-            fixed_overtime_pay_max = None
-            overtime_extra_pay = ""
+            col13, col14 = st.columns(2)
 
-        incentive = st.text_input(
-            "インセンティブ",
-            key="job_form_incentive",
-        )
-
-    with st.container(border=True):
-
-        st.markdown("### 福利厚生")
-
-        col15, col16 = st.columns(2)
-
-        with col15:
-            social_insurance = st.text_input(
-                "社会保険",
-                key="job_form_social_insurance",
-            )
-
-            commuting_allowance = st.text_input(
-                "通勤手当",
-                key="job_form_commuting_allowance",
-            )
-
-            housing_allowance = st.text_input(
-                "住宅手当",
-                key="job_form_housing_allowance",
-            )
-
-        with col16:
-            retirement_plan = st.text_input(
-                "退職金制度",
-                key="job_form_retirement_plan",
-            )
-
-            qualification_support = st.text_input(
-                "資格取得支援",
-                key="job_form_qualification_support",
-            )
-
-            training_program = st.text_input(
-                "研修制度",
-                key="job_form_training_program",
-            )
-
-    with st.container(border=True):
-
-        st.markdown("### 応募条件・求める人物像")
-
-        st.caption(
-            "複数ある場合は、1行に1項目ずつ入力してください。"
-        )
-
-        col17, col18 = st.columns(2)
-
-        with col17:
-            required_experience_text = st.text_area(
-                "必須経験",
-                placeholder=(
-                    "例：\n"
-                    "法人営業経験3年以上\n"
-                    "顧客折衝経験"
-                ),
-                key="job_form_required_experience",
-            )
-
-            required_skills_text = st.text_area(
-                "必須スキル",
-                placeholder=(
-                    "例：\n"
-                    "Excel\n"
-                    "PowerPoint"
-                ),
-                key="job_form_required_skills",
-            )
-
-            required_qualifications_text = st.text_area(
-                "必須資格",
-                key="job_form_required_qualifications",
-            )
-
-        with col18:
-            preferred_experience_text = st.text_area(
-                "歓迎経験",
-                key="job_form_preferred_experience",
-            )
-
-            preferred_skills_text = st.text_area(
-                "歓迎スキル",
-                key="job_form_preferred_skills",
-            )
-
-            desired_personality_text = st.text_area(
-                "求める人物像",
-                key="job_form_desired_personality",
-            )
-
-        job_details_text = st.text_area(
-            "具体的な業務内容",
-            placeholder=(
-                "複数ある場合は1行ずつ入力してください。"
-            ),
-            key="job_form_job_details",
-        )
-
-        not_listed_fields_text = st.text_area(
-            "求人票に記載がない項目・確認したいこと",
-            placeholder=(
-                "例：\n"
-                "平均残業時間の記載なし\n"
-                "在宅勤務頻度の記載なし"
-            ),
-            key="job_form_not_listed_fields",
-        )
-
-    with st.container(border=True):
-
-        st.markdown("### 選考情報")
-
-        col19, col20 = st.columns(2)
-
-        with col19:
-            document_screening_status = st.selectbox(
-                "書類選考",
-                options_with_current(
-                    SELECTION_STEP_OPTIONS,
-                    st.session_state.get(
-                        "job_form_document_screening_status",
-                        "",
-                    ),
-                ),
-                key="job_form_document_screening_status",
-            )
-
-            document_screening = st.text_input(
-                "書類選考の補足",
-                placeholder=(
-                    "例：履歴書・職務経歴書による選考"
-                ),
-                key="job_form_document_screening",
-            )
-
-            aptitude_test_status = st.selectbox(
-                "適性検査",
-                options_with_current(
-                    SELECTION_STEP_OPTIONS,
-                    st.session_state.get(
-                        "job_form_aptitude_test_status",
-                        "",
-                    ),
-                ),
-                key="job_form_aptitude_test_status",
-            )
-
-            aptitude_test = st.text_input(
-                "適性検査の補足",
-                placeholder="例：Web適性検査、SPI",
-                key="job_form_aptitude_test",
-            )
-
-            expected_join_date = st.text_input(
-                "入社予定・入社可能時期",
-                key="job_form_expected_join_date",
-            )
-
-        with col20:
-            interview = st.text_input(
-                "面接",
-                key="job_form_interview",
-            )
-
-            has_interview_count = st.checkbox(
-                "面接回数の記載あり",
-                key="job_form_has_interview_count",
-            )
-
-            if has_interview_count:
-                interview_count_col1, interview_count_col2 = (
-                    st.columns(2)
+            with col13:
+                monthly_salary_min = comma_number_input(
+                    "月給最低額（円）",
+                    key="job_form_monthly_salary_min",
+                    placeholder="例：280,000",
                 )
 
-                with interview_count_col1:
-                    interview_count_min = st.number_input(
-                        "面接回数（下限）",
-                        min_value=1,
+                base_salary_min = comma_number_input(
+                    "基本給最低額（円）",
+                    key="job_form_base_salary_min",
+                    placeholder="例：240,000",
+                )
+
+                expected_salary_min = comma_number_input(
+                    "想定年収最低額（万円）",
+                    key="job_form_expected_salary_min",
+                    placeholder="例：400",
+                )
+
+                bonus = st.text_input(
+                    "賞与",
+                    key="job_form_bonus",
+                )
+
+            with col14:
+                monthly_salary_max = comma_number_input(
+                    "月給最高額（円）",
+                    key="job_form_monthly_salary_max",
+                    placeholder="例：350,000",
+                )
+
+                base_salary_max = comma_number_input(
+                    "基本給最高額（円）",
+                    key="job_form_base_salary_max",
+                    placeholder="例：300,000",
+                )
+
+                expected_salary_max = comma_number_input(
+                    "想定年収最高額（万円）",
+                    key="job_form_expected_salary_max",
+                    placeholder="例：550",
+                )
+
+                salary_increase = st.text_input(
+                    "昇給",
+                    key="job_form_salary_increase",
+                )
+
+            st.divider()
+
+            fixed_overtime_system = st.selectbox(
+                "固定残業制",
+                options_with_current(
+                    FIXED_OVERTIME_OPTIONS,
+                    st.session_state.get(
+                        "job_form_fixed_overtime_system",
+                        "",
+                    ),
+                ),
+                key="job_form_fixed_overtime_system",
+            )
+
+            with st.container(key="job_conditional_fixed_overtime_system"):
+                st.caption(
+                    "求人票に記載された固定残業時間と"
+                    "固定残業代を入力してください。"
+                )
+
+                fixed_col1, fixed_col2 = st.columns(2)
+
+                with fixed_col1:
+                    fixed_overtime_hours = st.number_input(
+                        "固定残業時間（時間／月）",
+                        min_value=0,
                         step=1,
                         value=None,
-                        placeholder="例：1",
-                        key="job_form_interview_count_min",
+                        placeholder="例：20",
+                        key="job_form_fixed_overtime_hours",
                     )
 
-                with interview_count_col2:
-                    interview_count_max = st.number_input(
-                        "面接回数（上限）",
-                        min_value=1,
-                        step=1,
-                        value=None,
-                        placeholder="例：2",
-                        key="job_form_interview_count_max",
+                    fixed_overtime_pay_min = comma_number_input(
+                        "固定残業代最低額（円）",
+                        key="job_form_fixed_overtime_pay_min",
+                        placeholder="例：40,000",
+                    )
+
+                with fixed_col2:
+                    fixed_overtime_pay_max = comma_number_input(
+                        "固定残業代最高額（円）",
+                        key="job_form_fixed_overtime_pay_max",
+                        placeholder="例：60,000",
+                    )
+
+                    overtime_extra_pay = st.selectbox(
+                        "固定残業時間の超過分を追加支給",
+                        options_with_current(
+                            FIXED_OVERTIME_OPTIONS,
+                            st.session_state.get(
+                                "job_form_overtime_extra_pay",
+                                "",
+                            ),
+                        ),
+                        key="job_form_overtime_extra_pay",
                     )
 
                 st.caption(
-                    "単位：回。面接が2回と確定している場合は、"
-                    "下限と上限へ同じ回数を入力します。"
+                    "固定残業代について求人票に記載がない項目は、"
+                    "未入力のままで保存できます。"
                 )
+            if not (fixed_overtime_system == 'あり'):
+                fixed_overtime_hours = None
+                fixed_overtime_pay_min = None
+                fixed_overtime_pay_max = None
+                overtime_extra_pay = ""
 
-            else:
-                interview_count_min = None
-                interview_count_max = None
-
-    st.divider()
-
-    edit_job_id = st.session_state.get(
-        JOB_EDIT_ID_KEY
-    )
-
-    save_button_label = (
-        "変更内容を確認する"
-        if edit_job_id is not None
-        else "登録内容を確認する"
-    )
-
-    interview_count_error = ""
-
-    if (
-        interview_count_min is not None
-        and interview_count_max is not None
-        and interview_count_min > interview_count_max
-    ):
-        interview_count_error = (
-            "面接回数の下限が上限を超えています。"
-        )
-
-    employee_count_error = ""
-
-    if (
-        employee_count_min is not None
-        and employee_count_max is not None
-        and employee_count_min > employee_count_max
-    ):
-        employee_count_error = (
-            "従業員数の下限が上限を超えています。"
-        )
-
-    salary_range_errors: list[str] = []
-
-    salary_ranges = (
-        (
-            monthly_salary_min,
-            monthly_salary_max,
-            "月給",
-        ),
-        (
-            base_salary_min,
-            base_salary_max,
-            "基本給",
-        ),
-        (
-            expected_salary_min,
-            expected_salary_max,
-            "想定年収",
-        ),
-        (
-            fixed_overtime_pay_min,
-            fixed_overtime_pay_max,
-            "固定残業代",
-        ),
-    )
-
-    for (
-        minimum_value,
-        maximum_value,
-        salary_label,
-    ) in salary_ranges:
-        if (
-            minimum_value is not None
-            and maximum_value is not None
-            and minimum_value > maximum_value
-        ):
-            salary_range_errors.append(
-                f"{salary_label}の最低額が"
-                "最高額を超えています。"
+            incentive = st.text_input(
+                "インセンティブ",
+                key="job_form_incentive",
             )
 
-    if st.button(
-        save_button_label,
-        key="job_form_save",
-        type="primary",
-        use_container_width=True,
-    ):
-        required_errors = validate_required_job_fields(
-            company_name=company_name,
-            source_type=source_type,
-            source_name=source_name,
-            occupation=occupation,
-            job_summary=job_summary,
-        )
-        general_errors: list[str] = []
-        if interview_count_error:
-            general_errors.append(interview_count_error)
-        if employee_count_error:
-            general_errors.append(employee_count_error)
-        general_errors.extend(salary_range_errors)
+        with st.container(border=True):
 
-        st.session_state[JOB_FORM_ERRORS_KEY] = required_errors
-        st.session_state[JOB_FORM_GENERAL_ERRORS_KEY] = general_errors
-        if required_errors or general_errors:
-            st.session_state[JOB_SCROLL_TO_ERRORS_KEY] = True
+            st.markdown("### 福利厚生")
+
+            col15, col16 = st.columns(2)
+
+            with col15:
+                social_insurance = st.text_input(
+                    "社会保険",
+                    key="job_form_social_insurance",
+                )
+
+                commuting_allowance = st.text_input(
+                    "通勤手当",
+                    key="job_form_commuting_allowance",
+                )
+
+                housing_allowance = st.text_input(
+                    "住宅手当",
+                    key="job_form_housing_allowance",
+                )
+
+            with col16:
+                retirement_plan = st.text_input(
+                    "退職金制度",
+                    key="job_form_retirement_plan",
+                )
+
+                qualification_support = st.text_input(
+                    "資格取得支援",
+                    key="job_form_qualification_support",
+                )
+
+                training_program = st.text_input(
+                    "研修制度",
+                    key="job_form_training_program",
+                )
+
+        with st.container(border=True):
+
+            st.markdown("### 応募条件・求める人物像")
+
+            st.caption(
+                "複数ある場合は、1行に1項目ずつ入力してください。"
+            )
+
+            col17, col18 = st.columns(2)
+
+            with col17:
+                required_experience_text = st.text_area(
+                    "必須経験",
+                    placeholder=(
+                        "例：\n"
+                        "法人営業経験3年以上\n"
+                        "顧客折衝経験"
+                    ),
+                    key="job_form_required_experience",
+                )
+
+                required_skills_text = st.text_area(
+                    "必須スキル",
+                    placeholder=(
+                        "例：\n"
+                        "Excel\n"
+                        "PowerPoint"
+                    ),
+                    key="job_form_required_skills",
+                )
+
+                required_qualifications_text = st.text_area(
+                    "必須資格",
+                    key="job_form_required_qualifications",
+                )
+
+            with col18:
+                preferred_experience_text = st.text_area(
+                    "歓迎経験",
+                    key="job_form_preferred_experience",
+                )
+
+                preferred_skills_text = st.text_area(
+                    "歓迎スキル",
+                    key="job_form_preferred_skills",
+                )
+
+                desired_personality_text = st.text_area(
+                    "求める人物像",
+                    key="job_form_desired_personality",
+                )
+
+            job_details_text = st.text_area(
+                "具体的な業務内容",
+                placeholder=(
+                    "複数ある場合は1行ずつ入力してください。"
+                ),
+                key="job_form_job_details",
+            )
+
+            not_listed_fields_text = st.text_area(
+                "求人票に記載がない項目・確認したいこと",
+                placeholder=(
+                    "例：\n"
+                    "平均残業時間の記載なし\n"
+                    "在宅勤務頻度の記載なし"
+                ),
+                key="job_form_not_listed_fields",
+            )
+
+        with st.container(border=True):
+
+            st.markdown("### 選考情報")
+
+            col19, col20 = st.columns(2)
+
+            with col19:
+                document_screening_status = st.selectbox(
+                    "書類選考",
+                    options_with_current(
+                        SELECTION_STEP_OPTIONS,
+                        st.session_state.get(
+                            "job_form_document_screening_status",
+                            "",
+                        ),
+                    ),
+                    key="job_form_document_screening_status",
+                )
+
+                document_screening = st.text_input(
+                    "書類選考の補足",
+                    placeholder=(
+                        "例：履歴書・職務経歴書による選考"
+                    ),
+                    key="job_form_document_screening",
+                )
+
+                aptitude_test_status = st.selectbox(
+                    "適性検査",
+                    options_with_current(
+                        SELECTION_STEP_OPTIONS,
+                        st.session_state.get(
+                            "job_form_aptitude_test_status",
+                            "",
+                        ),
+                    ),
+                    key="job_form_aptitude_test_status",
+                )
+
+                aptitude_test = st.text_input(
+                    "適性検査の補足",
+                    placeholder="例：Web適性検査、SPI",
+                    key="job_form_aptitude_test",
+                )
+
+                expected_join_date = st.text_input(
+                    "入社予定・入社可能時期",
+                    key="job_form_expected_join_date",
+                )
+
+            with col20:
+                interview = st.text_input(
+                    "面接",
+                    key="job_form_interview",
+                )
+
+                has_interview_count = st.checkbox(
+                    "面接回数の記載あり",
+                    key="job_form_has_interview_count",
+                )
+
+                with st.container(key="job_conditional_has_interview_count"):
+                    interview_count_col1, interview_count_col2 = (
+                        st.columns(2)
+                    )
+
+                    with interview_count_col1:
+                        interview_count_min = st.number_input(
+                            "面接回数（下限）",
+                            min_value=1,
+                            step=1,
+                            value=None,
+                            placeholder="例：1",
+                            key="job_form_interview_count_min",
+                        )
+
+                    with interview_count_col2:
+                        interview_count_max = st.number_input(
+                            "面接回数（上限）",
+                            min_value=1,
+                            step=1,
+                            value=None,
+                            placeholder="例：2",
+                            key="job_form_interview_count_max",
+                        )
+
+                    st.caption(
+                        "単位：回。面接が2回と確定している場合は、"
+                        "下限と上限へ同じ回数を入力します。"
+                    )
+                if not (has_interview_count):
+                    interview_count_min = None
+                    interview_count_max = None
+
+        st.divider()
+
+        edit_job_id = st.session_state.get(
+            JOB_EDIT_ID_KEY
+        )
+
+        save_button_label = (
+            "変更内容を確認する"
+            if edit_job_id is not None
+            else "登録内容を確認する"
+        )
+
+        interview_count_error = ""
+
+        if (
+            interview_count_min is not None
+            and interview_count_max is not None
+            and interview_count_min > interview_count_max
+        ):
+            interview_count_error = (
+                "面接回数の下限が上限を超えています。"
+            )
+
+        employee_count_error = ""
+
+        if (
+            employee_count_min is not None
+            and employee_count_max is not None
+            and employee_count_min > employee_count_max
+        ):
+            employee_count_error = (
+                "従業員数の下限が上限を超えています。"
+            )
+
+        salary_range_errors: list[str] = []
+
+        salary_ranges = (
+            (
+                monthly_salary_min,
+                monthly_salary_max,
+                "月給",
+            ),
+            (
+                base_salary_min,
+                base_salary_max,
+                "基本給",
+            ),
+            (
+                expected_salary_min,
+                expected_salary_max,
+                "想定年収",
+            ),
+            (
+                fixed_overtime_pay_min,
+                fixed_overtime_pay_max,
+                "固定残業代",
+            ),
+        )
+
+        for (
+            minimum_value,
+            maximum_value,
+            salary_label,
+        ) in salary_ranges:
+            if (
+                minimum_value is not None
+                and maximum_value is not None
+                and minimum_value > maximum_value
+            ):
+                salary_range_errors.append(
+                    f"{salary_label}の最低額が"
+                    "最高額を超えています。"
+                )
+
+        if st.form_submit_button(
+            save_button_label,
+            key="job_form_save",
+            type="primary",
+            use_container_width=True,
+        ):
+            required_errors = validate_required_job_fields(
+                company_name=company_name,
+                source_type=source_type,
+                source_name=source_name,
+                occupation=occupation,
+                job_summary=job_summary,
+            )
+            general_errors: list[str] = []
+            if interview_count_error:
+                general_errors.append(interview_count_error)
+            if employee_count_error:
+                general_errors.append(employee_count_error)
+            general_errors.extend(salary_range_errors)
+
+            st.session_state[JOB_FORM_ERRORS_KEY] = required_errors
+            st.session_state[JOB_FORM_GENERAL_ERRORS_KEY] = general_errors
+            if required_errors or general_errors:
+                st.session_state[JOB_SCROLL_TO_ERRORS_KEY] = True
+                st.rerun()
+            job = Job(
+                registration_method=st.session_state[
+                    JOB_REGISTRATION_MODE_KEY
+                ],
+                source_url=st.session_state.get(
+                    "job_registration_url",
+                    "",
+                ),
+                source_text=st.session_state.get(
+                    "job_registration_text",
+                    "",
+                ),
+                acquired_at="",
+                source_type=source_type,
+                source_name=source_name,
+
+                company_name=company_name,
+                job_title=job_title,
+                job_number=job_number,
+                publication_start_date=date_to_text(
+                    publication_start_date
+                ),
+                publication_end_date=date_to_text(
+                    publication_end_date
+                ),
+                industry=industry,
+                business_description=business_description,
+                employee_count_min=integer_to_text(
+                    employee_count_min
+                ),
+                employee_count_max=integer_to_text(
+                    employee_count_max
+                ),
+                employee_count=(
+                    integer_to_text(employee_count_min)
+                    if (
+                        employee_count_min is not None
+                        and employee_count_min
+                        == employee_count_max
+                    )
+                    else ""
+                ),
+                established_date=established_date,
+                capital=capital,
+                listing_status=listing_status,
+
+                occupation=occupation,
+                department=department,
+                planned_hires=integer_to_text(
+                    planned_hires
+                ),
+                recruitment_reason=recruitment_reason,
+
+                job_summary=job_summary,
+                responsibility_scope=responsibility_scope,
+                customers=customers,
+                internal_stakeholders=internal_stakeholders,
+                external_partners=external_partners,
+                goals_kpi=goals_kpi,
+                expected_results=expected_results,
+                organizational_culture=organizational_culture,
+
+                employment_type=employment_type,
+                probation_period_status=(
+                    probation_period_status
+                ),
+                probation_period_months=integer_to_text(
+                    probation_period_months
+                ),
+                probation_period=probation_period,
+                prefecture=prefecture,
+                municipality=municipality,
+                nearest_station=nearest_station,
+                transfer_required=transfer_required,
+                work_style=work_style,
+                start_time=time_to_text(
+                    start_time
+                ),
+                end_time=time_to_text(
+                    end_time
+                ),
+                break_minutes=(
+                    integer_to_text(break_minutes)
+                    if break_minutes is not None
+                    else st.session_state.get(
+                        "job_form_break_minutes_legacy",
+                        "",
+                    )
+                ),
+                scheduled_work_hours=(
+                    hour_to_text(scheduled_work_hours)
+                    if scheduled_work_hours is not None
+                    else st.session_state.get(
+                        "job_form_scheduled_work_hours_legacy",
+                        "",
+                    )
+                ),
+                flextime=flextime,
+                overtime=(
+                    integer_to_text(overtime)
+                    if overtime is not None
+                    else st.session_state.get(
+                        "job_form_overtime_legacy",
+                        "",
+                    )
+                ),
+                holidays=holidays,
+                annual_holidays=integer_to_text(
+                    annual_holidays
+                ),
+
+                wage_type=wage_type,
+                monthly_salary_min=integer_to_text(
+                    monthly_salary_min
+                ),
+                monthly_salary_max=integer_to_text(
+                    monthly_salary_max
+                ),
+                base_salary_min=integer_to_text(
+                    base_salary_min
+                ),
+                base_salary_max=integer_to_text(
+                    base_salary_max
+                ),
+
+                monthly_salary=st.session_state.get(
+                    "job_form_monthly_salary",
+                    "",
+                ),
+                annual_salary=st.session_state.get(
+                    "job_form_annual_salary",
+                    "",
+                ),
+                expected_salary_min=integer_to_text(
+                    expected_salary_min
+                ),
+                expected_salary_max=integer_to_text(
+                    expected_salary_max
+                ),
+                fixed_overtime_system=fixed_overtime_system,
+                fixed_overtime_pay_min=integer_to_text(
+                    fixed_overtime_pay_min
+                ),
+                fixed_overtime_pay_max=integer_to_text(
+                    fixed_overtime_pay_max
+                ),
+                overtime_extra_pay=overtime_extra_pay,
+
+                fixed_overtime_hours=integer_to_text(
+                    fixed_overtime_hours
+                ),
+                fixed_overtime_pay=integer_to_text(
+                    fixed_overtime_pay_min
+                ),
+                bonus=bonus,
+                salary_increase=salary_increase,
+                incentive=incentive,
+
+                social_insurance=social_insurance,
+                commuting_allowance=commuting_allowance,
+                housing_allowance=housing_allowance,
+                retirement_plan=retirement_plan,
+                qualification_support=qualification_support,
+                training_program=training_program,
+
+                document_screening_status=(
+                    document_screening_status
+                ),
+                document_screening=document_screening,
+                interview=interview,
+                aptitude_test_status=(
+                    aptitude_test_status
+                ),
+                aptitude_test=aptitude_test,
+                interview_count_min=integer_to_text(
+                    interview_count_min
+                ),
+                interview_count_max=integer_to_text(
+                    interview_count_max
+                ),
+                interview_count=(
+                    integer_to_text(interview_count_min)
+                    if (
+                        interview_count_min is not None
+                        and interview_count_min
+                        == interview_count_max
+                    )
+                    else ""
+                ),
+                expected_join_date=expected_join_date,
+
+                job_details=text_to_list(
+                    job_details_text
+                ),
+                required_experience=text_to_list(
+                    required_experience_text
+                ),
+                required_skills=text_to_list(
+                    required_skills_text
+                ),
+                required_qualifications=text_to_list(
+                    required_qualifications_text
+                ),
+                preferred_experience=text_to_list(
+                    preferred_experience_text
+                ),
+                preferred_skills=text_to_list(
+                    preferred_skills_text
+                ),
+                desired_personality=text_to_list(
+                    desired_personality_text
+                ),
+                not_listed_fields=text_to_list(
+                    not_listed_fields_text
+                ),
+            )
+
+            st.session_state[
+                JOB_CONFIRM_DATA_KEY
+            ] = job
+
+            st.session_state[
+                JOB_FORM_STEP_KEY
+            ] = "confirm"
+
             st.rerun()
-        job = Job(
-            registration_method=st.session_state[
-                JOB_REGISTRATION_MODE_KEY
-            ],
-            source_url=st.session_state.get(
-                "job_registration_url",
-                "",
-            ),
-            source_text=st.session_state.get(
-                "job_registration_text",
-                "",
-            ),
-            acquired_at="",
-            source_type=source_type,
-            source_name=source_name,
-
-            company_name=company_name,
-            job_title=job_title,
-            job_number=job_number,
-            publication_start_date=date_to_text(
-                publication_start_date
-            ),
-            publication_end_date=date_to_text(
-                publication_end_date
-            ),
-            industry=industry,
-            business_description=business_description,
-            employee_count_min=integer_to_text(
-                employee_count_min
-            ),
-            employee_count_max=integer_to_text(
-                employee_count_max
-            ),
-            employee_count=(
-                integer_to_text(employee_count_min)
-                if (
-                    employee_count_min is not None
-                    and employee_count_min
-                    == employee_count_max
-                )
-                else ""
-            ),
-            established_date=established_date,
-            capital=capital,
-            listing_status=listing_status,
-
-            occupation=occupation,
-            department=department,
-            planned_hires=integer_to_text(
-                planned_hires
-            ),
-            recruitment_reason=recruitment_reason,
-
-            job_summary=job_summary,
-            responsibility_scope=responsibility_scope,
-            customers=customers,
-            internal_stakeholders=internal_stakeholders,
-            external_partners=external_partners,
-            goals_kpi=goals_kpi,
-            expected_results=expected_results,
-            organizational_culture=organizational_culture,
-
-            employment_type=employment_type,
-            probation_period_status=(
-                probation_period_status
-            ),
-            probation_period_months=integer_to_text(
-                probation_period_months
-            ),
-            probation_period=probation_period,
-            prefecture=prefecture,
-            municipality=municipality,
-            nearest_station=nearest_station,
-            transfer_required=transfer_required,
-            work_style=work_style,
-            start_time=time_to_text(
-                start_time
-            ),
-            end_time=time_to_text(
-                end_time
-            ),
-            break_minutes=(
-                integer_to_text(break_minutes)
-                if break_minutes is not None
-                else st.session_state.get(
-                    "job_form_break_minutes_legacy",
-                    "",
-                )
-            ),
-            scheduled_work_hours=(
-                hour_to_text(scheduled_work_hours)
-                if scheduled_work_hours is not None
-                else st.session_state.get(
-                    "job_form_scheduled_work_hours_legacy",
-                    "",
-                )
-            ),
-            flextime=flextime,
-            overtime=(
-                integer_to_text(overtime)
-                if overtime is not None
-                else st.session_state.get(
-                    "job_form_overtime_legacy",
-                    "",
-                )
-            ),
-            holidays=holidays,
-            annual_holidays=integer_to_text(
-                annual_holidays
-            ),
-
-            wage_type=wage_type,
-            monthly_salary_min=integer_to_text(
-                monthly_salary_min
-            ),
-            monthly_salary_max=integer_to_text(
-                monthly_salary_max
-            ),
-            base_salary_min=integer_to_text(
-                base_salary_min
-            ),
-            base_salary_max=integer_to_text(
-                base_salary_max
-            ),
-
-            monthly_salary=st.session_state.get(
-                "job_form_monthly_salary",
-                "",
-            ),
-            annual_salary=st.session_state.get(
-                "job_form_annual_salary",
-                "",
-            ),
-            expected_salary_min=integer_to_text(
-                expected_salary_min
-            ),
-            expected_salary_max=integer_to_text(
-                expected_salary_max
-            ),
-            fixed_overtime_system=fixed_overtime_system,
-            fixed_overtime_pay_min=integer_to_text(
-                fixed_overtime_pay_min
-            ),
-            fixed_overtime_pay_max=integer_to_text(
-                fixed_overtime_pay_max
-            ),
-            overtime_extra_pay=overtime_extra_pay,
-
-            fixed_overtime_hours=integer_to_text(
-                fixed_overtime_hours
-            ),
-            fixed_overtime_pay=integer_to_text(
-                fixed_overtime_pay_min
-            ),
-            bonus=bonus,
-            salary_increase=salary_increase,
-            incentive=incentive,
-
-            social_insurance=social_insurance,
-            commuting_allowance=commuting_allowance,
-            housing_allowance=housing_allowance,
-            retirement_plan=retirement_plan,
-            qualification_support=qualification_support,
-            training_program=training_program,
-
-            document_screening_status=(
-                document_screening_status
-            ),
-            document_screening=document_screening,
-            interview=interview,
-            aptitude_test_status=(
-                aptitude_test_status
-            ),
-            aptitude_test=aptitude_test,
-            interview_count_min=integer_to_text(
-                interview_count_min
-            ),
-            interview_count_max=integer_to_text(
-                interview_count_max
-            ),
-            interview_count=(
-                integer_to_text(interview_count_min)
-                if (
-                    interview_count_min is not None
-                    and interview_count_min
-                    == interview_count_max
-                )
-                else ""
-            ),
-            expected_join_date=expected_join_date,
-
-            job_details=text_to_list(
-                job_details_text
-            ),
-            required_experience=text_to_list(
-                required_experience_text
-            ),
-            required_skills=text_to_list(
-                required_skills_text
-            ),
-            required_qualifications=text_to_list(
-                required_qualifications_text
-            ),
-            preferred_experience=text_to_list(
-                preferred_experience_text
-            ),
-            preferred_skills=text_to_list(
-                preferred_skills_text
-            ),
-            desired_personality=text_to_list(
-                desired_personality_text
-            ),
-            not_listed_fields=text_to_list(
-                not_listed_fields_text
-            ),
-        )
-
-        st.session_state[
-            JOB_CONFIRM_DATA_KEY
-        ] = job
-
-        st.session_state[
-            JOB_FORM_STEP_KEY
-        ] = "confirm"
-
-        st.rerun()
 
 
-# ========================================
-# 登録内容の最終確認
-# ========================================
+    # ========================================
+    # 登録内容の最終確認
+    # ========================================
 
 def render_job_confirmation() -> None:
     """保存前の求人情報を確認する画面。"""
