@@ -378,8 +378,11 @@ ACTION_CARDS = [
 # ========================================
 
 
+HOME_APPLICATION_VIEWS = load_application_views(False)
+
+
 def _home_task_items() -> list[TaskItem]:
-    summary = operational_summary(load_application_views(False))
+    summary = operational_summary(HOME_APPLICATION_VIEWS)
     candidates = sorted(
         [*summary["attention_items"], *summary["upcoming_items"]],
         key=lambda item: item["date"],
@@ -413,6 +416,9 @@ def _home_task_items() -> list[TaskItem]:
 
 
 TASK_ITEMS = _home_task_items()
+
+from services.home_next_step_service import load_next_step, render_next_step_html
+NEXT_STEP_HTML = render_next_step_html(load_next_step(HOME_APPLICATION_VIEWS))
 
 # ========================================
 # 最近の活動
@@ -1169,9 +1175,7 @@ page = """
         </div>
         <div class="metea-next-body">
           <h2>次の一歩</h2>
-          <p>まだ入力が完了していない項目があります。</p>
-          <p>まずは「<a class="metea-text-link" href="?page=basic_info">基本情報</a>」から始めてみましょう。</p>
-          <a class="metea-primary-button" href="?page=basic_info">基本情報を入力する <span>→</span></a>
+          __NEXT_STEP_HTML__
         </div>
       </article>
 
@@ -1206,6 +1210,8 @@ page = """
 # Pythonで生成したHTMLをページへ差し込む
 # ========================================
 
+
+page = page.replace("__NEXT_STEP_HTML__", NEXT_STEP_HTML)
 
 page = page.replace(
     "__NAV_ITEMS_HTML__",
