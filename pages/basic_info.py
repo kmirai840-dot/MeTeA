@@ -1,8 +1,10 @@
 """基本情報画面の表示と入力チェックを担当するモジュール。"""
 
+from database.operation import database_operation
+
 from datetime import date
 import streamlit as st
-from ui.page_execution import navigate_to_page, rerun_current_page
+from ui.page_execution import (navigate_to_page, rerun_current_page, request_save, take_save_request, defer_save_failure, render_deferred_save_failure)
 
 from data.master_data import GENDER_LABELS, PREFECTURES
 from pages.self_discovery_theme import apply_self_discovery_theme
@@ -224,6 +226,7 @@ def capture_basic_info_input() -> None:
     st.session_state[INPUT_SNAPSHOT_KEY] = values
 
 
+@database_operation
 def initialize_basic_info_state() -> None:
     """基本情報画面で使う入力値を初期化する。"""
 
@@ -383,9 +386,81 @@ def get_selected_station_values() -> tuple[str, str]:
     return "", ""
 
 
+def request_basic_save() -> None:
+    capture_basic_info_input()
+    request_save("basic_info")
+
+
+def _save_and_continue() -> None:
+    initialize_basic_info_state()
+
+
+    (
+        selected_station_name,
+        selected_station_place_id,
+    ) = get_selected_station_values()
+
+    st.session_state[NEAREST_STATION_KEY] = (
+        selected_station_name
+    )
+
+    try:
+        save_basic_info_draft(build_current_form_values())
+    except Exception:
+        defer_save_failure("basic_info",
+            "基本情報の下書き",
+            recovery="この画面の入力内容は保持しています。画面を閉じず、接続が戻ってからもう一度「次へ」を押してください。",
+        )
+        return
+
+
+    basic_info, validation_errors = validate_basic_info(
+        st.session_state[FAMILY_NAME_KEY],
+        st.session_state[GIVEN_NAME_KEY],
+        st.session_state[GENDER_KEY],
+        st.session_state[BIRTH_YEAR_KEY],
+        st.session_state[BIRTH_MONTH_KEY],
+        st.session_state[BIRTH_DAY_KEY],
+        st.session_state[PREFECTURE_KEY],
+        st.session_state[MUNICIPALITY_KEY],
+        st.session_state[NEAREST_STATION_KEY],
+        st.session_state[
+            NEAREST_STATION_PLACE_ID_KEY
+        ],
+    )
+
+    st.session_state[ERRORS_KEY] = validation_errors
+
+    if validation_errors:
+        return
+
+    assert basic_info is not None
+
+    try:
+        save_basic_info(basic_info)
+    except Exception:
+        defer_save_failure("basic_info",
+            "基本情報",
+            recovery="入力内容は下書きとして保持されています。時間をおいて、もう一度「次へ」を押してください。",
+        )
+        return
+
+    st.session_state[SAVED_DATA_KEY] = basic_info
+    st.session_state.pop(INPUT_SNAPSHOT_KEY, None)
+    st.session_state[ERRORS_KEY] = {}
+    st.session_state[SAVE_MESSAGE_KEY] = (
+        "基本情報を保存しました。"
+        "続けて希望条件を入力してください。"
+    )
+
+    navigate_to_page("hope_conditions")
+
+
 @st.fragment
 def render_basic_info_page() -> None:
     """基本情報の入力画面を表示する。"""
+    if take_save_request("basic_info"):
+        _save_and_continue()
 
     apply_self_discovery_theme(current_step=1)
 
@@ -833,12 +908,12 @@ def render_basic_info_page() -> None:
             unsafe_allow_html=True,
         )
 
-        submitted = st.form_submit_button(
+        st.form_submit_button(
             "次へ →",
             type="primary",
             use_container_width=True,
             key="basic_next",
-            on_click=capture_basic_info_input,
+            on_click=request_basic_save,
         )
 
 
@@ -915,69 +990,4 @@ def render_basic_info_page() -> None:
 
         rerun_current_page()
 
-    if not submitted:
-        return
-
-    st.session_state[
-        NEAREST_STATION_PLACE_ID_KEY
-    ] = selected_station_place_id_in_form
-
-    (
-        selected_station_name,
-        selected_station_place_id,
-    ) = get_selected_station_values()
-
-    st.session_state[NEAREST_STATION_KEY] = (
-        selected_station_name
-    )
-
-    try:
-        save_basic_info_draft(build_current_form_values())
-    except Exception:
-        render_save_failure(
-            "基本情報の下書き",
-            recovery="この画面の入力内容は保持しています。画面を閉じず、接続が戻ってからもう一度「次へ」を押してください。",
-        )
-        return
-
-
-    basic_info, validation_errors = validate_basic_info(
-        st.session_state[FAMILY_NAME_KEY],
-        st.session_state[GIVEN_NAME_KEY],
-        st.session_state[GENDER_KEY],
-        st.session_state[BIRTH_YEAR_KEY],
-        st.session_state[BIRTH_MONTH_KEY],
-        st.session_state[BIRTH_DAY_KEY],
-        st.session_state[PREFECTURE_KEY],
-        st.session_state[MUNICIPALITY_KEY],
-        st.session_state[NEAREST_STATION_KEY],
-        st.session_state[
-            NEAREST_STATION_PLACE_ID_KEY
-        ],
-    )
-
-    st.session_state[ERRORS_KEY] = validation_errors
-
-    if validation_errors:
-        rerun_current_page()
-
-    assert basic_info is not None
-
-    try:
-        save_basic_info(basic_info)
-    except Exception:
-        render_save_failure(
-            "基本情報",
-            recovery="入力内容は下書きとして保持されています。時間をおいて、もう一度「次へ」を押してください。",
-        )
-        return
-
-    st.session_state[SAVED_DATA_KEY] = basic_info
-    st.session_state.pop(INPUT_SNAPSHOT_KEY, None)
-    st.session_state[ERRORS_KEY] = {}
-    st.session_state[SAVE_MESSAGE_KEY] = (
-        "基本情報を保存しました。"
-        "続けて希望条件を入力してください。"
-    )
-
-    navigate_to_page("hope_conditions")
+    render_deferred_save_failure("basic_info")

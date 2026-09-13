@@ -1,5 +1,7 @@
 """職務経歴の入力チェック・保存を担当する。"""
 
+from database.operation import database_operation
+
 from models import (
     Career,
     CareerHistory,
@@ -86,6 +88,7 @@ def validate_careers(
     return errors
 
 
+@database_operation
 def save_career_data(
     career_items: list[
         tuple[
@@ -129,6 +132,7 @@ def save_career_data(
     return []
 
 
+@database_operation
 def load_career_data(
 ) -> list[
     tuple[

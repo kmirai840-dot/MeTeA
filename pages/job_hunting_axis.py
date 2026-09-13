@@ -1,8 +1,10 @@
 """就活の軸画面の表示を担当するモジュール。"""
 
+from database.operation import database_operation
+
 from html import escape
 import streamlit as st
-from ui.page_execution import navigate_to_page, rerun_current_page
+from ui.page_execution import (navigate_to_page, rerun_current_page, request_save, take_save_request, defer_save_failure, render_deferred_save_failure)
 
 from pages.self_discovery_theme import apply_self_discovery_theme
 
@@ -81,6 +83,7 @@ def dict_to_axis(
     )
 
 
+@database_operation
 def initialize_job_hunting_axis_state() -> None:
     """下書きまたは正式保存データを画面へ復元する。"""
 
@@ -526,9 +529,37 @@ def render_regenerate_controls() -> None:
             rerun_current_page()
 
 
+def _save_and_continue() -> None:
+    try:
+        current_axes = st.session_state.get(
+            AXES_STATE_KEY,
+            [],
+        )
+
+        errors = save_job_hunting_axis_data(
+            current_axes
+        )
+
+        if errors:
+            set_axis_form_errors(errors)
+            return
+
+        else:
+            clear_axis_errors()
+            navigate_to_page("career")
+
+    except Exception:
+        defer_save_failure("job_hunting_axis",
+            "就活の軸",
+            recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「この内容で確定して次へ」を押してください。",
+        )
+
+
 @st.fragment
 def render_job_hunting_axis_page() -> None:
     """就活の軸画面を表示する。"""
+    if take_save_request("job_hunting_axis"):
+        _save_and_continue()
 
     apply_self_discovery_theme(current_step=4)
 
@@ -920,35 +951,15 @@ def render_job_hunting_axis_page() -> None:
                 )
 
     with action_columns[2]:
-        if st.button(
+        st.button(
             "この内容で確定して次へ →",
             key="job_hunting_axis_save",
             use_container_width=True,
             type="primary",
-        ):
-            try:
-                current_axes = st.session_state.get(
-                    AXES_STATE_KEY,
-                    [],
-                )
-                
-                errors = save_job_hunting_axis_data(
-                    current_axes
-                )
-
-                if errors:
-                    set_axis_form_errors(errors)
-                    rerun_current_page()
-
-                else:
-                    clear_axis_errors()
-                    navigate_to_page("career")
-
-            except Exception:
-                render_save_failure(
-                    "就活の軸",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「この内容で確定して次へ」を押してください。",
-                )
+            on_click=request_save,
+            args=("job_hunting_axis",),
+        )
+        render_deferred_save_failure("job_hunting_axis")
 
     message = st.session_state.pop(
         MESSAGE_KEY,

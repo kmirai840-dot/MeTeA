@@ -1,5 +1,7 @@
 """希望条件の下書き保存・正式保存・取得を担当する。"""
 
+from database.operation import database_operation
+
 from database.repositories.draft_repository import (
     get_draft,
     save_draft,
@@ -20,6 +22,7 @@ from services.job_matching_cache_service import (
 HOPE_CONDITIONS_FORM_NAME = "hope_conditions"
 
 
+@database_operation
 def save_hope_conditions_draft(
     draft_data: dict[str, object],
 ) -> None:
@@ -32,6 +35,7 @@ def save_hope_conditions_draft(
     )
 
 
+@database_operation
 def load_hope_conditions_draft() -> dict[str, object] | None:
     """希望条件の入力途中データを取得する。"""
 
@@ -41,6 +45,7 @@ def load_hope_conditions_draft() -> dict[str, object] | None:
     )
 
 
+@database_operation
 def save_hope_conditions_data(
     hope_condition: HopeCondition,
     items: list[HopeConditionItem],
@@ -79,6 +84,7 @@ def save_hope_conditions_data(
         )
 
 
+@database_operation
 def load_hope_conditions_data(
 ) -> tuple[HopeCondition | None, list[HopeConditionItem]]:
     """正式保存済みの希望条件を取得する。"""

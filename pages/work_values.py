@@ -1,11 +1,13 @@
 """価値観入力画面。"""
 
+from database.operation import database_operation
+
 import base64
 from html import escape
 from pathlib import Path
 
 import streamlit as st
-from ui.page_execution import navigate_to_page, rerun_current_page
+from ui.page_execution import (navigate_to_page, rerun_current_page, request_save, take_save_request, defer_save_failure, render_deferred_save_failure)
 
 from constants.work_values import (
     IMPORTANT_VALUE_OPTIONS,
@@ -260,6 +262,7 @@ def _initialize_environment_reason_fields() -> None:
         st.session_state[ENVIRONMENT_REASON_FIELDS[0][0]] = existing_text
 
 
+@database_operation
 def initialize_work_values_state() -> None:
     """一時保存または正式保存済み回答を画面へ復元する。"""
 
@@ -1116,9 +1119,127 @@ def work_style_section(
                         unsafe_allow_html=True,
                     )
 
+def _save_and_continue() -> None:
+    draft_data = collect_work_values_draft()
+    try:
+        save_work_values_draft(draft_data)
+    except Exception:
+        defer_save_failure("work_values",
+            "価値観",
+            recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
+        )
+        return
+
+    validation_errors = validate_work_values_form()
+    st.session_state[WORK_VALUES_ERRORS_KEY] = validation_errors
+
+    if validation_errors:
+        return
+
+    rankings: list[WorkValueRanking] = []
+
+    ranking_groups = [
+        (
+            "important_value",
+            IMPORTANT_VALUE_OPTIONS,
+        ),
+        (
+            "rewarding_scene",
+            REWARDING_SCENE_OPTIONS,
+        ),
+        (
+            "strength_environment",
+            STRENGTH_ENVIRONMENT_OPTIONS,
+        ),
+    ]
+
+    for question_type, _ in ranking_groups:
+        for priority_rank in range(1, 4):
+            selected_value = st.session_state.get(
+                f"{question_type}_{priority_rank}"
+            )
+
+            if selected_value:
+                custom_value = None
+
+                if selected_value == "その他":
+                    custom_value = st.session_state.get(
+                        (
+                            f"{question_type}_"
+                            f"{priority_rank}_custom"
+                        ),
+                        "",
+                    )
+
+                rankings.append(
+                    WorkValueRanking(
+                        question_type=question_type,
+                        selected_value=selected_value,
+                        priority_rank=priority_rank,
+                        custom_value=custom_value,
+                    )
+                )
+
+    details = [
+        WorkValueDetail(
+            detail_type="rewarding_experience",
+            detail_text=_compose_rewarding_experience(),
+        ),
+        WorkValueDetail(
+            detail_type="environment_reason",
+            detail_text=_compose_environment_reason(),
+        ),
+    ]
+
+    work_style_answers: list[WorkStyleAnswer] = []
+
+    for question in WORK_STYLE_QUESTIONS:
+        answer_score = st.session_state.get(
+            "work_style_"
+            f"{question['question_type']}"
+        )
+        if answer_score is None:
+            continue
+        work_style_answers.append(
+            WorkStyleAnswer(
+                question_type=question[
+                    "question_type"
+                ],
+                answer_score=answer_score,
+            )
+        )
+
+    try:
+        save_errors = save_work_values_data(
+            rankings=rankings,
+            details=details,
+            work_style_answers=work_style_answers,
+        )
+    except Exception:
+        defer_save_failure("work_values",
+            "価値観",
+            recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
+        )
+        return
+
+    if save_errors:
+        defer_save_failure("work_values",
+            "価値観",
+            recovery="入力内容を確認して、もう一度「保存して次へ」を押してください。",
+        )
+
+    else:
+        st.session_state[WORK_VALUES_ERRORS_KEY] = {}
+        st.session_state.pop("job_hunting_axes_loaded", None)
+        st.session_state.pop("job_hunting_axes", None)
+        navigate_to_page("job_hunting_axis")
+
+
 @st.fragment
 def show_page() -> None:
     """価値観入力画面を表示する。"""
+    if take_save_request("work_values"):
+        _save_and_continue()
 
     apply_self_discovery_theme(current_step=3)
 
@@ -1432,123 +1553,12 @@ def show_page() -> None:
                 )
 
     with action_columns[2]:
-        if st.button(
+        st.button(
             "保存して次へ →",
             key="work_values_save",
             type="primary",
             use_container_width=True,
-        ):
-            # 基本情報・希望条件と同様に、下書き保存後に必須確認を行う。
-            draft_data = collect_work_values_draft()
-            try:
-                save_work_values_draft(draft_data)
-            except Exception:
-                render_save_failure(
-                    "価値観",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
-                )
-                return
-
-            validation_errors = validate_work_values_form()
-            st.session_state[WORK_VALUES_ERRORS_KEY] = validation_errors
-
-            if validation_errors:
-                rerun_current_page()
-
-            rankings: list[WorkValueRanking] = []
-
-            ranking_groups = [
-                (
-                    "important_value",
-                    IMPORTANT_VALUE_OPTIONS,
-                ),
-                (
-                    "rewarding_scene",
-                    REWARDING_SCENE_OPTIONS,
-                ),
-                (
-                    "strength_environment",
-                    STRENGTH_ENVIRONMENT_OPTIONS,
-                ),
-            ]
-
-            for question_type, _ in ranking_groups:
-                for priority_rank in range(1, 4):
-                    selected_value = st.session_state.get(
-                        f"{question_type}_{priority_rank}"
-                    )
-
-                    if selected_value:
-                        custom_value = None
-
-                        if selected_value == "その他":
-                            custom_value = st.session_state.get(
-                                (
-                                    f"{question_type}_"
-                                    f"{priority_rank}_custom"
-                                ),
-                                "",
-                            )
-
-                        rankings.append(
-                            WorkValueRanking(
-                                question_type=question_type,
-                                selected_value=selected_value,
-                                priority_rank=priority_rank,
-                                custom_value=custom_value,
-                            )
-                        )
-
-            details = [
-                WorkValueDetail(
-                    detail_type="rewarding_experience",
-                    detail_text=_compose_rewarding_experience(),
-                ),
-                WorkValueDetail(
-                    detail_type="environment_reason",
-                    detail_text=_compose_environment_reason(),
-                ),
-            ]
-
-            work_style_answers: list[WorkStyleAnswer] = []
-
-            for question in WORK_STYLE_QUESTIONS:
-                answer_score = st.session_state.get(
-                    "work_style_"
-                    f"{question['question_type']}"
-                )
-                if answer_score is None:
-                    continue
-                work_style_answers.append(
-                    WorkStyleAnswer(
-                        question_type=question[
-                            "question_type"
-                        ],
-                        answer_score=answer_score,
-                    )
-                )
-
-            try:
-                save_errors = save_work_values_data(
-                    rankings=rankings,
-                    details=details,
-                    work_style_answers=work_style_answers,
-                )
-            except Exception:
-                render_save_failure(
-                    "価値観",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
-                )
-                return
-
-            if save_errors:
-                render_save_failure(
-                    "価値観",
-                    recovery="入力内容を確認して、もう一度「保存して次へ」を押してください。",
-                )
-
-            else:
-                st.session_state[WORK_VALUES_ERRORS_KEY] = {}
-                st.session_state.pop("job_hunting_axes_loaded", None)
-                st.session_state.pop("job_hunting_axes", None)
-                navigate_to_page("job_hunting_axis")
+            on_click=request_save,
+            args=("work_values",),
+        )
+        render_deferred_save_failure("work_values")

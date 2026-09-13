@@ -27,3 +27,22 @@ def resolve_current_page() -> str:
         del st.session_state[PENDING_PAGE_KEY]
         return pending
     return st.query_params.get("page", "home")
+
+
+def request_save(form: str) -> None:
+    st.session_state[f"metea_save_requested_{form}"] = True
+
+
+def take_save_request(form: str) -> bool:
+    return st.session_state.pop(f"metea_save_requested_{form}", False)
+
+
+def defer_save_failure(form: str, label: str, *, recovery: str) -> None:
+    st.session_state[f"metea_save_failure_{form}"] = (label, recovery)
+
+
+def render_deferred_save_failure(form: str) -> None:
+    from ui.design_system import render_save_failure
+    failure = st.session_state.pop(f"metea_save_failure_{form}", None)
+    if failure:
+        render_save_failure(failure[0], recovery=failure[1])

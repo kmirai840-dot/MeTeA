@@ -1,5 +1,7 @@
 """職務経歴入力画面。"""
 
+from database.operation import database_operation
+
 from dataclasses import replace
 
 import streamlit as st
@@ -469,6 +471,7 @@ def render_career_field_error(keyword: str) -> None:
 # 初期化
 # ==========================================
 
+@database_operation
 def initialize_career_state() -> None:
     """職務経歴画面で使用する状態を初期化する。"""
 

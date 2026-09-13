@@ -1,5 +1,7 @@
 """基本情報の入力確認とデータ作成を担当する。"""
 
+from database.operation import database_operation
+
 from datetime import date
 
 from data.master_data import GENDER_LABELS, PREFECTURES
@@ -155,6 +157,7 @@ def validate_basic_info(
     return basic_info, {}
 
 
+@database_operation
 def save_basic_info_draft(
     draft_data: dict[str, object],
 ) -> None:
@@ -167,6 +170,7 @@ def save_basic_info_draft(
     )
 
 
+@database_operation
 def load_basic_info_draft() -> dict[str, object] | None:
     """基本情報の入力途中データを取得する。"""
 
@@ -176,6 +180,7 @@ def load_basic_info_draft() -> dict[str, object] | None:
     )
 
 
+@database_operation
 def save_basic_info(
     basic_info: BasicInfo,
 ) -> None:
@@ -205,6 +210,7 @@ def save_basic_info(
         )
 
 
+@database_operation
 def load_basic_info() -> BasicInfo | None:
     """正式保存済みの基本情報を取得する。"""
 

@@ -1,5 +1,7 @@
 """価値観回答の入力確認・保存・取得を担当する。"""
 
+from database.operation import database_operation
+
 from collections import defaultdict
 from database.repositories.home_activity_repository import save_general_activity
 
@@ -299,6 +301,7 @@ def validate_work_style_answers(
     return validated_answers, []
 
 
+@database_operation
 def save_work_values_data(
     rankings: list[WorkValueRanking],
     details: list[WorkValueDetail],
@@ -375,6 +378,7 @@ def save_work_values_data(
     return []
 
 
+@database_operation
 def load_work_values_data(
 ) -> tuple[
     list[WorkValueRanking],
@@ -388,6 +392,7 @@ def load_work_values_data(
     )
 
 
+@database_operation
 def save_work_values_draft(
     draft_data: dict[str, object],
 ) -> None:
@@ -400,6 +405,7 @@ def save_work_values_draft(
     )
 
 
+@database_operation
 def load_work_values_draft(
 ) -> dict[str, object] | None:
     """価値観画面の入力途中データを取得する。"""

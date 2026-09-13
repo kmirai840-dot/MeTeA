@@ -1,5 +1,7 @@
 """就活の軸の入力確認・保存・取得を担当する。"""
 
+from database.operation import database_operation
+
 from database.repositories.draft_repository import (
     get_draft,
     save_draft,
@@ -120,6 +122,7 @@ def load_job_hunting_axis_draft(
     )
 
 
+@database_operation
 def save_job_hunting_axis_data(
     axes: list[JobHuntingAxis],
 ) -> list[str]:
@@ -164,6 +167,7 @@ def save_job_hunting_axis_data(
     return []
 
 
+@database_operation
 def load_job_hunting_axis_data(
 ) -> list[JobHuntingAxis]:
     """正式保存済みの就活の軸を取得する。"""

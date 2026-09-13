@@ -147,7 +147,7 @@ def resolve_google_user(claims: Mapping, invitations: frozenset[str] | None, *, 
         connection.close()
 
 
-def require_account_enabled(user_id: int, invitations: frozenset[str]) -> None:
+def require_account_enabled(user_id: int, invitations: frozenset[str] | None, *, subject: str | None = None) -> None:
     """業務Repositoryでも無効化・招待解除を確認。バックグラウンド処理を含む。"""
     connection = get_connection()
     try:
@@ -157,6 +157,7 @@ def require_account_enabled(user_id: int, invitations: frozenset[str]) -> None:
         ).fetchone()
         if (row is None or not row["is_active"] or row["deleted_at"] is not None
                 or row["auth_provider"] != "google" or not row["auth_subject"] or not row["email_verified"]
+                or (subject is not None and row["auth_subject"] != subject)
                 or (invitations is not None and str(row["email"] or "").casefold() not in invitations)):
             raise LoginDenied("このアカウントは現在利用できません。")
     finally:
@@ -169,6 +170,23 @@ def logout_google_user() -> None:
     clear_current_user_id()
     st.query_params.clear()
     st.logout()
+
+
+VERIFIED_GOOGLE_CLAIMS_KEY = "metea_verified_google_claims"
+
+
+def verified_claims_signature(claims: Mapping) -> dict:
+    return {key: claims.get(key) for key in ('iss', 'sub', 'email', 'email_verified', 'name', 'picture')}
+
+
+def reuse_verified_session(claims: Mapping, invitations, state) -> int | None:
+    """同じ検証済みGoogle本人なら登録処理を省き、有効性は必ず再確認する。"""
+    from services.current_user_service import CURRENT_USER_SESSION_KEY
+    user_id = state.get(CURRENT_USER_SESSION_KEY)
+    if not user_id or state.get(VERIFIED_GOOGLE_CLAIMS_KEY) != verified_claims_signature(claims):
+        return None
+    require_account_enabled(user_id, invitations, subject=claims.get('sub'))
+    return user_id
 
 
 def require_google_user() -> None:
@@ -194,13 +212,17 @@ def require_google_user() -> None:
             st.login("google")
         st.stop()
     try:
-        initialize_database()
         entered_code = st.session_state.pop("metea_pending_invite_code", None)
-        if entered_code is None:
-            user_id = resolve_google_user(dict(st.user), invitations)
-        else:
-            user_id = resolve_google_user(dict(st.user), invitations, invitation_code=entered_code)
+        claims = dict(st.user)
+        user_id = reuse_verified_session(claims, invitations, st.session_state) if entered_code is None else None
+        if user_id is None:
+            initialize_database()
+            if entered_code is None:
+                user_id = resolve_google_user(claims, invitations)
+            else:
+                user_id = resolve_google_user(claims, invitations, invitation_code=entered_code)
         set_current_user_id(user_id)
+        st.session_state[VERIFIED_GOOGLE_CLAIMS_KEY] = verified_claims_signature(claims)
     except InvitationRequired as error:
         from services.current_user_service import CURRENT_USER_SESSION_KEY
         if CURRENT_USER_SESSION_KEY in st.session_state:

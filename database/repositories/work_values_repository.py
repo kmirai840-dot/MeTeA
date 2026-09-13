@@ -62,9 +62,7 @@ def save_work_values(
         )
 
         # 順位付き回答を新しい正式データとして登録する
-        for ranking in rankings:
-            connection.execute(
-                """
+        connection.executemany("""
                 INSERT INTO user_work_value_rankings (
                     user_id,
                     question_type,
@@ -73,51 +71,33 @@ def save_work_values(
                     custom_value
                 )
                 VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    user_id,
-                    ranking.question_type,
-                    ranking.selected_value,
-                    ranking.priority_rank,
-                    ranking.custom_value,
-                ),
-            )
+                """, [
+            (user_id, ranking.question_type, ranking.selected_value, ranking.priority_rank, ranking.custom_value) for ranking in rankings
+        ])
 
         # 自由記述回答を新しい正式データとして登録する
-        for detail in details:
-            connection.execute(
-                """
+        connection.executemany("""
                 INSERT INTO user_work_value_details (
                     user_id,
                     detail_type,
                     detail_text
                 )
                 VALUES (?, ?, ?)
-                """,
-                (
-                    user_id,
-                    detail.detail_type,
-                    detail.detail_text,
-                ),
-            )
+                """, [
+            (user_id, detail.detail_type, detail.detail_text) for detail in details
+        ])
 
         # 仕事の進め方回答を新しい正式データとして登録する
-        for answer in work_style_answers:
-            connection.execute(
-                """
+        connection.executemany("""
                 INSERT INTO user_work_style_answers (
                     user_id,
                     question_type,
                     answer_score
                 )
                 VALUES (?, ?, ?)
-                """,
-                (
-                    user_id,
-                    answer.question_type,
-                    answer.answer_score,
-                ),
-            )
+                """, [
+            (user_id, answer.question_type, answer.answer_score) for answer in work_style_answers
+        ])
 
         # 正式保存が成功したため、価値観画面の下書きを削除する
         connection.execute(

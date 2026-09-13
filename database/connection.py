@@ -16,7 +16,17 @@ def get_database_path() -> Path:
     return DEFAULT_DATABASE_PATH
 
 
-def get_connection() -> sqlite3.Connection:
+def get_connection():
+    from database.operation import current_operation, BorrowedConnection
+    operation = current_operation()
+    if operation is not None:
+        if operation.connection is None:
+            operation.connection = _open_connection()
+        return BorrowedConnection(operation)
+    return _open_connection()
+
+
+def _open_connection() -> sqlite3.Connection:
     """明示した保存先へ接続する。接続失敗時に別DBへ戻さない。"""
 
     backend = os.getenv('METEA_DATABASE_BACKEND', 'sqlite').strip().lower()

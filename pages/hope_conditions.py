@@ -1,8 +1,10 @@
 """希望条件画面の表示を担当するモジュール。"""
 
+from database.operation import database_operation
+
 from datetime import date
 import streamlit as st
-from ui.page_execution import navigate_to_page, rerun_current_page
+from ui.page_execution import (navigate_to_page, rerun_current_page, request_save, take_save_request, defer_save_failure, render_deferred_save_failure)
 
 from data.master_data import (
     AGE_GROUP_OPTIONS,
@@ -40,6 +42,7 @@ PRIORITY_LABELS_WITHOUT_NO_PREFERENCE = {
 }
 
 
+@database_operation
 def initialize_hope_conditions_state() -> None:
     """下書きまたは正式保存データを画面へ復元する。"""
 
@@ -814,9 +817,46 @@ def priority_requires_value(priority_key: str) -> bool:
     return st.session_state.get(priority_key, "no_preference") != "no_preference"
 
 
+def _save_and_continue() -> None:
+    try:
+        # 基本情報と同様、入力値を下書きへ退避してから検証する。
+        draft_data = collect_hope_conditions_draft()
+        save_hope_conditions_draft(draft_data)
+
+        validation_errors = validate_hope_conditions()
+        st.session_state[ERRORS_KEY] = validation_errors
+
+        if validation_errors:
+            return
+
+        hope_condition = build_hope_condition()
+        hope_condition_items = (
+            build_hope_condition_items()
+        )
+
+        save_hope_conditions_data(
+            hope_condition,
+            hope_condition_items,
+        )
+
+        st.session_state[DRAFT_MESSAGE_KEY] = (
+            "希望条件を保存しました。"
+        )
+        st.session_state[ERRORS_KEY] = {}
+        navigate_to_page("work_values")
+
+    except Exception:
+        defer_save_failure("hope_conditions",
+            "希望条件",
+            recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
+        )
+
+
 @st.fragment
 def render_hope_conditions_page() -> None:
     """希望条件の入力画面を表示する。"""
+    if take_save_request("hope_conditions"):
+        _save_and_continue()
 
     apply_self_discovery_theme(current_step=2)
 
@@ -1905,44 +1945,15 @@ def render_hope_conditions_page() -> None:
                 )
 
     with action_columns[2]:
-        if st.button(
+        st.button(
             "保存して次へ →",
             key="hope_conditions_save",
             use_container_width=True,
             type="primary",
-        ):
-            try:
-                # 基本情報と同様、入力値を下書きへ退避してから検証する。
-                draft_data = collect_hope_conditions_draft()
-                save_hope_conditions_draft(draft_data)
-
-                validation_errors = validate_hope_conditions()
-                st.session_state[ERRORS_KEY] = validation_errors
-
-                if validation_errors:
-                    rerun_current_page()
-
-                hope_condition = build_hope_condition()
-                hope_condition_items = (
-                    build_hope_condition_items()
-                )
-
-                save_hope_conditions_data(
-                    hope_condition,
-                    hope_condition_items,
-                )
-
-                st.session_state[DRAFT_MESSAGE_KEY] = (
-                    "希望条件を保存しました。"
-                )
-                st.session_state[ERRORS_KEY] = {}
-                navigate_to_page("work_values")
-
-            except Exception:
-                render_save_failure(
-                    "希望条件",
-                    recovery="入力中の内容は画面に残っています。時間をおいて、もう一度「保存して次へ」を押してください。",
-                )
+            on_click=request_save,
+            args=("hope_conditions",),
+        )
+        render_deferred_save_failure("hope_conditions")
 
     st.caption(
         "一時保存した内容はSQLiteへ保存されます。"

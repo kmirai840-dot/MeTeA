@@ -1,5 +1,7 @@
 """保存済み回答から、利用者が確認する就活の軸候補を作成する。"""
 
+from database.operation import database_operation
+
 from constants.work_values import (
     QUESTION_IMPORTANT_VALUE,
     QUESTION_REWARDING_SCENE,
@@ -191,6 +193,7 @@ def _hope_axis(
     )
 
 
+@database_operation
 def suggest_job_hunting_axes() -> list[JobHuntingAxis]:
     """希望条件・価値観から、確認前の軸候補を最大3件作る。"""
 

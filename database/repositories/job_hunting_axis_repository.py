@@ -28,9 +28,7 @@ def save_job_hunting_axes(
         )
 
         # 現在の画面内容を新しい正式データとして登録する
-        for axis in axes:
-            connection.execute(
-                """
+        connection.executemany("""
                 INSERT INTO user_job_hunting_axes (
                     user_id,
                     axis_title,
@@ -39,15 +37,9 @@ def save_job_hunting_axes(
                     source_type
                 )
                 VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    user_id,
-                    axis.axis_title,
-                    axis.axis_description,
-                    axis.priority_rank,
-                    axis.source_type,
-                ),
-            )
+                """, [
+            (user_id, axis.axis_title, axis.axis_description, axis.priority_rank, axis.source_type) for axis in axes
+        ])
 
         # 正式保存が成功したため、下書きを削除する
         connection.execute(

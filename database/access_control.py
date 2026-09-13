@@ -15,7 +15,14 @@ def require_user_id(user_id: int | None = None) -> int:
     from services.google_auth_service import auth_mode, allowed_emails, access_invitations, require_account_enabled
     if auth_mode() == "google":
         import streamlit as st
-        require_account_enabled(current, access_invitations(st.secrets))
+        from database.operation import current_operation
+        operation = current_operation()
+        invitations = access_invitations(st.secrets)
+        check_key = (current, invitations)
+        if operation is None or check_key not in operation.checked_users:
+            require_account_enabled(current, invitations)
+            if operation is not None:
+                operation.checked_users.add(check_key)
     return current
 
 

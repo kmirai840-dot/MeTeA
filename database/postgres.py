@@ -135,8 +135,14 @@ class PostgresConnection:
         return Cursor(cursor, last_id)
 
     def executemany(self, statement, parameters):
-        for values in parameters:
-            self.execute(statement, values)
+        # 戻りIDが不要な一括登録はpsycopgのパイプラインでまとめて送る。
+        self._prepare()
+        query = translate_sql(statement, True)
+        try:
+            with self.raw.cursor() as cursor:
+                cursor.executemany(query, (tuple(map(encode_value, row)) for row in parameters))
+        except psycopg.IntegrityError:
+            raise sqlite3.IntegrityError('データの一意制約または参照制約に違反しました。') from None
 
     def commit(self):
         self.raw.commit()
