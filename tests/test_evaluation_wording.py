@@ -8,6 +8,7 @@ class EvaluationWordingTest(unittest.TestCase):
         self.assertEqual(len(result.splitlines()),2)
         self.assertIn('希望する雇用形態「正社員」と求人の雇用形態「正社員」が一致しています',result)
         self.assertEqual(normalize(result),result)
+        self.assertEqual(normalize(text.replace('必須条件と合致します。','必要条件を満たすため。')),result)
 
     def test_preserves_distinct_or_uncertain_conditions(self):
         base='・雇用形態：希望する雇用形態「正社員」と求人の雇用形態「正社員」が一致しています'

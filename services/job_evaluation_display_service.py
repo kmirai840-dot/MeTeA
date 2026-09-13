@@ -20,7 +20,7 @@ def normalize_matching_points(text: str) -> str:
         line = re.sub(r'求人の雇用形態「([^」]+)」は、希望する雇用形態に含まれています', r'希望する雇用形態「\1」と求人の雇用形態「\1」が一致しています', line)
         title, separator, reason = line.lstrip(' ・●-').partition('：')
         if (separator and title.strip() == employment and '雇用形態' in reason
-                and employment in reason and ('合致' in reason or '一致' in reason)
+                and employment in reason and any(word in reason for word in ('合致', '一致', '満たす', '満たしています'))
                 and not any(word in reason for word in ('不一致', '一部一致', '登用', '試用', '転換'))):
             continue
         result.append(line)
