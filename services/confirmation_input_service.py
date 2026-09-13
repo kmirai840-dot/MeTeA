@@ -4,6 +4,7 @@ from datetime import time
 
 OTHER = 'その他（補足に記載）'
 UNKNOWN = '確認できなかった'
+DETAIL = '確認できた（補足に記載）'
 CHOICES = {
     '転勤条件': ['転勤なし', '転勤あり', '条件付きで転勤あり'],
     'シフト勤務': ['シフト勤務なし', 'シフト勤務あり'],
@@ -15,6 +16,22 @@ CHOICES = {
 }
 for name in ('在宅勤務', 'リモートワーク', 'フレックスタイム制度', '副業', '研修制度', '資格取得支援', '試用期間'):
     CHOICES[name] = ['あり', 'なし', '条件付きであり']
+# AIが表示する項目名の表記にも、同じ選択肢を適用する。
+for alias, original in {
+    '土曜日': '土曜日休日希望', '土曜日休日': '土曜日休日希望',
+    '服装・髪型自由': '服装・髪型自由希望', '服装・髪型': '服装・髪型自由希望',
+    '転勤': '転勤条件',
+}.items():
+    CHOICES[alias] = CHOICES[original]
+CHOICES['未経験・第二新卒歓迎'] = ['未経験者・第二新卒ともに応募可能', '未経験者は応募可能', '第二新卒は応募可能', '実務経験が必要']
+CHOICES['老舗・安定企業'] = ['設立から20年以上', '設立から10年以上20年未満', '設立から10年未満']
+
+
+def choices_for(name):
+    # 個別の候補がない項目も、確認状況を選択して事実を補足できる。
+    return CHOICES.get(name, [DETAIL]) + [UNKNOWN, OTHER]
+
+
 NUMBERS = {'残業時間': ('月平均・時間', 744), '年間休日数': ('日／年', 366),
            '年収': ('万円／年', None), '電車移動時間': ('片道・分', None)}
 TIMES = {'始業時刻', '終業時刻'}
@@ -24,7 +41,7 @@ def input_kind(name):
     if name in CHOICES: return 'choice'
     if name in NUMBERS: return 'number'
     if name in TIMES: return 'time'
-    return 'text'
+    return 'choice'
 
 
 def restore_input(name, saved):
@@ -33,7 +50,7 @@ def restore_input(name, saved):
     prefix = name + '：'
     raw = first[len(prefix):] if first.startswith(prefix) else first
     kind = input_kind(name)
-    if kind == 'choice' and raw in CHOICES[name] + [UNKNOWN, OTHER]:
+    if kind == 'choice' and raw in choices_for(name):
         return raw, notes
     if first.startswith(prefix) and kind == 'number':
         suffix = ' ' + NUMBERS[name][0]
@@ -53,9 +70,9 @@ def format_input(name, value, notes):
     if kind == 'text': return notes
     if kind == 'choice':
         if value is None: raise ValueError('確認結果を選択してください。')
-        if value not in CHOICES[name] + [UNKNOWN, OTHER]: raise ValueError('選択肢を確認してください。')
-        if value == OTHER:
-            if not notes: raise ValueError('その他の確認結果を補足に入力してください。')
+        if value not in choices_for(name): raise ValueError('選択肢を確認してください。')
+        if value in {OTHER, DETAIL}:
+            if not notes: raise ValueError('確認した具体的な内容を補足に入力してください。')
             return notes
         raw = value
     elif value is None:

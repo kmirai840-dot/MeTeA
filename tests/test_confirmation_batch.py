@@ -50,3 +50,14 @@ render_batch_confirmation_form(10,[dict(item_key='a',item_name='転勤条件',re
             app.button[0].click().run()
             self.assertTrue(app.error)
             save.assert_not_called()
+
+    def test_public_company_items_have_selectors_in_single_form(self):
+        script = """from ui.job_confirmation_results import render_batch_confirmation_form
+names=['土曜日','服装・髪型自由','未経験・第二新卒歓迎','老舗・安定企業','独自項目']
+render_batch_confirmation_form(10,[dict(item_key=str(n),item_name=name,reason='') for n,name in enumerate(names)],[],[],lambda:None)
+"""
+        app=AppTest.from_string(script, default_timeout=30).run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.selectbox),5)
+        self.assertEqual(len(app.button),1)
+        self.assertTrue(all(field.value is None for field in app.selectbox))

@@ -16,7 +16,7 @@ class ConfirmationInputsTest(unittest.TestCase):
         value, notes = restore_input('転勤条件', old)
         self.assertEqual(value, OTHER)
         self.assertEqual(format_input('転勤条件', value, notes), old)
-        self.assertEqual(format_input('企業文化', None, old), old)
+        self.assertEqual(format_input('企業文化', OTHER, old), old)
         self.assertEqual(restore_input('残業時間', old), (None, old))
 
     def test_blank_is_not_saved_as_no_or_zero(self):
@@ -44,3 +44,16 @@ class ConfirmationInputsTest(unittest.TestCase):
             app = AppTest.from_string(f"from ui.job_confirmation_results import render_result_form\nrender_result_form(10,dict(item_key='k',item_name='{name}',item_reason='不明'))", default_timeout=10).run()
             self.assertFalse(app.exception)
             self.assertIsNone(getattr(app, widget)[0].value)
+
+    def test_public_item_names_use_choices_and_preserve_old_text(self):
+        from services.confirmation_input_service import input_kind, choices_for, DETAIL
+        for name in ['土曜日', '服装・髪型自由', '未経験・第二新卒歓迎', '老舗・安定企業', '独自の確認項目']:
+            self.assertEqual(input_kind(name), 'choice')
+            self.assertIsNone(restore_input(name, '')[0])
+            old = '以前に確認した内容をそのまま保持'
+            self.assertEqual(format_input(name, *restore_input(name, old)), old)
+        for name, value in [('土曜日','毎週土曜日が休み'),('服装・髪型自由','服装・髪型ともに規定あり'),('未経験・第二新卒歓迎','実務経験が必要'),('老舗・安定企業','設立から10年未満')]:
+            self.assertIn(value, choices_for(name))
+            self.assertEqual(restore_input(name, format_input(name, value, '')), (value, ''))
+        with self.assertRaises(ValueError): format_input('独自の確認項目', DETAIL, '')
+        self.assertEqual(format_input('独自の確認項目', DETAIL, '確認した事実'), '確認した事実')

@@ -1,7 +1,7 @@
 """確認結果を求人の追加情報として保存・編集する。"""
 import streamlit as st
 from services.job_confirmation_service import save_confirmation_result, restore_confirmation_item
-from services.confirmation_input_service import CHOICES, NUMBERS, OTHER, UNKNOWN, input_kind, restore_input, format_input
+from services.confirmation_input_service import CHOICES, NUMBERS, OTHER, UNKNOWN, choices_for, input_kind, restore_input, format_input
 from ui.job_evaluation_area import refresh_confirmation_area
 
 
@@ -12,7 +12,7 @@ def render_result_form(job_id, item):
             kind = input_kind(name)
             value, notes = restore_input(name, item.get('result_text', ''))
             if kind == 'choice':
-                options = CHOICES[name] + [UNKNOWN, OTHER]
+                options = choices_for(name)
                 value = st.selectbox('確認結果', options, index=options.index(value) if value in options else None,
                                      placeholder='確認した結果を選択してください')
             elif kind == 'number':
@@ -124,11 +124,13 @@ def _batch_fields(job_id, item, confirmed):
     with st.container(border=confirmed):
         st.markdown(f"**{'確認済み：' if confirmed else ''}{name}**")
         st.caption(item.get('reason', item.get('item_reason', '')))
+        if name == '老舗・安定企業':
+            st.caption('確認できた設立からの年数を選択してください。経営状況などは補足に記載できます。年数だけで経営の安定性を判断するものではありません。')
         with st.expander('確認結果を入力・編集', key=f"confirmation_form_{job_id}_{item['item_key']}"):
             value, notes = restore_input(name, item.get('result_text', ''))
             kind = input_kind(name)
             if kind == 'choice':
-                options = CHOICES[name] + [UNKNOWN, OTHER]
+                options = choices_for(name)
                 value = st.selectbox('確認結果', options, index=options.index(value) if value in options else None,
                                      placeholder='確認した結果を選択してください', key=prefix+'_value')
             elif kind == 'number':
