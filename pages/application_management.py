@@ -2019,7 +2019,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         st.session_state.pop("schedule_dialog_application_id", 0) or 0
     )
     if selected_application_id:
-        initial = next((view for view in all_views if view['application'].id == selected_application_id), None)
+        initial = next((view for view in views if view['application'].id == selected_application_id), None)
         _render_application_detail_dialog(selected_application_id, [initial] if initial else [])
 
 

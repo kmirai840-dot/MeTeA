@@ -6,6 +6,17 @@ from models import ApplicationRecord,Job
 from pages import application_management as page
 
 class ApplicationBatchTest(unittest.TestCase):
+ def test_table_opens_modal_with_its_own_row_snapshot(self):
+  detail=dict(application=ApplicationRecord(id=9,job_id=3),job=Job(company_name='テスト'),milestones=[],next_milestone=None)
+  page._test_table_views=[detail]
+  try:
+   with patch.object(page,'_render_application_detail_dialog') as opened:
+    app=AppTest.from_string("import streamlit as st\nfrom pages import application_management as p\nst.session_state['schedule_dialog_application_id']=9\np._render_application_table(p._test_table_views,'week')",default_timeout=30).run()
+    self.assertFalse(app.exception)
+    opened.assert_called_once_with(9,[detail])
+  finally:
+   del page._test_table_views
+
  def test_modal_consumes_list_snapshot_once_then_reads_fresh(self):
   detail=dict(application=ApplicationRecord(id=9,job_id=3),job=Job(company_name='テスト'),milestones=[])
   holder=[detail]
