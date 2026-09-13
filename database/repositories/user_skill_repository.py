@@ -17,9 +17,10 @@ def save_user_skills(user_id: int, text: str) -> None:
     user_id = require_user_id(user_id)
     connection = get_connection()
     try:
-        connection.execute("""INSERT INTO user_skills (user_id, skills_text) VALUES (?, ?)
+        # この表の主キーはuser_id。戻りID不要のAPIで、PG互換層のRETURNING id付加を避ける。
+        connection.executemany("""INSERT INTO user_skills (user_id, skills_text) VALUES (?, ?)
             ON CONFLICT (user_id) DO UPDATE SET skills_text=excluded.skills_text,
-            updated_at=CURRENT_TIMESTAMP""", (user_id, text))
+            updated_at=CURRENT_TIMESTAMP""", [(user_id, text)])
         connection.commit()
     except Exception:
         connection.rollback()
