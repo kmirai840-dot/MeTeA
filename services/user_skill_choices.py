@@ -8,7 +8,9 @@ SKILL_OPTIONS = (
     "Word：文書作成・書式設定", "PowerPoint：スライド作成",
     "Googleスプレッドシート：表作成・集計", "Googleドキュメント：文書作成",
     "Googleスライド：資料作成", "SQL：データ抽出・集計",
-    "Python：プログラミング", "HTML・CSS：Webページ作成",
+    "Python：プログラミング", "Java：プログラミング",
+    "GAS（Google Apps Script）：自動化・スクリプト作成",
+    "HTML・CSS：Webページ作成",
     "Canva：画像・資料作成", "Figma：画面デザイン",
 )
 HEADER = "【選択したスキル】\n"

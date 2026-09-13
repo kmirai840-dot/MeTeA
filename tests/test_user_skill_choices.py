@@ -4,6 +4,12 @@ from services.user_skill_choices import format_skill_choices, parse_skill_choice
 
 
 class SkillChoicesTest(unittest.TestCase):
+    def test_requested_languages_can_be_saved_and_restored(self):
+        values = ["Python：プログラミング", "SQL：データ抽出・集計", "Java：プログラミング", "Excel：マクロ・VBA", "GAS（Google Apps Script）：自動化・スクリプト作成"]
+        work, learning, notes = parse_skill_choices(format_skill_choices(values, [], ""))
+        self.assertEqual(set(work), set(values))
+        self.assertEqual(learning, [])
+
     def test_round_trip_and_legacy_preservation(self):
         notes = "独学で習得\nその他：社内ツール"
         text = format_skill_choices(["Excel：VLOOKUP"], ["Excel：ピボットテーブル"], notes)
