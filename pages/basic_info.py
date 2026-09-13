@@ -41,6 +41,8 @@ NEAREST_STATION_PLACE_ID_KEY = (
 )
 STATION_SEARCH_QUERY_KEY = "basic_station_search_query"
 STATION_CANDIDATES_KEY = "basic_station_candidates"
+INPUT_SNAPSHOT_KEY = "basic_input_snapshot"
+STATION_SELECTION_KEY = "basic_station_selection"
 
 # 入力チェックで作成されたエラーを取得するための識別名
 FAMILY_NAME_ERROR_KEY = "family_name"
@@ -207,12 +209,30 @@ def build_saved_form_values(
     }
 
 
+def capture_basic_info_input() -> None:
+    """送信コールバックで、認証の再確認より先に入力を退避する。"""
+    values = build_current_form_values()
+    selected = st.session_state.get(STATION_SELECTION_KEY)
+    for candidate in st.session_state.get(STATION_CANDIDATES_KEY, []):
+        if candidate["place_id"] == selected:
+            values[NEAREST_STATION_PLACE_ID_KEY] = selected
+            values[NEAREST_STATION_KEY] = candidate["station_name"]
+            st.session_state[NEAREST_STATION_PLACE_ID_KEY] = selected
+            st.session_state[NEAREST_STATION_KEY] = candidate["station_name"]
+            break
+    st.session_state[INPUT_SNAPSHOT_KEY] = values
+
+
 def initialize_basic_info_state() -> None:
     """基本情報画面で使う入力値を初期化する。"""
 
     saved_data = st.session_state.get(SAVED_DATA_KEY)
 
-    if isinstance(saved_data, BasicInfo):
+    if all(key in st.session_state for key in build_empty_form_values()):
+        defaults = {}
+    elif INPUT_SNAPSHOT_KEY in st.session_state:
+        defaults = build_draft_form_values(st.session_state[INPUT_SNAPSHOT_KEY])
+    elif isinstance(saved_data, BasicInfo):
         defaults = build_saved_form_values(saved_data)
     else:
         draft_data = load_basic_info_draft()
@@ -362,6 +382,7 @@ def get_selected_station_values() -> tuple[str, str]:
     return "", ""
 
 
+@st.fragment
 def render_basic_info_page() -> None:
     """基本情報の入力画面を表示する。"""
 
@@ -750,6 +771,7 @@ def render_basic_info_page() -> None:
                 st.form_submit_button(
                     "駅を検索",
                     use_container_width=True,
+                    on_click=capture_basic_info_input,
                 )
             )
 
@@ -784,6 +806,7 @@ def render_basic_info_page() -> None:
                     options=station_place_id_options,
                     index=station_select_index,
                     format_func=format_station_candidate,
+                    key=STATION_SELECTION_KEY,
                 )
             )
 
@@ -814,6 +837,7 @@ def render_basic_info_page() -> None:
             type="primary",
             use_container_width=True,
             key="basic_next",
+            on_click=capture_basic_info_input,
         )
 
 
@@ -833,7 +857,7 @@ def render_basic_info_page() -> None:
             st.session_state[ERRORS_KEY][
                 NEAREST_STATION_ERROR_KEY
             ] = "検索する駅名を入力してください"
-            st.rerun()
+            st.rerun(scope="fragment")
 
         try:
             station_candidates = search_station_candidates(
@@ -848,7 +872,7 @@ def render_basic_info_page() -> None:
             st.session_state[ERRORS_KEY][
                 NEAREST_STATION_ERROR_KEY
             ] = str(error)
-            st.rerun()
+            st.rerun(scope="fragment")
 
         if not station_candidates:
             st.session_state[STATION_CANDIDATES_KEY] = []
@@ -862,7 +886,7 @@ def render_basic_info_page() -> None:
                 "該当する駅が見つかりませんでした。"
                 "駅名を確認して、もう一度検索してください"
             )
-            st.rerun()
+            st.rerun(scope="fragment")
 
         st.session_state[STATION_CANDIDATES_KEY] = [
             {
@@ -888,7 +912,7 @@ def render_basic_info_page() -> None:
             None,
         )
 
-        st.rerun()
+        st.rerun(scope="fragment")
 
     if not submitted:
         return
@@ -906,9 +930,14 @@ def render_basic_info_page() -> None:
         selected_station_name
     )
 
-    save_basic_info_draft(
-        build_current_form_values(),
-    )
+    try:
+        save_basic_info_draft(build_current_form_values())
+    except Exception:
+        render_save_failure(
+            "基本情報の下書き",
+            recovery="この画面の入力内容は保持しています。画面を閉じず、接続が戻ってからもう一度「次へ」を押してください。",
+        )
+        return
 
 
     basic_info, validation_errors = validate_basic_info(
@@ -929,7 +958,7 @@ def render_basic_info_page() -> None:
     st.session_state[ERRORS_KEY] = validation_errors
 
     if validation_errors:
-        st.rerun()
+        st.rerun(scope="fragment")
 
     assert basic_info is not None
 
@@ -943,6 +972,7 @@ def render_basic_info_page() -> None:
         return
 
     st.session_state[SAVED_DATA_KEY] = basic_info
+    st.session_state.pop(INPUT_SNAPSHOT_KEY, None)
     st.session_state[ERRORS_KEY] = {}
     st.session_state[SAVE_MESSAGE_KEY] = (
         "基本情報を保存しました。"

@@ -13,6 +13,7 @@ from contextvars import ContextVar
 
 
 CURRENT_USER_SESSION_KEY = "metea_current_user_id"
+SUSPENDED_USER_SESSION_KEY = "metea_suspended_user_id"
 DEFAULT_USER_ID = 1
 _background_user_id: ContextVar[int | None] = ContextVar("metea_background_user_id", default=None)
 
@@ -71,13 +72,24 @@ def set_current_user_id(user_id: int) -> None:
     session_state = _streamlit_session_state()
     if session_state is None:
         raise RuntimeError("Streamlitセッション外では利用者を変更できません。")
-    if session_state.get(CURRENT_USER_SESSION_KEY) != normalized:
+    previous = session_state.get(CURRENT_USER_SESSION_KEY, session_state.get(SUSPENDED_USER_SESSION_KEY))
+    if previous != normalized:
         # 前の利用者のフォーム、選択中ID、下書き等を持ち越さない。
         authenticated = session_state.get("app_authenticated")
         session_state.clear()
         if authenticated is not None:
             session_state["app_authenticated"] = authenticated
     session_state[CURRENT_USER_SESSION_KEY] = normalized
+    session_state.pop(SUSPENDED_USER_SESSION_KEY, None)
+
+
+def suspend_current_user_id() -> None:
+    """一時的な通信失敗では入力を残すが、再確認まで業務データへアクセスさせない。"""
+    session_state = _streamlit_session_state()
+    if session_state is not None:
+        current = session_state.pop(CURRENT_USER_SESSION_KEY, None)
+        if current is not None:
+            session_state[SUSPENDED_USER_SESSION_KEY] = current
 
 
 def clear_current_user_id() -> None:

@@ -219,7 +219,8 @@ def require_google_user() -> None:
             logout_google_user()
         st.stop()
     except (ConnectionError, psycopg.OperationalError, psycopg.InterfaceError):
-        clear_current_user_id()
+        from services.current_user_service import suspend_current_user_id
+        suspend_current_user_id()
         st.title("MeTeA")
         st.error("保存先との接続が切れました。少し待ってから再試行してください。")
         if st.button("再試行"):

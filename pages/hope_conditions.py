@@ -813,6 +813,7 @@ def priority_requires_value(priority_key: str) -> bool:
     return st.session_state.get(priority_key, "no_preference") != "no_preference"
 
 
+@st.fragment
 def render_hope_conditions_page() -> None:
     """希望条件の入力画面を表示する。"""
 
@@ -1920,7 +1921,7 @@ def render_hope_conditions_page() -> None:
                 st.session_state[ERRORS_KEY] = validation_errors
 
                 if validation_errors:
-                    st.rerun()
+                    st.rerun(scope="fragment")
 
                 hope_condition = build_hope_condition()
                 hope_condition_items = (
