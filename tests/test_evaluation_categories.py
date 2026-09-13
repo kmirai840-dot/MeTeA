@@ -4,6 +4,13 @@ from services.evaluation_categories import categorize_details
 
 
 class CategoryTest(unittest.TestCase):
+    def test_colon_in_item_name_keeps_required_category(self):
+        item = dict(item_name='Excel関数：SUMIF', reason='選択済み', category='required_condition')
+        detail = dict(item_name='Excel関数', reason='SUMIF：選択済み')
+        rows = categorize_details([detail], json.dumps({'items':[item]}))['required_condition']
+        self.assertEqual(rows[0]['item_name'], item['item_name'])
+        self.assertEqual(rows[0]['reason'], '選択済み')
+
     def test_semantic_subgroups_and_rule_rows(self):
         semantic = [dict(item_name="課題解決", reason="経験", category="career_skill", evaluation_group="portable_skill"), dict(item_name="Excel", reason="使用", category="required_condition", evaluation_group=""), dict(item_name="自律性", reason="合致", category="work_value", evaluation_group="confirmed_axis")]
         details = [dict(item_name=item["item_name"], reason=item["reason"], judgment="一致") for item in semantic]

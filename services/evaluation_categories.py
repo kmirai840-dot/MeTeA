@@ -24,6 +24,13 @@ def categorize_details(details, result_json):
     valid = isinstance(semantic, list) and all(isinstance(item, dict) for item in semantic)
     grouped = {key: [] for key in CATEGORIES}
     for detail in details:
+        # 表示文は最初の全角コロンで分割されるため、項目名内のコロンを復元する。
+        if valid:
+            combined = detail.get('item_name', '') + '：' + detail.get('reason', '')
+            full_matches = [item for item in semantic
+                            if combined == str(item.get('item_name', '')) + '：' + str(item.get('reason', ''))]
+            if full_matches:
+                detail = dict(detail, item_name=full_matches[0]['item_name'], reason=full_matches[0]['reason'])
         matches = [item for item in semantic if item.get("item_name") == detail.get("item_name")] if valid else []
         exact = [item for item in matches if item.get("reason", "").strip() == detail.get("reason", "").strip()]
         candidates = exact or matches
