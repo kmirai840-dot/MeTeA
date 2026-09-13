@@ -647,10 +647,11 @@ def render_evaluation_point_card(
 def render_commute_confirmation(
     job_id: int,
     job,
+    snapshot=None,
 ) -> None:
     """必要な場合だけ通勤時間の確認欄を表示する。"""
 
-    basic_info = load_basic_info()
+    basic_info = snapshot["basic"] if snapshot is not None else load_basic_info()
 
     save_message_key = (
         f"job_commute_saved_message_{job_id}"
@@ -700,7 +701,7 @@ def render_commute_confirmation(
             else ""
         )
 
-        saved_commute = load_current_job_commute(
+        saved_commute = snapshot["commute"] if snapshot is not None else load_current_job_commute(
             job=job,
             job_id=job_id,
             current_origin_station_place_id=(
@@ -905,6 +906,7 @@ def render_ai_matching_result(
     job_id: int,
     job,
     evaluations=None,
+    snapshot=None,
 ) -> None:
     """求人のAIマッチング結果を表示する。"""
 
@@ -1131,6 +1133,7 @@ def render_ai_matching_result(
     render_commute_confirmation(
         job_id=job_id,
         job=job,
+        snapshot=snapshot,
     )
 
 
@@ -1327,6 +1330,7 @@ def render_confirmation_group(
 def partition_company_confirmation_items(
     job_id: int,
     items: list[dict[str, str]],
+    snapshot=None,
 ) -> tuple[
     list[dict[str, str]],
     list[dict[str, str]],
@@ -1334,7 +1338,7 @@ def partition_company_confirmation_items(
     """企業確認項目を確認中と確認不要に分ける。"""
 
     resolutions = (
-        load_job_confirmation_resolutions(job_id)
+        snapshot["resolutions"] if snapshot is not None else load_job_confirmation_resolutions(job_id)
     )
     active_items = []
     dismissed_items = []
@@ -1478,6 +1482,7 @@ def render_dismissed_confirmation_items(
 def render_matching_detail(
     job_id: int,
     evaluations=None,
+    snapshot=None,
 ) -> None:
     """AIマッチング評価の内訳を表示する。"""
 
@@ -1572,6 +1577,7 @@ def render_matching_detail(
         ) = partition_company_confirmation_items(
             job_id,
             company_items,
+            snapshot=snapshot,
         )
 
         st.markdown(
@@ -1609,11 +1615,12 @@ def render_matching_detail(
 
 def _render_application_decision_content(
     job_id: int,
+    snapshot=None,
 ) -> None:
     """応募判断と管理情報を表示・保存する。"""
 
     decisions = (
-        load_job_application_decisions()
+        snapshot["decisions"] if snapshot is not None else load_job_application_decisions()
     )
 
     decision = decisions.get(job_id)
@@ -1806,6 +1813,7 @@ def _render_application_decision_content(
 
 def render_application_decision(
     job_id: int,
+    snapshot=None,
 ) -> None:
     """応募判断をカード内に表示する。"""
 
@@ -1819,7 +1827,7 @@ def render_application_decision(
         border=True,
         key=f"application_decision_card_{job_id}",
     ):
-        _render_application_decision_content(job_id)
+        _render_application_decision_content(job_id, snapshot=snapshot)
 
 def render_job_detail_styles() -> None:
     """求人確認画面専用のスタイルを適用する。"""
@@ -2730,8 +2738,6 @@ def show_page() -> None:
 
     render_job_detail_styles()
 
-    evaluations = render_evaluation_progress()
-
     job_id_value = st.query_params.get(
         "job_id"
     )
@@ -2754,7 +2760,10 @@ def show_page() -> None:
 
         return
 
-    job = load_job(job_id)
+    from services.job_detail_data_service import load_job_detail_data
+    with st.spinner("求人の保存済み情報を読み込んでいます…"):
+        snapshot = load_job_detail_data(job_id)
+    job = snapshot["job"] if snapshot is not None else None
 
     if job is None:
         st.error(
@@ -2768,6 +2777,8 @@ def show_page() -> None:
             move_to_job_list()
 
         return
+
+    evaluations = render_evaluation_progress(snapshot["evaluations"])
 
     st.title(
         job.company_name
@@ -2784,11 +2795,12 @@ def show_page() -> None:
         job_id=job_id,
         job=job,
         evaluations=evaluations,
+        snapshot=snapshot,
     )
 
     st.divider()
 
-    render_matching_detail(job_id, evaluations=evaluations)
+    render_matching_detail(job_id, evaluations=evaluations, snapshot=snapshot)
 
     st.divider()
 
@@ -2810,7 +2822,7 @@ def show_page() -> None:
 
     st.divider()
 
-    render_application_decision(job_id)
+    render_application_decision(job_id, snapshot=snapshot)
 
     return_page = st.query_params.get(
         "return_page",

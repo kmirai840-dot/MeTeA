@@ -37,9 +37,10 @@ def result_signature(snapshot):
                  for job, status, stale, evaluated in snapshot)
 
 
-def render_evaluation_progress():
+def render_evaluation_progress(evaluations=None):
     # 画面を開いた時だけルール更新と未処理の変更を確認する。
-    evaluations = load_job_match_evaluations()
+    if evaluations is None:
+        evaluations = load_job_match_evaluations()
     initial = tuple((job_id, e.evaluation_status, e.is_stale, str(e.evaluated_at or ''))
                     for job_id, e in sorted(evaluations.items()))
     if not has_pending(initial):
