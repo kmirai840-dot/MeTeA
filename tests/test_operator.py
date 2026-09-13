@@ -87,6 +87,40 @@ class OperatorTest(unittest.TestCase):
         with self.assertRaises(DataAccessDenied):
             operator.read_user_data(9999)
 
+    def test_lightweight_browse_matches_export_and_checks_authority(self):
+        for uid in (1,2):
+            data = operator.read_user_data(uid)
+            self.assertEqual(operator.list_user_table_counts(uid), {t:len(rows) for t,rows in data['tables'].items()})
+            for table, rows in data['tables'].items():
+                self.assertEqual(operator.read_user_table(uid, table), rows)
+        with self.assertRaises(ValueError):
+            operator.read_user_table(2, 'users; SELECT 1')
+        with patch.dict(self.settings['access'], admin_emails=[]):
+            for fn in (lambda:operator.list_user_table_counts(2), lambda:operator.read_user_table(2, 'users')):
+                with self.assertRaises(PermissionError):
+                    fn()
+
+    def test_export_is_deferred_and_rechecks_session_and_revocation(self):
+        from types import SimpleNamespace
+        from services.current_user_service import CURRENT_USER_SESSION_KEY
+        state = {CURRENT_USER_SESSION_KEY:1}
+        with patch('streamlit.runtime.scriptrunner.get_script_run_ctx', return_value=SimpleNamespace(session_state=state)), patch.object(operator, '_read_user_data', wraps=operator._read_user_data) as read:
+            download = operator.prepare_user_export(2)
+            read.assert_not_called()
+            # 呼出元スレッドのStreamlit user/sessionには依存しない。
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                payload = pool.submit(download).result()
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                self.assertEqual(json.loads(archive.read('data.json'))['user_id'], 2)
+            with patch.dict(self.settings['access'], admin_emails=[]):
+                with self.assertRaises(PermissionError):
+                    download()
+            state.clear()
+            with self.assertRaises(PermissionError):
+                download()
+            self.assertEqual(read.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

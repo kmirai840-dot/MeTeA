@@ -1,3 +1,4 @@
+from services.profile_review_data_service import load_profile_review_data, load_profile_statuses
 """「自分を知る」で正式保存した内容の確認・カード内編集画面。"""
 
 from dataclasses import replace
@@ -229,23 +230,12 @@ def _card(title: str, fields: list[tuple[str, object]]) -> None:
     st.markdown(f'<div class="metea-data-card"><div class="metea-data-card__head"><strong>{escape(title)}</strong></div><div class="metea-data-grid">{"".join(_field(k,v) for k,v in fields)}</div></div>', unsafe_allow_html=True)
 
 
-def _status_counts() -> dict[str, tuple[bool, str]]:
-    basic = load_basic_info()
-    hope, hope_items = load_hope_conditions_data()
-    rankings, details, styles = load_work_values_data()
-    axes = load_job_hunting_axis_data()
-    careers = load_career_data()
-    return {
-        "basic": (basic is not None, "登録済み" if basic else "未登録"),
-        "hope": (hope is not None and bool(hope_items), f"{len(hope_items)}件の条件" if hope else "未登録"),
-        "values": (bool(rankings or details or styles), f"{len(rankings)+len(details)+len(styles)}件の回答" if rankings or details or styles else "未登録"),
-        "axis": (bool(axes), f"{len(axes)}件の軸" if axes else "未登録"),
-        "career": (bool(careers), f"{len(careers)}社" if careers else "未登録"),
-    }
+def _status_counts():
+    return load_profile_statuses()
 
 
-def _render_category_selector() -> None:
-    statuses = _status_counts()
+def _render_category_selector(snapshot) -> None:
+    statuses = snapshot['statuses']
     st.markdown('<a class="metea-review-back" href="?page=self_discovery">← 自分を知るへ戻る</a><div class="metea-review-head"><div><h1>登録内容を確認する</h1><p>これまでに登録した内容を、カテゴリごとに振り返れます。見直したい項目を選んでください。</p></div></div>', unsafe_allow_html=True)
     cards = []
     for key, title, subtitle, description, icon in CATEGORIES:
@@ -337,8 +327,7 @@ def _progress_count(completed: int, total: int) -> str:
     return f"{completed}件 / {total}件"
 
 
-def _review_sidebar(category: str, completion: int) -> None:
-    statuses = _status_counts()
+def _review_sidebar(category: str, completion: int, statuses) -> None:
     labels = {"basic": "基本情報", "hope": "希望条件", "values": "価値観", "axis": "就活の軸", "career": "職務経歴・スキル"}
     rows = "".join(
         f'<div class="metea-basic-status{"" if registered else " is-empty"}"><span>{escape(labels[key])}</span><b>{"登録済み" if registered else "未登録"}</b></div>'
@@ -371,8 +360,8 @@ def _review_sidebar(category: str, completion: int) -> None:
     )
 
 
-def _render_basic() -> None:
-    info = load_basic_info()
+def _render_basic(snapshot) -> None:
+    info = snapshot['data']
     requested_edit = st.query_params.get("edit")
     if requested_edit in {"profile", "location"}:
         st.session_state[_edit_key("basic", "profile")] = False
@@ -381,7 +370,7 @@ def _render_basic() -> None:
         st.query_params.pop("edit", None)
         # 描画前の状態変更なので、そのまま編集画面を描画できる。
 
-    updated_at = load_basic_info_updated_at()
+    updated_at = snapshot['updated_at']
     updated_label = "未登録"
     if updated_at:
         try:
@@ -435,7 +424,7 @@ def _render_basic() -> None:
         st.markdown('<div class="metea-empty">基本情報はまだ登録されていません。<br><a href="?page=basic_info">基本情報を入力する</a></div>', unsafe_allow_html=True); return
     if info:
         gender_label = GENDER_LABELS.get(info.gender, info.gender)
-        statuses = _status_counts()
+        statuses = snapshot['statuses']
         status_labels = {
             "basic": "基本情報",
             "hope": "希望条件",
@@ -523,6 +512,7 @@ def _render_basic() -> None:
 
 
 @st.dialog("希望条件を編集", width="large")
+
 def _hope_dialog(edit_key: str, condition: object, items: list[HopeConditionItem]) -> None:
     if edit_key == "base":
         with st.form("review_hope_base_dialog"):
@@ -597,8 +587,8 @@ def _career_dialog(edit_key: str, careers: list[tuple[Career,list[CareerHistory]
         else:_finish_edit("career",edit_key);st.session_state["profile_review_notice"]="職務経歴・スキルを更新しました。";st.rerun()
 
 
-def _render_hope() -> None:
-    condition,items=load_hope_conditions_data();active=_consume_edit_query("hope");_dashboard_header("hope","希望条件","求人比較やAIマッチングに利用する希望条件を確認できます。",[])
+def _render_hope(snapshot) -> None:
+    condition,items=snapshot['data'];active=_consume_edit_query("hope");_dashboard_header("hope","希望条件","求人比較やAIマッチングに利用する希望条件を確認できます。",[])
     if not condition:st.markdown('<div class="metea-empty">希望条件はまだ登録されていません。<br><a href="?page=hope_conditions">希望条件を入力する</a></div>',unsafe_allow_html=True);return
     labels={"industry":"希望業種","occupation":"希望職種","location":"希望勤務地","employment_type":"雇用形態","holiday":"希望休日","age_group":"職場の年齢層","time_system":"勤務制度","workstyle":"働き方・風土","career_condition":"キャリア・組織風土"}
     cards=[_review_card_html("hope","base","年収・勤務条件",[("最低許容年収",f"{condition.minimum_salary}万円"),("希望年収",f"{condition.desired_salary}万円"),("理想年収",f"{condition.ideal_salary}万円"),("通勤時間上限",f"{condition.commute_minutes}分"),("残業時間上限",f"{condition.overtime_limit}時間"),("年間休日",f"{condition.annual_holidays}日")])]
@@ -617,12 +607,12 @@ def _render_hope() -> None:
     main,side=st.columns([3.2,1],gap="medium")
     with main:
         st.markdown(_review_facts_html([("回答状況 全体",_progress_count(total_done,total_questions)),("年収・勤務条件",_progress_count(base_done,len(base_values))),("希望条件",_progress_count(item_done,len(items))),("優先度",_progress_count(priority_done,len(items)))]),unsafe_allow_html=True);st.markdown(f'<div class="metea-basic-section-grid">{"".join(cards)}</div>',unsafe_allow_html=True);st.markdown('<div class="metea-basic-next"><div><strong>次は価値観を確認できます</strong><span>大切にしたいことや仕事の進め方を振り返ってみましょう。</span></div><a href="?page=profile_review&amp;category=values">価値観を確認する →</a></div>',unsafe_allow_html=True)
-    with side:_review_sidebar("hope",100 if items else 50)
+    with side:_review_sidebar("hope",100 if items else 50, snapshot['statuses'])
     if active:_hope_dialog(active,condition,items)
 
 
-def _render_values() -> None:
-    rankings,details,answers=load_work_values_data();active=_consume_edit_query("values");_dashboard_header("values","価値観","大切にしたいこと・経験・仕事の進め方を確認できます。",[])
+def _render_values(snapshot) -> None:
+    rankings,details,answers=snapshot['data'];active=_consume_edit_query("values");_dashboard_header("values","価値観","大切にしたいこと・経験・仕事の進め方を確認できます。",[])
     if not (rankings or details or answers):st.markdown('<div class="metea-empty">価値観はまだ登録されていません。<br><a href="?page=work_values">価値観を入力する</a></div>',unsafe_allow_html=True);return
     work_style_questions = {question["question_type"]: question for question in WORK_STYLE_QUESTIONS}
     cards=[_review_card_html("values",f"ranking_{i}",f"{item.priority_rank}位　{item.selected_value}",[(RANKING_QUESTION_LABELS.get(item.question_type,"大切にしたいこと"),item.selected_value),("補足",item.custom_value or "―")]) for i,item in enumerate(rankings)]
@@ -633,26 +623,26 @@ def _render_values() -> None:
     main,side=st.columns([3.2,1],gap="medium")
     with main:
         st.markdown(_review_facts_html([("回答状況 全体",_progress_count(len(rankings)+len(details)+len(answers),ranking_total+detail_total+style_total)),("選択した価値観",_progress_count(len(rankings),ranking_total)),("経験・理由",_progress_count(len(details),detail_total)),("仕事の進め方",_progress_count(len(answers),style_total))]),unsafe_allow_html=True);st.markdown(f'<div class="metea-basic-section-grid">{"".join(cards)}</div>',unsafe_allow_html=True);st.markdown('<div class="metea-basic-next"><div><strong>次は就活の軸を確認できます</strong><span>価値観から整理した仕事選びの判断基準を確認しましょう。</span></div><a href="?page=profile_review&amp;category=axis">就活の軸を確認する →</a></div>',unsafe_allow_html=True)
-    with side:_review_sidebar("values",completion)
+    with side:_review_sidebar("values",completion, snapshot['statuses'])
     if active:_values_dialog(active,rankings,details,answers)
 
 
-def _render_axis() -> None:
-    axes=load_job_hunting_axis_data();active=_consume_edit_query("axis");_dashboard_header("axis","就活の軸","仕事を選ぶときに大切にする判断基準を確認できます。",[])
+def _render_axis(snapshot) -> None:
+    axes=snapshot['data'];active=_consume_edit_query("axis");_dashboard_header("axis","就活の軸","仕事を選ぶときに大切にする判断基準を確認できます。",[])
     if not axes:st.markdown('<div class="metea-empty">就活の軸はまだ登録されていません。<br><a href="?page=job_hunting_axis">就活の軸を入力する</a></div>',unsafe_allow_html=True);return
     cards=[_review_card_html("axis",f"axis_{i}",f"{item.priority_rank}位　{item.axis_title}",[("軸の名称",item.axis_title),("具体的な判断基準",item.axis_description),("作成方法","入力内容からの提案" if item.source_type!="manual" else "手動登録")]) for i,item in enumerate(axes)]
     axis_total=3;title_done=sum(bool(item.axis_title) for item in axes);description_done=sum(bool(item.axis_description) for item in axes);rank_done=sum(bool(item.priority_rank) for item in axes)
     main,side=st.columns([3.2,1],gap="medium")
     with main:
         st.markdown(_review_facts_html([("回答状況 全体",_progress_count(title_done+description_done+rank_done,axis_total*3)),("就活の軸",_progress_count(title_done,axis_total)),("判断基準",_progress_count(description_done,axis_total)),("優先順位",_progress_count(rank_done,axis_total))]),unsafe_allow_html=True);st.markdown(f'<div class="metea-basic-section-grid metea-axis-list">{"".join(cards)}</div>',unsafe_allow_html=True);st.markdown('<div class="metea-basic-next"><div><strong>次は職務経歴・スキルを確認できます</strong><span>会社・部署・役割ごとに登録した経験を振り返りましょう。</span></div><a href="?page=profile_review&amp;category=career">職務経歴を確認する →</a></div>',unsafe_allow_html=True)
-    with side:_review_sidebar("axis",min(100,round(len(axes)/3*100)))
+    with side:_review_sidebar("axis",min(100,round(len(axes)/3*100)), snapshot['statuses'])
     if active:_axis_dialog(active,axes)
 
 
-def _render_career() -> None:
+def _render_career(snapshot) -> None:
     from ui.user_skills import render_user_skills
-    render_user_skills()
-    careers=load_career_data();active=_consume_edit_query("career");history_count=sum(len(h) for _,h in careers);_dashboard_header("career","職務経歴・スキル","会社・部署・役割ごとに登録した経験を確認できます。",[])
+    render_user_skills(initial_text=snapshot['skills'])
+    careers=snapshot['data'];active=_consume_edit_query("career");history_count=sum(len(h) for _,h in careers);_dashboard_header("career","職務経歴・スキル","会社・部署・役割ごとに登録した経験を確認できます。",[])
     if not careers:st.markdown('<div class="metea-empty">職務経歴はまだ登録されていません。<br><a href="?page=career">職務経歴を登録する</a></div>',unsafe_allow_html=True);return
     company_groups=[]
     for ci,(career,histories) in enumerate(careers):
@@ -668,7 +658,7 @@ def _render_career() -> None:
     main,side=st.columns([3.2,1],gap="medium")
     with main:
         st.markdown(_review_facts_html([("登録情報 全体",_progress_count(len(careers)+history_count+achievement_done,total_records)),("会社情報",_progress_count(len(careers),len(careers))),("部署・役割",_progress_count(history_count,history_count)),("実績・成果",_progress_count(achievement_done,history_count))]),unsafe_allow_html=True);st.markdown(f'<div class="metea-career-list">{"".join(company_groups)}</div>',unsafe_allow_html=True);st.markdown('<div class="metea-career-import"><div class="metea-career-import__text"><div class="metea-career-import__icon">▤</div><div><strong>職務経歴書から情報を追加・更新できます</strong><span>PDFまたはWordファイルを読み込み、AIが整理した内容を確認してから登録できます。</span></div></div><a href="?page=career&amp;entry=document">PDF・Wordから取り込む →</a></div>',unsafe_allow_html=True);st.markdown('<div class="metea-basic-next"><div><strong>登録内容を求人比較に活用できます</strong><span>経験や実績をもとに、求人との相性を確認してみましょう。</span></div><a href="?page=job_list">求人を見てみる →</a></div>',unsafe_allow_html=True)
-    with side:_review_sidebar("career",100 if careers and history_count else 50)
+    with side:_review_sidebar("career",100 if careers and history_count else 50, snapshot['statuses'])
     if active:_career_dialog(active,careers)
 
 
@@ -684,8 +674,9 @@ def show_page() -> None:
     if notice:_notice(notice)
     category=st.query_params.get("category","")
     _review_navigation(category)
-    if not category:_render_category_selector();return
+    snapshot = load_profile_review_data(category)
+    if not category:_render_category_selector(snapshot);return
     renderers={"basic":_render_basic,"hope":_render_hope,"values":_render_values,"axis":_render_axis,"career":_render_career}
     renderer=renderers.get(category)
     if renderer is None:st.query_params["page"]="profile_review";st.query_params.pop("category",None);rerun_current_page()
-    renderer()
+    renderer(snapshot)

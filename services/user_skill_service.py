@@ -5,6 +5,7 @@ from services.current_user_service import get_current_user_id
 from services.job_matching_cache_service import invalidate_current_user_job_evaluations
 
 
+@database_operation
 def load_skills() -> str:
     return get_user_skills(get_current_user_id())
 

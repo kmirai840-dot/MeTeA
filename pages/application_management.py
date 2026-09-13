@@ -31,6 +31,7 @@ from services.application_management_service import (
     load_application_detail,
     load_application_views,
     load_preparation_items,
+    load_selection_preparation_data,
     load_global_preparation_templates,
     copy_global_preparations_to_application,
     copy_application_preparations_to_selection,
@@ -1545,7 +1546,6 @@ def _application_status_controls(summary: dict, selected_focus: str) -> str:
 def render_application_list_page(focus: str = "") -> None:
     render_job_navigation("application_list")
     _inject_css()
-    sync_applications_from_decisions()
     requested_focus = str(st.query_params.get("focus", "") or focus).strip()
     if requested_focus == "milestones":
         st.session_state["application_task_focus"] = True
@@ -2019,7 +2019,8 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         st.session_state.pop("schedule_dialog_application_id", 0) or 0
     )
     if selected_application_id:
-        _render_application_detail_dialog(selected_application_id)
+        initial = next((view for view in all_views if view['application'].id == selected_application_id), None)
+        _render_application_detail_dialog(selected_application_id, [initial] if initial else [])
 
 
 def _render_application_card(view: dict) -> None:
@@ -2208,7 +2209,6 @@ def _report_heatmap(rows: dict, stages: tuple[str, ...], axis_name: str) -> str:
 def render_application_dashboard_page() -> None:
     render_job_navigation("application_dashboard")
     _inject_css()
-    sync_applications_from_decisions()
     today = date.today()
     period_enabled = bool(st.session_state.get("report_period_enabled", False))
     selected_period = st.session_state.get("report_period_range", (today - timedelta(days=30), today))
@@ -2388,6 +2388,7 @@ def render_application_detail_page(
     application_id_override: int | None = None,
     *,
     embedded: bool = False,
+    snapshot_holder=None,
 ) -> None:
     if not embedded:
         render_job_navigation("application_list")
@@ -2404,7 +2405,8 @@ def render_application_detail_page(
         st.query_params.clear()
         st.query_params["page"] = "application_list"
         st.rerun()
-    detail = load_application_detail(application_id)
+    # 一覧とモーダル初回だけ共有。保存後やモーダルの再実行では必ず再取得する。
+    detail = snapshot_holder.pop() if snapshot_holder else load_application_detail(application_id)
     if not detail:
         st.error("応募情報が見つかりません。")
         return
@@ -2738,7 +2740,7 @@ def render_application_detail_page(
     width="large",
     on_dismiss=_close_schedule_dialog_for_filter_change,
 )
-def _render_application_detail_dialog(application_id: int) -> None:
+def _render_application_detail_dialog(application_id: int, snapshot_holder=None) -> None:
     """応募管理画面を離れず、予定・結果の登録と現在地確認を行う。"""
     st.markdown(
         """
@@ -2763,6 +2765,7 @@ def _render_application_detail_dialog(application_id: int) -> None:
     render_application_detail_page(
         application_id,
         embedded=True,
+        snapshot_holder=snapshot_holder,
     )
 
 
@@ -2795,14 +2798,15 @@ def render_selection_preparation_page() -> None:
                 unsafe_allow_html=True,
             )
         return
-    detail = load_application_detail(application_id)
-    if not detail:
+    snapshot = load_selection_preparation_data(application_id)
+    if not snapshot:
         st.error("応募情報が見つかりません。")
         return
-    app, job = detail["application"], detail["job"]
-    selection_type = app.current_phase.replace("調整中", "").replace("予定", "").replace("結果待ち", "") or "選考"
-    items = load_preparation_items(app.id, selection_type)
-    global_templates = load_global_preparation_templates()
+    detail = snapshot['detail']
+    app, job = detail['application'], detail['job']
+    selection_type = snapshot['selection_type']
+    items = snapshot['items']
+    global_templates = snapshot['global_templates']
     scope_labels = {"selection": "選考別準備", "company": "企業別準備", "common": "共通準備"}
     requested_scope = str(st.query_params.get("prep_tab", "selection"))
     if requested_scope not in scope_labels:

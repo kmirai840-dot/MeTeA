@@ -845,7 +845,7 @@ def render_commute_confirmation(
             else:
                 if snapshot is not None:
                     snapshot["commute"] = saved_commute_result
-                evaluations = load_job_match_evaluations(force_numeric_job_id=job_id)
+                evaluations = load_job_match_evaluations(force_numeric_job_id=job_id, job_ids=[job_id])
                 evaluation = evaluations.get(job_id)
                 if evaluation and evaluation.evaluation_result_json:
                     save_message = "通勤時間を保存し、確認済みの時間を評価に反映しました。"
@@ -896,7 +896,7 @@ def render_ai_matching_result(
     """求人のAIマッチング結果を表示する。"""
 
     if evaluations is None:
-        evaluations = load_job_match_evaluations()
+        evaluations = load_job_match_evaluations(job_ids=[job_id])
 
     evaluation = evaluations.get(job_id)
 
@@ -1493,7 +1493,7 @@ def render_matching_detail(
     """AIマッチング評価の内訳を表示する。"""
 
     if evaluations is None:
-        evaluations = load_job_match_evaluations()
+        evaluations = load_job_match_evaluations(job_ids=[job_id])
 
     evaluation = evaluations.get(job_id)
 
@@ -1536,7 +1536,7 @@ def render_matching_detail(
             from ui.job_evaluation_area import _poll, pending
             from time import monotonic
             ctx = get_script_run_ctx()
-            latest = load_job_match_evaluations().get(job_id) if ctx and ctx.fragment_ids_this_run else evaluation
+            latest = load_job_match_evaluations(job_ids=[job_id]).get(job_id) if ctx and ctx.fragment_ids_this_run else evaluation
             _poll(key=f'job_detail_table_poll_{job_id}',
                   data={'jobId': job_id, 'table': True, 'pending': pending(latest), 'sequence': monotonic()},
                   on_poll_change=lambda: None, height=0)
@@ -1561,7 +1561,8 @@ def render_matching_detail(
                 grouped = categorize_details([dict(item, row_index=index) for index, item in enumerate(table_items)], latest.evaluation_result_json)
                 classified = [dict(item, category=key) for key, rows in grouped.items() for item in rows]
                 from services.job_confirmation_service import load_confirmation_records
-                accepted_names = {r['item_name'] for r in load_confirmation_records(job_id) if r.get('accepted')}
+                accepted_records = load_confirmation_records(job_id) if ctx and ctx.fragment_ids_this_run else (snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id))
+                accepted_names = {r['item_name'] for r in accepted_records if r.get('accepted')}
                 for row in classified:
                     if row['item_name'] in accepted_names:
                         row['judgment'] = '許容'
@@ -1627,7 +1628,7 @@ def _render_application_decision_content(
     """応募判断と管理情報を表示・保存する。"""
 
     decisions = (
-        snapshot["decisions"] if snapshot is not None else load_job_application_decisions()
+        snapshot["decisions"] if snapshot is not None else load_job_application_decisions(job_ids=[job_id])
     )
 
     decision = decisions.get(job_id)

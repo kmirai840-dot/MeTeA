@@ -5,6 +5,7 @@ from html import escape
 import streamlit as st
 
 from ui.job_evaluation_progress import render_evaluation_progress
+from services.job_comparison_data_service import load_comparison_data
 
 from services.job_evaluation_service import (
     load_job_match_evaluations,
@@ -1210,8 +1211,6 @@ def show_page() -> None:
     render_job_navigation("job_comparison")
     render_comparison_styles()
 
-    evaluations = render_evaluation_progress()
-
     selected_job_ids = st.session_state.get(
         JOB_COMPARE_SELECTED_KEY,
         [],
@@ -1233,12 +1232,9 @@ def show_page() -> None:
                 JOB_COMPARE_SELECTED_KEY
             ] = selected_job_ids
 
-    all_jobs = dict(load_jobs())
-    selected_jobs = [
-        (job_id, all_jobs[job_id])
-        for job_id in selected_job_ids
-        if job_id in all_jobs
-    ]
+    snapshot = load_comparison_data(selected_job_ids)
+    selected_jobs = snapshot['selected_jobs']
+    evaluations = render_evaluation_progress(snapshot['evaluations'], job_ids=[jid for jid, _ in selected_jobs])
 
     if st.button(
         "← 求人一覧へ戻る",
@@ -1279,7 +1275,7 @@ def show_page() -> None:
         )
         return
 
-    rule_data = load_rule_comparison_data(selected_jobs)
+    rule_data = snapshot['rule_data']
 
     def rule_judgments(*item_names):
         """表示中の求人順に希望条件との判定を返す。"""

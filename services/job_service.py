@@ -562,11 +562,12 @@ def add_job_source_data(
 # ========================================
 
 def load_jobs(
+    job_ids=None,
 ) -> list[tuple[int, Job]]:
     """登録済み求人を取得する。"""
 
     return get_jobs(
-        get_current_user_id()
+        get_current_user_id(), job_ids=job_ids
     )
 
 

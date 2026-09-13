@@ -163,32 +163,18 @@ def get_careers(
             (user_id,),
         ).fetchall()
 
+        history_rows = connection.execute(
+            """SELECT h.* FROM user_career_histories h
+               JOIN user_careers c ON c.id = h.career_id
+               WHERE c.user_id = ? AND c.deleted_at IS NULL AND h.deleted_at IS NULL
+               ORDER BY h.career_id, h.display_order""", (user_id,),
+        ).fetchall() if careers else []
+        histories_by_career = {}
+        for row in history_rows:
+            histories_by_career.setdefault(row['career_id'], []).append(row)
         results = []
-
         for career_row in careers:
-
-            histories = connection.execute(
-                """
-                SELECT
-                    department,
-                    position,
-                    occupation,
-                    start_year,
-                    start_month,
-                    end_year,
-                    end_month,
-                    job_description,
-                    achievements,
-                    display_order
-                FROM user_career_histories
-                WHERE career_id = ?
-                  AND deleted_at IS NULL
-                ORDER BY display_order
-                """,
-                (
-                    career_row["id"],
-                ),
-            ).fetchall()
+            histories = histories_by_career.get(career_row['id'], [])
 
             career = Career(
                 company_name=career_row["company_name"],

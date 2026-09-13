@@ -8,8 +8,61 @@ from database.access_control import (
     require_user_id,
 )
 from database.connection import get_connection
+from database.query_scope import id_scope
+from database.operation import database_operation
 from models import (ApplicationActivity, ApplicationMilestone, ApplicationPreparation,
                     ApplicationRecord, UserPreparationTemplate)
+
+
+def lock_application_job(job_id):
+    """同一求人の応募作成を直列化。呼出元の操作終了までロックを保持する。"""
+    user_id = require_user_id()
+    c = get_connection()
+    try:
+        if getattr(c, 'dialect', '') == 'postgresql':
+            row = c.execute('SELECT id FROM user_jobs WHERE id=? AND user_id=? AND deleted_at IS NULL FOR UPDATE',
+                            (job_id, user_id)).fetchone()
+            if row is None:
+                from database.access_control import DataAccessDenied
+                raise DataAccessDenied('求人を操作する権限がありません。')
+        else:
+            if not c.in_transaction:
+                c.execute('BEGIN IMMEDIATE')
+            require_job_owner(c, job_id, user_id)
+    finally:
+        c.close()
+
+
+@database_operation
+def insert_preparation_defaults(application_id, items):
+    user_id = require_user_id()
+    c = get_connection()
+    try:
+        require_application_owner(c, application_id, user_id)
+        if any(item.application_id != application_id for item in items):
+            raise ValueError('応募情報が一致しません。')
+        c.executemany('''INSERT INTO application_preparations
+            (application_id, scope, selection_type, theme_key, title, description, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(application_id, scope, selection_type, theme_key) DO NOTHING''',
+            [(application_id, i.scope, i.selection_type, i.theme_key, i.title, i.description, i.sort_order) for i in items])
+    finally:
+        c.close()
+
+
+@database_operation
+def insert_template_defaults(user_id, items):
+    user_id = require_user_id(user_id)
+    c = get_connection()
+    try:
+        if any(item.user_id != user_id for item in items):
+            raise ValueError('利用者が一致しません。')
+        c.executemany('''INSERT INTO user_preparation_templates
+            (user_id, theme_key, title, description, sort_order) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, theme_key) DO NOTHING''',
+            [(user_id, i.theme_key, i.title, i.description, i.sort_order) for i in items])
+    finally:
+        c.close()
 
 
 def get_applications(user_id: int, include_closed: bool = True) -> list[ApplicationRecord]:
@@ -120,8 +173,9 @@ def add_phase_history(application_id: int, phase: str, category: str, result: st
         connection.close()
 
 
-def get_milestones(application_id: int | None = None, user_id: int | None = None) -> list[ApplicationMilestone]:
+def get_milestones(application_id: int | None = None, user_id: int | None = None, application_ids=None) -> list[ApplicationMilestone]:
     user_id = require_user_id(user_id)
+    scope, ids = id_scope('a.id', application_ids)
     connection = get_connection()
     try:
         if application_id is not None:
@@ -133,11 +187,11 @@ def get_milestones(application_id: int | None = None, user_id: int | None = None
             ).fetchall()
         else:
             rows = connection.execute(
-                """SELECT m.* FROM application_milestones m
+                f"""SELECT m.* FROM application_milestones m
                    JOIN user_applications a ON a.id = m.application_id
                    WHERE a.user_id = ? AND a.deleted_at IS NULL AND m.deleted_at IS NULL
-                   ORDER BY m.scheduled_date, m.id""",
-                (user_id,),
+                   {scope} ORDER BY m.scheduled_date, m.id""",
+                (user_id, *ids),
             ).fetchall()
     finally:
         connection.close()
@@ -209,8 +263,9 @@ def delete_milestone(milestone_id: int) -> bool:
         connection.close()
 
 
-def get_phase_history(application_id: int | None = None, user_id: int | None = None) -> list[dict]:
+def get_phase_history(application_id: int | None = None, user_id: int | None = None, application_ids=None) -> list[dict]:
     user_id = require_user_id(user_id)
+    scope, ids = id_scope('a.id', application_ids)
     connection = get_connection()
     try:
         if application_id is not None:
@@ -222,11 +277,11 @@ def get_phase_history(application_id: int | None = None, user_id: int | None = N
             ).fetchall()
         else:
             rows = connection.execute(
-                """SELECT h.* FROM application_phase_history h
+                f"""SELECT h.* FROM application_phase_history h
                    JOIN user_applications a ON a.id = h.application_id
                    WHERE a.user_id = ? AND a.deleted_at IS NULL
-                   ORDER BY h.changed_at, h.id""",
-                (user_id,),
+                   {scope} ORDER BY h.changed_at, h.id""",
+                (user_id, *ids),
             ).fetchall()
     finally:
         connection.close()

@@ -6,6 +6,22 @@ from models import ApplicationRecord,Job
 from pages import application_management as page
 
 class ApplicationBatchTest(unittest.TestCase):
+ def test_modal_consumes_list_snapshot_once_then_reads_fresh(self):
+  detail=dict(application=ApplicationRecord(id=9,job_id=3),job=Job(company_name='テスト'),milestones=[])
+  holder=[detail]
+  with patch.object(page,'load_application_detail',return_value=detail) as read, patch('ui.job_form_visibility.install_visibility'):
+   # 同じholderを次回の実行にも渡す。初期情報が繰り返し使われないことを確認。
+   page._test_snapshot_holder=holder
+   try:
+    app=AppTest.from_string('from pages import application_management as p\np.render_application_detail_page(9,embedded=True,snapshot_holder=p._test_snapshot_holder)',default_timeout=30).run()
+    self.assertFalse(app.exception)
+    read.assert_not_called()
+    app.run()
+    self.assertFalse(app.exception)
+    read.assert_called_once_with(9)
+   finally:
+    del page._test_snapshot_holder
+
  def test_selection_and_schedule_submit_current_inputs_once(self):
   detail=dict(application=ApplicationRecord(id=9,job_id=3),job=Job(company_name='テスト'),milestones=[])
   with ExitStack() as stack:

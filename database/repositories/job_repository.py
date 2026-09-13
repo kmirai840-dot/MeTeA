@@ -1,5 +1,6 @@
 """求人情報のDB保存・取得・更新・削除を担当する。"""
 
+from database.query_scope import id_scope
 import sqlite3
 
 from models import Job
@@ -286,38 +287,42 @@ def create_job(
 
 
 def get_jobs(
-    user_id: int,
+    user_id: int, job_ids=None,
 ) -> list[tuple[int, Job]]:
     """利用者の登録済み求人を取得する。"""
     user_id = require_user_id(user_id)
 
+    scope, ids = id_scope("id", job_ids)
     connection = get_connection()
 
     try:
         rows = connection.execute(
-            """
+            f"""
             SELECT *
             FROM user_jobs
             WHERE
                 user_id = ?
                 AND deleted_at IS NULL
+            {scope}
             ORDER BY
                 created_at DESC,
                 id DESC
             """,
-            (user_id,),
+            (user_id, *ids),
         ).fetchall()
 
+        item_scope, item_ids = id_scope("job.id", ids if job_ids is not None else None)
         items_by_job = {row['id']: {field: [] for field in MULTI_VALUE_FIELDS} for row in rows}
         if rows:
             items = connection.execute(
-                """SELECT item.job_id, item.item_type, item.item_value
+                f"""SELECT item.job_id, item.item_type, item.item_value
                    FROM user_job_items AS item
                    JOIN user_jobs AS job ON job.id = item.job_id
                    WHERE job.user_id = ? AND job.deleted_at IS NULL
                      AND item.deleted_at IS NULL
+                   {item_scope}
                    ORDER BY item.job_id, item.item_type, item.display_order, item.id""",
-                (user_id,),
+                (user_id, *item_ids),
             ).fetchall()
             for item in items:
                 values = items_by_job.get(item['job_id'])

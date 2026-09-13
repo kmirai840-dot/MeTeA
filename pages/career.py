@@ -1,5 +1,6 @@
 """職務経歴入力画面。"""
 
+from services.user_skill_service import load_skills
 from database.operation import database_operation
 
 from dataclasses import replace
@@ -473,13 +474,14 @@ def render_career_field_error(keyword: str) -> None:
 # ==========================================
 
 @database_operation
-def initialize_career_state() -> None:
+def initialize_career_state() -> str:
     """職務経歴画面で使用する状態を初期化する。"""
 
+    skills = load_skills()
     if st.session_state.get(
         CAREER_LOADED_KEY
     ):
-        return
+        return skills
 
     career_items = load_career_data()
 
@@ -504,9 +506,13 @@ def initialize_career_state() -> None:
     ] = True
 
 
+    return skills
+
+
 # ==========================================
 # フォーム初期化
 # ==========================================
+
 
 def reset_current_history_form_state() -> None:
     """部署・役割の通常入力フォームを初期化する。"""
@@ -2448,7 +2454,7 @@ def show_page() -> None:
 
     apply_self_discovery_theme(current_step=5)
 
-    initialize_career_state()
+    initial_skills = initialize_career_state()
 
     # 確認画面の「PDF・Wordから取り込む」から来た場合は、保存済みの
     # 職務経歴を維持したまま登録方法の選択画面を表示する。
@@ -2475,7 +2481,7 @@ def show_page() -> None:
     st.title("職務経歴・スキル")
 
     from ui.user_skills import render_user_skills
-    render_user_skills()
+    render_user_skills(initial_text=initial_skills)
 
     st.caption(
         "これまでの職務経歴を会社ごとに登録します。"

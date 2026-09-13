@@ -1,5 +1,6 @@
 """求人のAI評価と応募判断を担当するRepository。"""
 
+from database.query_scope import id_scope
 from database.access_control import (
     require_job_owner,
     require_user_id,
@@ -15,16 +16,17 @@ from models import (
 # AIマッチング評価
 # ========================================
 def get_job_match_evaluations(
-    user_id: int,
+    user_id: int, job_ids=None,
 ) -> dict[int, JobMatchEvaluation]:
     """利用者の全求人に対するAI評価を取得する。"""
     user_id = require_user_id(user_id)
 
+    scope, ids = id_scope("job_id", job_ids)
     connection = get_connection()
 
     try:
         rows = connection.execute(
-            """
+            f"""
             SELECT
                 job_id,
                 overall_score,
@@ -60,12 +62,13 @@ def get_job_match_evaluations(
                       AND j.user_id = user_job_match_evaluations.user_id
                       AND j.deleted_at IS NULL
                 )
+            {scope}
             ORDER BY
                 overall_score DESC,
                 evaluated_at DESC,
                 id DESC
             """,
-            (user_id,),
+            (user_id, *ids),
         ).fetchall()
 
     finally:
@@ -422,16 +425,17 @@ def get_stale_job_match_evaluation_ids(
 # 応募判断
 # ========================================
 def get_job_application_decisions(
-    user_id: int,
+    user_id: int, job_ids=None,
 ) -> dict[int, JobApplicationDecision]:
     """利用者の全求人に対する応募判断を取得する。"""
     user_id = require_user_id(user_id)
 
+    scope, ids = id_scope("job_id", job_ids)
     connection = get_connection()
 
     try:
         rows = connection.execute(
-            """
+            f"""
             SELECT
                 job_id,
                 decision_status,
@@ -448,11 +452,12 @@ def get_job_application_decisions(
                       AND j.user_id = user_job_application_decisions.user_id
                       AND j.deleted_at IS NULL
                 )
+            {scope}
             ORDER BY
                 updated_at DESC,
                 id DESC
             """,
-            (user_id,),
+            (user_id, *ids),
         ).fetchall()
 
     finally:

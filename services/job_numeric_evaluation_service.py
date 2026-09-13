@@ -55,10 +55,13 @@ def refresh_numeric_evaluations(evaluations, force_job_id=None):
     from database.repositories.job_evaluation_repository import save_job_match_evaluation
     uid=get_current_user_id()
     basic=load_basic_info();hope,items=load_hope_conditions_data()
-    jobs=dict(load_jobs());commutes=get_job_commute_checks(uid)
+    from database.query_scope import id_scope
+    ids = tuple(candidates)
+    jobs=dict(load_jobs(job_ids=ids));commutes=get_job_commute_checks(uid, job_ids=ids)
     connection=get_connection()
     try:
-        records=connection.execute("SELECT job_id,item_name FROM user_job_confirmation_resolutions WHERE user_id=? AND status='confirmed'",(uid,)).fetchall()
+        scope, parameters = id_scope('job_id', ids)
+        records=connection.execute(f"SELECT job_id,item_name FROM user_job_confirmation_resolutions WHERE user_id=? AND status='confirmed'{scope}",(uid, *parameters)).fetchall()
     finally:
         connection.close()
     confirmed={}

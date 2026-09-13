@@ -4,10 +4,10 @@ from services.user_skill_choices import SKILL_OPTIONS, parse_skill_choices, form
 
 
 @st.fragment
-def render_user_skills():
+def render_user_skills(initial_text=None):
     with st.expander("使用できるツール・スキル", expanded=True):
         st.caption("職歴の有無にかかわらず、仕事・学習・個人活動で身につけたスキルを登録できます（任意）。求人の応募必須条件やスキルの評価に使用します。")
-        work, learning, notes = parse_skill_choices(load_skills())
+        work, learning, notes = parse_skill_choices(initial_text if initial_text is not None and not _fragment_run() else load_skills())
         with st.form("user_skills_form"):
             selected_work = st.multiselect("仕事で使用したスキル（複数選択）", SKILL_OPTIONS, default=work)
             selected_learning = st.multiselect("学習・個人活動で使用したスキル（複数選択）", SKILL_OPTIONS, default=learning)
@@ -25,3 +25,9 @@ def render_user_skills():
                 st.error(str(error))
             else:
                 st.success("保存しました。変更内容は次の求人評価に反映されます。" if changed else "保存済みの内容と同じです。")
+
+
+def _fragment_run():
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    ctx = get_script_run_ctx()
+    return bool(ctx and ctx.fragment_ids_this_run)

@@ -6,19 +6,28 @@ import zipfile
 from datetime import datetime, timezone
 
 from database.connection import get_connection
+from database.operation import database_operation
 from database.access_control import DataAccessDenied
 from services.current_user_service import get_current_user_id
 from services.google_auth_service import auth_mode, allowed_emails, access_invitations, require_account_enabled
 
 
+@database_operation
 def require_operator():
     import streamlit as st
     if auth_mode() != 'google' or not st.user.is_logged_in:
         raise DataAccessDenied('運営者としてのログインが必要です。')
-    admins = allowed_emails({'access': {'allowed_emails': st.secrets.get('access', {}).get('admin_emails', [])}})
     uid = get_current_user_id()
+    return _require_operator_claims(uid, dict(st.user))
+
+
+@database_operation
+def _require_operator_claims(uid, claims):
+    import streamlit as st
+    if auth_mode() != 'google':
+        raise DataAccessDenied('運営者としてのログインが必要です。')
+    admins = allowed_emails({'access': {'allowed_emails': st.secrets.get('access', {}).get('admin_emails', [])}})
     require_account_enabled(uid, access_invitations(st.secrets))
-    claims = dict(st.user)
     c = get_connection()
     try:
         row = c.execute('SELECT email, auth_subject FROM users WHERE id=?', (uid,)).fetchone()
@@ -41,6 +50,7 @@ def is_operator():
         return False
 
 
+@database_operation
 def list_users():
     require_operator()
     c = get_connection()
@@ -73,8 +83,16 @@ CHILD_TABLES = {
 
 def read_user_data(user_id):
     operator_id = require_operator()
+    return _read_user_data(user_id, operator_id)
+
+
+def _validate_user_id(user_id):
     if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id < 1:
         raise ValueError('利用者を選択してください。')
+
+
+def _read_user_data(user_id, operator_id):
+    _validate_user_id(user_id)
     c = get_connection()
     try:
         if getattr(c, 'dialect', '') == 'postgresql':
@@ -105,6 +123,10 @@ def _csv_cell(value):
 
 def export_user_data(user_id):
     data = read_user_data(user_id)  # 出力ごとに再認可。共有キャッシュに載せない。
+    return _zip_user_data(data)
+
+
+def _zip_user_data(data):
     raw_json = json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
     output = io.BytesIO()
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
@@ -119,3 +141,70 @@ def export_user_data(user_id):
             writer.writerows([_csv_cell(v) for v in row.values()] for row in rows)
             archive.writestr(table + '.csv', text.getvalue().encode('utf-8-sig'))
     return output.getvalue()
+
+
+def prepare_user_export(user_id):
+    """本人セッションに結び付く遅延出力。登録時には業務データもZIPも取得しない。"""
+    import streamlit as st
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    from services.current_user_service import CURRENT_USER_SESSION_KEY
+    operator_id = require_operator()
+    _validate_user_id(user_id)
+    ctx = get_script_run_ctx()
+    if ctx is None:
+        raise DataAccessDenied('ログインした画面から出力してください。')
+    session = ctx.session_state
+    claims = dict(st.user)
+
+    def download():
+        # ログアウト・利用者切替・アカウント停止・運営者権限解除を確認する。
+        if CURRENT_USER_SESSION_KEY not in session or session[CURRENT_USER_SESSION_KEY] != operator_id:
+            raise DataAccessDenied('再ログインしてください。')
+        _require_operator_claims(operator_id, claims)
+        return _zip_user_data(_read_user_data(user_id, operator_id))
+    return download
+
+
+USER_EXPORT_COLUMNS = 'id, email, display_name, auth_provider, is_active, created_at, updated_at, deleted_at, last_login_at'
+
+
+def _table_query(table, count=False):
+    if table == 'users':
+        return f"SELECT {'COUNT(*) AS total' if count else USER_EXPORT_COLUMNS} FROM users WHERE id=?"
+    if table in DIRECT_TABLES:
+        order = 'user_id' if table == 'user_skills' else 'id'
+        return f"SELECT {'COUNT(*) AS total' if count else '*'} FROM {table} WHERE user_id=?" + ('' if count else f' ORDER BY {order}')
+    if table in CHILD_TABLES:
+        parent, key = CHILD_TABLES[table]
+        return f"SELECT {'COUNT(*) AS total' if count else 'child.*'} FROM {table} child JOIN {parent} parent ON child.{key}=parent.id WHERE parent.user_id=?" + ('' if count else ' ORDER BY child.id')
+    raise ValueError('未対応の保存先です。')
+
+
+@database_operation
+def list_user_table_counts(user_id):
+    require_operator()
+    _validate_user_id(user_id)
+    tables = ('users', *DIRECT_TABLES, *CHILD_TABLES)
+    c = get_connection()
+    try:
+        rows = c.execute(' UNION ALL '.join(f"SELECT '{table}' AS name, total FROM ({_table_query(table, True)}) counts" for table in tables), (user_id,)*len(tables)).fetchall()
+        counts = {row['name']: row['total'] for row in rows}
+        if not counts['users']:
+            raise DataAccessDenied('利用者が見つかりません。')
+        return counts
+    finally:
+        c.close()
+
+
+@database_operation
+def read_user_table(user_id, table):
+    require_operator()
+    _validate_user_id(user_id)
+    query = _table_query(table)
+    c = get_connection()
+    try:
+        if not c.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone():
+            raise DataAccessDenied('利用者が見つかりません。')
+        return [dict(row) for row in c.execute(query, (user_id,)).fetchall()]
+    finally:
+        c.close()

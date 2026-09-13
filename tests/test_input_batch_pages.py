@@ -35,6 +35,7 @@ class InputBatchPagesTest(TestCase):
 
     def test_career_manual_form(self):
         self.stack.enter_context(patch('pages.career.load_career_data',return_value=[]))
+        self.stack.enter_context(patch('pages.career.load_skills',return_value=''))
         self.stack.enter_context(patch('ui.user_skills.render_user_skills'))
         app=AppTest.from_string("import streamlit as st; from pages.career import show_page, CAREER_ENTRY_MODE_KEY; st.session_state[CAREER_ENTRY_MODE_KEY]='manual'; show_page()",default_timeout=45).run()
         self.assertFalse(app.exception)

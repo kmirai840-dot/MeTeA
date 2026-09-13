@@ -18,7 +18,7 @@ def load_job_detail_data(job_id):
         commute = load_current_job_commute(job_id, basic.nearest_station_place_id, job.nearest_station, job=job)
     records = load_confirmation_records(job_id)
     return dict(job=job, basic=basic, commute=commute,
-                evaluations=load_job_match_evaluations(),
+                evaluations=load_job_match_evaluations(job_ids=[job_id]),
                 resolutions={str(row['item_key']): str(row['status']) for row in records},
-                decisions=load_job_application_decisions(),
+                decisions=load_job_application_decisions(job_ids=[job_id]),
                 confirmation_records=records)

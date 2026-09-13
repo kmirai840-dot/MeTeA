@@ -2,22 +2,26 @@
 import streamlit as st
 
 from database.connection import get_connection
+from database.operation import database_operation
+from database.query_scope import id_scope
 from database.access_control import require_user_id
 from services.current_user_service import get_current_user_id
 from services.job_evaluation_service import load_job_match_evaluations
 from services.job_matching_auto_evaluation_service import enqueue_stale_job_evaluations
 
 
-def evaluation_snapshot():
+@database_operation
+def evaluation_snapshot(job_ids=None):
     user_id = require_user_id(get_current_user_id())
+    scope, ids = id_scope('e.job_id', job_ids)
     connection = get_connection()
     try:
         rows = connection.execute(
-            """SELECT e.job_id, e.evaluation_status, e.is_stale, e.evaluated_at
+            f"""SELECT e.job_id, e.evaluation_status, e.is_stale, e.evaluated_at
             FROM user_job_match_evaluations e
             JOIN user_jobs j ON j.id = e.job_id AND j.user_id = e.user_id
             WHERE e.user_id = ? AND e.deleted_at IS NULL AND j.deleted_at IS NULL
-            ORDER BY e.job_id""", (user_id,),
+            {scope} ORDER BY e.job_id""", (user_id, *ids),
         ).fetchall()
         return tuple((r['job_id'], r['evaluation_status'], bool(r['is_stale']),
                       str(r['evaluated_at'] or '')) for r in rows)
@@ -37,23 +41,29 @@ def result_signature(snapshot):
                  for job, status, stale, evaluated in snapshot)
 
 
-def render_evaluation_progress(evaluations=None):
+def render_evaluation_progress(evaluations=None, job_ids=None):
     # 画面を開いた時だけルール更新と未処理の変更を確認する。
     if evaluations is None:
-        evaluations = load_job_match_evaluations()
+        evaluations = load_job_match_evaluations(job_ids=job_ids)
     initial = tuple((job_id, e.evaluation_status, e.is_stale, str(e.evaluated_at or ''))
                     for job_id, e in sorted(evaluations.items()))
     if not has_pending(initial):
         return evaluations
     if any(e.is_stale and e.evaluation_status not in {'queued', 'running', 'failed'}
            for e in evaluations.values()):
-        enqueue_stale_job_evaluations()
-        initial = evaluation_snapshot()
+        if job_ids is None:
+            enqueue_stale_job_evaluations()
+        else:
+            from services.job_matching_auto_evaluation_service import enqueue_job_evaluation
+            for jid, evaluation in evaluations.items():
+                if evaluation.is_stale and evaluation.evaluation_status not in {'queued', 'running', 'failed'}:
+                    enqueue_job_evaluation(jid)
+        initial = evaluation_snapshot(job_ids)
     baseline = result_signature(initial)
 
     @st.fragment(run_every=3)
     def watch():
-        latest = evaluation_snapshot()
+        latest = evaluation_snapshot(job_ids)
         if result_signature(latest) != baseline or not has_pending(latest):
             st.rerun()
         st.info('AI評価を更新中です。前回の結果がある場合は表示を続け、完了すると自動で切り替わります。')

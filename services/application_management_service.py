@@ -256,6 +256,7 @@ def _default_route(job_id: int) -> str:
     return (job.source_name if job else "") or "直接応募"
 
 
+@database_operation
 def sync_applications_from_decisions() -> int:
     created = 0
     for job_id, decision in load_job_application_decisions().items():
@@ -272,11 +273,14 @@ def sync_applications_from_decisions() -> int:
     return created
 
 
+@database_operation
 def ensure_application_from_decision(job_id: int, decision_status: str, next_action: str = "",
                                      action_deadline: str | None = None, route: str = "") -> int | None:
     if decision_status not in ACTIVE_DECISIONS:
         return None
     user_id = get_current_user_id()
+    from database.repositories.application_repository import lock_application_job
+    lock_application_job(job_id)
     actual_route = route or _default_route(job_id)
     existing = get_application_by_job_route(user_id, job_id, actual_route)
     if existing:
@@ -309,11 +313,16 @@ def ensure_application_from_decision(job_id: int, decision_status: str, next_act
 def load_application_views(include_closed: bool = True) -> list[dict]:
     user_id = get_current_user_id()
     applications = get_applications(user_id, include_closed)
+    return _application_views(applications)
+
+
+def _application_views(applications):
+    user_id = get_current_user_id()
     if not applications:
         return []
-    jobs = dict(load_jobs())
+    jobs = dict(load_jobs(job_ids=[app.job_id for app in applications]))
     milestones_by_application = defaultdict(list)
-    for milestone in get_milestones(user_id=user_id):
+    for milestone in get_milestones(user_id=user_id, application_ids=[app.id for app in applications]):
         milestones_by_application[milestone.application_id].append(milestone)
     result = []
     for application in applications:
@@ -571,32 +580,49 @@ def add_manual_activity(application_id: int, title: str, detail: str, occurred_a
         occurred_at=occurred_at, title=title, detail=detail, is_automatic=False))
 
 
+@database_operation
 def load_preparation_items(application_id: int, selection_type: str) -> list[ApplicationPreparation]:
+    from database.repositories.application_repository import insert_preparation_defaults
     existing = get_preparations(application_id)
-    existing_keys = {(item.scope, item.selection_type, item.theme_key) for item in existing}
+    keys = {(item.scope, item.selection_type, item.theme_key) for item in existing}
+    missing = []
     for order, (scope, key, title, description) in enumerate(PREPARATION_THEMES):
-        if scope == "common":
-            continue
         item_selection_type = selection_type if scope == "selection" else ""
-        if (scope, item_selection_type, key) not in existing_keys:
-            save_preparation(ApplicationPreparation(
-                application_id=application_id, scope=scope, selection_type=item_selection_type,
-                theme_key=key, title=title, description=description, sort_order=order,
-            ))
+        if scope != "common" and (scope, item_selection_type, key) not in keys:
+            missing.append(ApplicationPreparation(application_id=application_id, scope=scope,
+                selection_type=item_selection_type, theme_key=key, title=title,
+                description=description, sort_order=order))
+    if not missing:
+        return existing
+    insert_preparation_defaults(application_id, missing)
     return get_preparations(application_id)
 
 
+@database_operation
 def load_global_preparation_templates() -> list[UserPreparationTemplate]:
-    user_id = get_current_user_id()
-    existing = get_user_preparation_templates(user_id)
+    from database.repositories.application_repository import insert_template_defaults
+    uid = get_current_user_id()
+    existing = get_user_preparation_templates(uid)
     keys = {item.theme_key for item in existing}
-    for order, (_, key, title, description) in enumerate(GLOBAL_PREPARATION_THEMES):
-        if key not in keys:
-            save_user_preparation_template(UserPreparationTemplate(
-                user_id=user_id, theme_key=key, title=title,
-                description=description, sort_order=order,
-            ))
-    return get_user_preparation_templates(user_id)
+    missing = [UserPreparationTemplate(user_id=uid, theme_key=key, title=title,
+        description=description, sort_order=order)
+        for order, (_, key, title, description) in enumerate(GLOBAL_PREPARATION_THEMES) if key not in keys]
+    if not missing:
+        return existing
+    insert_template_defaults(uid, missing)
+    return get_user_preparation_templates(uid)
+
+
+@database_operation
+def load_selection_preparation_data(application_id):
+    detail = load_application_detail(application_id)
+    if not detail:
+        return None
+    phase = detail['application'].current_phase
+    selection_type = phase.replace("調整中", "").replace("予定", "").replace("結果待ち", "") or "選考"
+    return dict(detail=detail, selection_type=selection_type,
+        items=load_preparation_items(application_id, selection_type),
+        global_templates=load_global_preparation_templates())
 
 
 def save_global_preparation_template(item: UserPreparationTemplate) -> None:
@@ -725,13 +751,13 @@ def _rate_row(reached: int, passed: int, failed: int = 0) -> dict:
     }
 
 
+@database_operation
 def selection_pass_report(start_date: date | None = None, end_date: date | None = None) -> dict:
     """選考フェーズと応募経路・業種・職種ごとの通過実績を返す。"""
-    views = load_application_views(True)
+    applications = get_applications(get_current_user_id(), True)
     if start_date or end_date:
-        filtered_views = []
-        for view in views:
-            application = view["application"]
+        filtered_applications = []
+        for application in applications:
             raw_date = application.application_date or application.created_at
             try:
                 applied_on = date.fromisoformat(str(raw_date)[:10])
@@ -741,10 +767,11 @@ def selection_pass_report(start_date: date | None = None, end_date: date | None 
                 continue
             if end_date and applied_on > end_date:
                 continue
-            filtered_views.append(view)
-        views = filtered_views
+            filtered_applications.append(application)
+        applications = filtered_applications
+    views = _application_views(applications)
     target_application_ids = {view["application"].id for view in views}
-    histories = get_phase_history(user_id=get_current_user_id())
+    histories = get_phase_history(user_id=get_current_user_id(), application_ids=target_application_ids)
     history_by_application = defaultdict(list)
     for row in histories:
         application_id = int(row["application_id"])

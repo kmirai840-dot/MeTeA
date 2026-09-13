@@ -52,12 +52,12 @@ def is_job_match_evaluation_ready(
 # ========================================
 @database_operation
 def load_job_match_evaluations(
-    *, force_numeric_job_id: int | None = None,
+    *, force_numeric_job_id: int | None = None, job_ids=None,
 ) -> dict[int, JobMatchEvaluation]:
     """現在の利用者に紐づくAI評価を取得する。"""
 
     user_id = get_current_user_id()
-    evaluations = get_job_match_evaluations(user_id)
+    evaluations = get_job_match_evaluations(user_id, job_ids=job_ids)
     from services.job_numeric_evaluation_service import refresh_numeric_evaluations
     evaluations = refresh_numeric_evaluations(evaluations, force_job_id=force_numeric_job_id)
     version_mismatch_found = False
@@ -79,7 +79,7 @@ def load_job_match_evaluations(
             version_mismatch_found = True
 
     if version_mismatch_found:
-        evaluations = get_job_match_evaluations(user_id)
+        evaluations = get_job_match_evaluations(user_id, job_ids=job_ids)
     return {job_id: replace(evaluation, matching_points=normalize_matching_points(evaluation.matching_points))
             for job_id, evaluation in evaluations.items()}
 
@@ -138,14 +138,16 @@ def save_job_match_evaluation_data(
 # 応募判断
 # ========================================
 def load_job_application_decisions(
+    job_ids=None,
 ) -> dict[int, JobApplicationDecision]:
     """現在の利用者に紐づく応募判断を取得する。"""
 
     return get_job_application_decisions(
-        get_current_user_id()
+        get_current_user_id(), job_ids=job_ids
     )
 
 
+@database_operation
 def save_job_application_decision_data(
     decision: JobApplicationDecision,
 ) -> list[str]:

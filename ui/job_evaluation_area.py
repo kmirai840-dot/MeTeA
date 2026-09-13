@@ -25,7 +25,7 @@ def pending(evaluation):
 @database_operation
 def load_area_updates(job_id):
     records = load_confirmation_records(job_id)
-    return dict(evaluations=load_job_match_evaluations(), confirmation_records=records,
+    return dict(evaluations=load_job_match_evaluations(job_ids=[job_id]), confirmation_records=records,
                 resolutions={row['item_key']:row['status'] for row in records})
 
 
