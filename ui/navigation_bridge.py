@@ -5,7 +5,7 @@ import streamlit as st
 from streamlit.components.v2 import component
 from ui.page_execution import PENDING_PAGE_KEY
 
-PAGES = frozenset(('home application_dashboard application_detail selection_preparation basic_info hope_conditions job_hunting_axis work_values career profile_review self_discovery job_change_reason job_registration job_list job_detail job_comparison application_list milestones activity_history settings operator help logout privacy').split())
+PAGES = frozenset(('home announcements application_dashboard application_detail selection_preparation basic_info hope_conditions job_hunting_axis work_values career profile_review self_discovery job_change_reason job_registration job_list job_detail job_comparison application_list milestones activity_history settings operator help logout privacy').split())
 KEY = 'metea_navigation_bridge'
 
 

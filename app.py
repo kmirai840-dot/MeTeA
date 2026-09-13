@@ -110,6 +110,7 @@ current_page = resolve_current_page()
 
 valid_pages = {
     "home",
+    "announcements",
     "application_dashboard",
     "application_detail",
     "selection_preparation",
@@ -214,6 +215,10 @@ elif current_page == "selection_preparation":
 
 elif current_page == "operator":
     render_reloaded_page("ui.operator_page", "render_operator_page")
+    st.stop()
+
+elif current_page == "announcements":
+    render_reloaded_page("pages.announcements", "show_page")
     st.stop()
 
 elif current_page == "settings":
@@ -1170,27 +1175,7 @@ page = """
       </div>
 
       <nav class="metea-nav" aria-label="メインナビゲーション">
-        <details class="metea-announcement-menu">
-          <summary>お知らせ</summary>
-      <article class="metea-panel metea-announcement-panel" aria-labelledby="metea-announcement-heading">
-        <div class="metea-panel-head"><h2 id="metea-announcement-heading">お知らせ</h2></div>
-        <time datetime="2026-09-13">2026年9月13日</time>
-        <h3>AI評価・求人一覧の不具合を修正しました</h3>
-        <p>AI評価が繰り返し失敗する問題と、求人一覧がエラーで開けない問題を修正しました。ご不便をおかけしました。</p>
-        <details>
-          <summary>修正内容とご利用時のお願い</summary>
-          <ul>
-            <li>AI評価の回答が途中で切れる問題と、判定の組み合わせが不正になり評価に失敗する問題を修正しました。</li>
-            <li>求人一覧を開いたときのエラーを修正しました。</li>
-            <li>ホームの「次の一歩」が、保存済みの入力内容や応募状況に応じて表示されるようになりました。</li>
-            <li>「保存して次へ」の待ち時間を短縮しました。引き続き速度改善を進めています。</li>
-          </ul>
-          <p>「求人情報は保存されています」と表示された場合、求人を登録し直す必要はありません。修正後もAI評価の失敗表示が残る場合は、「再試行」を1回押してください。評価には数十秒かかる場合があります。</p>
-          <p>再試行後も失敗する場合は、表示されたメッセージと発生した時刻を運営者へお知らせください。</p>
-        </details>
-      </article>
-
-        </details>
+        <a href="?page=announcements">お知らせ</a>
         __NAV_ITEMS_HTML__
         </nav>
     </div>

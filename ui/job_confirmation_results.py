@@ -79,10 +79,6 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
                 st.caption('以前の判断は保持しています。許容する場合は、本人判断を選んで保存してください。')
                 for item in dismissed:
                     entries.append(_batch_fields(job_id, item, False))
-        if confirmed:
-            st.markdown('#### 確認済み・許容した項目')
-            for item in confirmed:
-                entries.append(_batch_fields(job_id, item, True))
         submitted = st.form_submit_button('確認結果をまとめて保存・評価を更新')
         if submitted:
             changes, errors = [], []
@@ -127,7 +123,10 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
 def _batch_fields(job_id, item, confirmed):
     name = item['item_name']
     prefix = f"batch_{job_id}_{item['item_key']}"
-    with st.container(border=confirmed):
+    st.html("""<style>
+    [class*="st-key-acceptance_item_"]:not(:has([class*="st-key-acceptance_control_"] input:checked)) [class*="st-key-acceptance_adjustment_"] { display: none; }
+    </style>""")
+    with st.container(border=confirmed, key='acceptance_item_'+prefix):
         st.markdown(f"**{name}**")
         st.caption(item.get('reason', item.get('item_reason', '')))
         if name == '老舗・安定企業':
@@ -145,10 +144,12 @@ def _batch_fields(job_id, item, confirmed):
             elif kind == 'time':
                 value = st.time_input(name, value=value, step=60, key=prefix+'_value')
             notes = st.text_area('確認した内容' if kind == 'text' else '補足（任意）', value=notes, max_chars=2000, key=prefix+'_notes')
-        accepted = st.checkbox('許容', value=bool(item.get('accepted')), key=prefix+'_accepted')
-        options = ['そのまま', '加点', '減点']
-        adjustment = st.selectbox('点数への反映', options,
-            index={0:0, 1:1, -1:2}.get(item.get('score_adjustment', 0), 0), key=prefix+'_adjustment')
-        st.caption('「許容」にチェックした場合に反映します。加点＋1点・減点−1点、合計±5点まで。')
+        with st.container(key='acceptance_control_'+prefix):
+            accepted = st.checkbox('許容', value=bool(item.get('accepted')), key=prefix+'_accepted')
+        with st.container(key='acceptance_adjustment_'+prefix):
+            options = ['そのまま', '加点', '減点']
+            adjustment = st.selectbox('点数への反映', options,
+                index={0:0, 1:1, -1:2}.get(item.get('score_adjustment', 0), 0), key=prefix+'_adjustment')
+            st.caption('加点＋1点・減点−1点、合計±5点まで。')
         remove_fact = st.checkbox('保存済みの確認結果を取り消す', key=prefix+'_action') if item.get('status') == 'confirmed' else False
     return item, value, notes, remove_fact, accepted, {'そのまま':0, '加点':1, '減点':-1}[adjustment]

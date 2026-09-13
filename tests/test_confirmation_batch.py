@@ -61,3 +61,17 @@ render_batch_confirmation_form(10,[dict(item_key=str(n),item_name=name,reason=''
         self.assertEqual(len(app.selectbox),10)
         self.assertEqual(len(app.button),1)
         self.assertTrue(all(field.value is None for field in app.selectbox[::2]))
+
+    def test_resolved_items_hidden_and_not_resubmitted(self):
+        script = """from ui.job_confirmation_results import render_batch_confirmation_form
+items=[dict(item_key='a',item_name='転勤条件',reason=''),dict(item_key='b',item_name='夜勤',reason=''),dict(item_key='c',item_name='シフト勤務',reason='')]
+records=[dict(items[0],status='confirmed',result_text='転勤なし',accepted=0),dict(items[1],status='pending',accepted=1,score_adjustment=1)]
+render_batch_confirmation_form(10,items,[],records,lambda:None)
+"""
+        with patch.object(service,'save_confirmation_decisions',return_value=0) as save, patch('ui.job_evaluation_area.refresh_saved_confirmation_details'):
+            app=AppTest.from_string(script,default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.checkbox),1)
+            self.assertFalse(any('確認済み・許容した項目' in m.value for m in app.markdown))
+            app.button[0].click().run()
+            self.assertEqual([c['item_name'] for c in save.call_args.args[1]],['シフト勤務'])
