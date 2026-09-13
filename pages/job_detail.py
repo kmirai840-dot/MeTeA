@@ -1034,12 +1034,16 @@ def render_ai_matching_result(
                     evaluation.overall_score,
                     evaluation.evaluation_coverage,
                 )
+                from services.job_confirmation_service import load_confirmation_records, personal_score_adjustment
+                judgment_records = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
+                adjustment = personal_score_adjustment(judgment_records)
+                if any(r.get('accepted') for r in judgment_records):
+                    adjusted = max(0, min(100, evaluation.overall_score + adjustment))
+                    st.caption(f'AI評価 {evaluation.overall_score}点 ／ 本人調整 {adjustment:+d}点 ／ 調整後 {adjusted}点')
+
 
 
             with detail_col:
-                work_breakdown, career_breakdown = load_score_breakdowns(
-                    evaluation
-                )
                 (
                     hope_col,
                     value_col,
@@ -1062,7 +1066,6 @@ def render_ai_matching_result(
                         "就活の軸",
                         evaluation.work_value_score,
                         "tone-green",
-                        breakdown=work_breakdown,
                     )
 
                 with career_col:
@@ -1070,7 +1073,6 @@ def render_ai_matching_result(
                         "職務経歴・スキル",
                         evaluation.career_skill_score,
                         "tone-orange",
-                        breakdown=career_breakdown,
                     )
 
                 with required_col:
@@ -1114,10 +1116,14 @@ def render_ai_matching_result(
                 )
 
             with comment_col3:
+                from services.job_confirmation_service import load_confirmation_records
+                records_for_tasks = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
+                accepted_names = {r['item_name'] for r in records_for_tasks if r.get('accepted')}
+                remaining = [r for r in parse_evaluation_detail_items(evaluation.confirmation_points, '要確認') if r['item_name'] not in accepted_names]
                 render_evaluation_point_card(
                     title="次に確認すること",
                     content=(
-                        evaluation.confirmation_points
+                        '\n'.join(f"{r['item_name']}：{r['reason']}" for r in remaining)
                     ),
                     tone="information",
                 )
@@ -1237,6 +1243,7 @@ def render_evaluation_detail_table(
         "一部一致": "is-partial",
         "不一致": "is-mismatch",
         "要確認": "is-confirmation",
+        "許容": "is-confirmation",
     }
 
     rows_html = []
@@ -1347,7 +1354,7 @@ def partition_company_confirmation_items(
 
     from services.job_confirmation_service import load_confirmation_records
     records = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
-    confirmed_names = {row['item_name'] for row in records if row['status'] == 'confirmed'}
+    confirmed_names = {row['item_name'] for row in records if row['status'] == 'confirmed' or row.get('accepted')}
 
     for item in items:
         item_with_key = dict(item)
@@ -1568,6 +1575,11 @@ def render_matching_detail(
             if table_items:
                 grouped = categorize_details([dict(item, row_index=index) for index, item in enumerate(table_items)], latest.evaluation_result_json)
                 classified = [dict(item, category=key) for key, rows in grouped.items() for item in rows]
+                from services.job_confirmation_service import load_confirmation_records
+                accepted_names = {r['item_name'] for r in load_confirmation_records(job_id) if r.get('accepted')}
+                for row in classified:
+                    if row['item_name'] in accepted_names:
+                        row['judgment'] = '許容'
                 render_evaluation_detail_table(sorted(classified, key=lambda item: item["row_index"]))
             else:
                 st.info(

@@ -111,7 +111,19 @@ def get_job_confirmation_records(user_id, job_id):
     connection = get_connection()
     try:
         require_job_owner(connection, job_id, user_id)
-        rows = connection.execute('SELECT item_key, item_name, item_reason, status, result_text, updated_at FROM user_job_confirmation_resolutions WHERE user_id = ? AND job_id = ? ORDER BY id', (user_id, job_id)).fetchall()
+        rows = connection.execute('SELECT item_key, item_name, item_reason, status, result_text, accepted, score_adjustment, updated_at FROM user_job_confirmation_resolutions WHERE user_id = ? AND job_id = ? ORDER BY id', (user_id, job_id)).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        connection.close()
+
+
+def save_confirmation_judgment(user_id, job_id, item_key, accepted, adjustment):
+    user_id = require_user_id(user_id)
+    connection = get_connection()
+    try:
+        require_job_owner(connection, job_id, user_id)
+        connection.execute('UPDATE user_job_confirmation_resolutions SET accepted = ?, score_adjustment = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND job_id = ? AND item_key = ?',
+                           (int(accepted), adjustment, user_id, job_id, item_key))
+        connection.commit()
     finally:
         connection.close()

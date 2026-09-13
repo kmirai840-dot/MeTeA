@@ -151,3 +151,48 @@ def save_confirmation_batch(job_id, changes):
     if needs_evaluation:
         _invalidate_confirmation(job_id, '企業・求人元への確認結果がまとめて更新されました。')
     return changed
+
+
+@database_operation
+def save_confirmation_decisions(job_id, changes):
+    """確認した事実と本人判断を別々に更新し、一括でコミットする。"""
+    from database.repositories.job_confirmation_repository import save_confirmation_judgment
+    before = {r['item_key']: r for r in load_confirmation_records(job_id)}
+    facts = []
+    judgments = []
+    for change in changes:
+        accepted = change.get('accepted', False)
+        adjustment = change.get('score_adjustment', 0)
+        if not isinstance(accepted, bool) or adjustment not in (-1, 0, 1):
+            raise ValueError('本人判断の選択を確認してください。')
+        if not accepted:
+            adjustment = 0
+        key = build_confirmation_item_key(change['item_name'], change['item_reason'])
+        old = before.get(key)
+        if change.get('remove_fact'):
+            # 許容・本人調整を消さずに確認した事実だけ取り消す。
+            if old and old['status'] == 'confirmed':
+                facts.append(dict(change, status='restore'))
+        elif change.get('result_text'):
+            facts.append(dict(change, status='confirmed'))
+        judgments.append((change, key, old, accepted, adjustment))
+    save_confirmation_batch(job_id, facts)
+    after = {r['item_key']: r for r in load_confirmation_records(job_id)}
+    changed_keys = set()
+    for change, key, old, accepted, adjustment in judgments:
+        row = after.get(key)
+        if row is None and (accepted or old):
+            save_job_confirmation_resolution(get_current_user_id(), job_id, key, change['item_name'], change['item_reason'], 'pending', '')
+        if row is not None or accepted or old:
+            save_confirmation_judgment(get_current_user_id(), job_id, key, accepted, adjustment)
+        if (old or {}).get('accepted', 0) != int(accepted) or (old or {}).get('score_adjustment', 0) != adjustment:
+            changed_keys.add(key)
+        if (old or {}).get('result_text', '') != (after.get(key) or {}).get('result_text', ''):
+            changed_keys.add(key)
+    return len(changed_keys)
+
+
+def personal_score_adjustment(records):
+    # AIの理由文が変わって同じ項目の記録が複数あっても二重加点しない。
+    by_name = {r['item_name']: int(r.get('score_adjustment', 0)) for r in records if r.get('accepted')}
+    return max(-5, min(5, sum(by_name.values())))

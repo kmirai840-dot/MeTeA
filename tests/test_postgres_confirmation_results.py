@@ -17,6 +17,8 @@ class PostgresConfirmationTest(PostgresFixture, unittest.TestCase):
                 c.execute('INSERT INTO user_jobs(id,user_id) VALUES (10,1)')
                 c.execute("INSERT INTO user_job_confirmation_resolutions(user_id,job_id,item_key,status) VALUES (1,10,'old','not_required')")
                 c.execute('ALTER TABLE user_job_confirmation_resolutions DROP COLUMN result_text')
+                c.execute('ALTER TABLE user_job_confirmation_resolutions DROP COLUMN accepted')
+                c.execute('ALTER TABLE user_job_confirmation_resolutions DROP COLUMN score_adjustment')
                 ensure_confirmation_schema(c)
                 ensure_confirmation_schema(c)
                 c.commit()
@@ -26,6 +28,10 @@ class PostgresConfirmationTest(PostgresFixture, unittest.TestCase):
                 self.assertTrue(save_confirmation_result(10,'残業時間','不明','月10時間'))
                 self.assertTrue(save_confirmation_result(10,'残業時間','不明','月20時間'))
                 self.assertEqual(load_confirmation_records(10)[1]['result_text'],'月20時間')
+                from services.job_confirmation_service import save_confirmation_decisions
+                save_confirmation_decisions(10,[dict(item_name='残業時間',item_reason='不明',accepted=True,score_adjustment=-1)])
+                row=load_confirmation_records(10)[1]
+                self.assertEqual((row['result_text'],row['accepted'],row['score_adjustment']),('月20時間',1,-1))
             with user_scope(2):
                 with self.assertRaises(DataAccessDenied): load_confirmation_records(10)
                 with self.assertRaises(DataAccessDenied): save_confirmation_result(10,'残業時間','不明','改変')

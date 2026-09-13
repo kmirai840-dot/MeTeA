@@ -26,7 +26,7 @@ class ConfirmationBatchTest(unittest.TestCase):
 items=[dict(item_key='a',item_name='転勤条件',reason=''),dict(item_key='b',item_name='残業時間',reason=''),dict(item_key='c',item_name='夜勤',reason='')]
 render_batch_confirmation_form(10,items,[],[],lambda:None)
 '''
-        with patch.object(service, 'save_confirmation_batch', return_value=2) as save, patch('ui.job_evaluation_area.refresh_saved_confirmation_details') as notify:
+        with patch.object(service, 'save_confirmation_decisions', return_value=2) as save, patch('ui.job_evaluation_area.refresh_saved_confirmation_details') as notify:
             app=AppTest.from_string(script, default_timeout=30).run()
             self.assertFalse(app.exception)
             self.assertEqual(len(app.button),1)
@@ -35,7 +35,7 @@ render_batch_confirmation_form(10,items,[],[],lambda:None)
             save.assert_not_called()
             app.button[0].click().run()
             self.assertFalse(app.exception)
-            self.assertEqual(len(save.call_args.args[1]),2)
+            self.assertEqual(len(save.call_args.args[1]),3)
             self.assertEqual(app.number_input[0].value,10)
             notify.assert_called_once_with(10, 2)
 
@@ -43,10 +43,10 @@ render_batch_confirmation_form(10,items,[],[],lambda:None)
         script = '''from ui.job_confirmation_results import render_batch_confirmation_form
 render_batch_confirmation_form(10,[dict(item_key='a',item_name='転勤条件',reason=''),dict(item_key='b',item_name='夜勤',reason='')],[],[],lambda:None)
 '''
-        with patch.object(service, 'save_confirmation_batch') as save:
+        with patch.object(service, 'save_confirmation_decisions') as save:
             app=AppTest.from_string(script, default_timeout=30).run()
             app.selectbox[0].select('転勤なし')
-            app.selectbox[1].select('その他（補足に記載）')
+            app.selectbox[2].select('その他（補足に記載）')
             app.button[0].click().run()
             self.assertTrue(app.error)
             save.assert_not_called()
@@ -58,6 +58,6 @@ render_batch_confirmation_form(10,[dict(item_key=str(n),item_name=name,reason=''
 """
         app=AppTest.from_string(script, default_timeout=30).run()
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.selectbox),5)
+        self.assertEqual(len(app.selectbox),10)
         self.assertEqual(len(app.button),1)
-        self.assertTrue(all(field.value is None for field in app.selectbox))
+        self.assertTrue(all(field.value is None for field in app.selectbox[::2]))

@@ -473,6 +473,8 @@ CREATE TABLE IF NOT EXISTS user_job_confirmation_resolutions (
     user_id INTEGER NOT NULL,
     job_id INTEGER NOT NULL,
     item_key TEXT NOT NULL,
+    accepted INTEGER NOT NULL DEFAULT 0,
+    score_adjustment INTEGER NOT NULL DEFAULT 0,
     item_name TEXT NOT NULL DEFAULT '',
     item_reason TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'not_required',

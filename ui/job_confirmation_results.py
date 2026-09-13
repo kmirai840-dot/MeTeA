@@ -37,7 +37,7 @@ def render_confirmed_results(job_id, records):
     confirmed = [row for row in records if row['status'] == 'confirmed']
     if not confirmed:
         return
-    st.markdown('#### 確認済みの追加情報')
+    st.markdown('#### 確認済み・許容した項目')
     st.caption('求人票とは別に、あなたが企業・求人元へ確認した情報です。AI評価にも使用します。')
     for row in confirmed:
         with st.container(border=True):
@@ -52,8 +52,11 @@ def render_confirmed_results(job_id, records):
 
 def render_batch_confirmation_form(job_id, items, dismissed, records, render_profile):
     """選択・入力・確認不要・復元を一回の送信にまとめる。"""
-    from services.job_confirmation_service import save_confirmation_batch
-    confirmed = [r for r in records if r['status'] == 'confirmed']
+    from services.job_confirmation_service import save_confirmation_decisions
+    confirmed = [r for r in records if r['status'] == 'confirmed' or r.get('accepted')]
+    represented = {r['item_name'] for r in confirmed}
+    items = [i for i in items if i['item_name'] not in represented]
+    dismissed = [i for i in dismissed if i['item_name'] not in represented]
     with st.container(key=f'confirmation_batch_shell_{job_id}'), st.form(f'confirmation_batch_{job_id}', border=False):
         st.caption('入力内容は、最後の「確認結果をまとめて保存・評価を更新」を押すまで保存されません。未入力の項目は変更しません。')
         entries = []
@@ -72,25 +75,22 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
         with profile_col:
             render_profile()
         if dismissed:
-            with st.expander(f'確認不要にした項目（{len(dismissed)}件）'):
+            with st.expander(f'以前に確認不要にした項目（{len(dismissed)}件）'):
+                st.caption('以前の判断は保持しています。許容する場合は、本人判断を選んで保存してください。')
                 for item in dismissed:
-                    if st.checkbox(f"{item['item_name']}を確認一覧へ戻す", key=f"batch_restore_{job_id}_{item['item_key']}"):
-                        restores.append(item)
+                    entries.append(_batch_fields(job_id, item, False))
         if confirmed:
-            st.markdown('#### 確認済みの追加情報')
+            st.markdown('#### 確認済み・許容した項目')
             for item in confirmed:
                 entries.append(_batch_fields(job_id, item, True))
         submitted = st.form_submit_button('確認結果をまとめて保存・評価を更新')
         if submitted:
             changes, errors = [], []
-            for item, value, notes, action in entries:
+            for item, value, notes, remove_fact, accepted, adjustment in entries:
                 name = item['item_name']
-                change = dict(item_name=name, item_reason=item.get('reason', item.get('item_reason', '')))
-                if action:
-                    change['status'] = 'restore' if item.get('status') == 'confirmed' else 'not_required'
-                elif value is None and not notes.strip():
-                    continue  # 空欄は保存済み情報も削除しない。
-                else:
+                change = dict(item_name=name, item_reason=item.get('reason', item.get('item_reason', '')),
+                              accepted=accepted, score_adjustment=adjustment, remove_fact=remove_fact)
+                if not remove_fact and (value is not None or notes.strip()):
                     try:
                         change['result_text'] = format_input(name, value, notes)
                         if not change['result_text'] or len(change['result_text']) > 2000:
@@ -99,7 +99,6 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
                         errors.append(f'{name}：{error}')
                         continue
                 changes.append(change)
-            changes.extend(dict(item_name=i['item_name'], item_reason=i.get('reason', i.get('item_reason', '')), status='restore') for i in restores)
             if errors:
                 for error in errors:
                     st.error(error)
@@ -107,11 +106,20 @@ def render_batch_confirmation_form(job_id, items, dismissed, records, render_pro
                 st.info('保存する入力・変更がありません。')
             else:
                 try:
-                    count = save_confirmation_batch(job_id, changes)
+                    count = save_confirmation_decisions(job_id, changes)
                 except ValueError as error:
                     st.error(str(error))
                 else:
                     from ui.job_evaluation_area import refresh_saved_confirmation_details
+                    from services.job_confirmation_service import build_confirmation_item_key
+                    reset_keys = []
+                    for change in changes:
+                        key = build_confirmation_item_key(change['item_name'], change['item_reason'])
+                        if change.get('remove_fact'):
+                            reset_keys.extend([f'batch_{job_id}_{key}_value', f'batch_{job_id}_{key}_notes'])
+                        if not change.get('accepted'):
+                            reset_keys.append(f'batch_{job_id}_{key}_adjustment')
+                    st.session_state[f'confirmation_reset_keys_{job_id}'] = reset_keys
                     refresh_saved_confirmation_details(job_id, count)
 
 
@@ -120,7 +128,7 @@ def _batch_fields(job_id, item, confirmed):
     name = item['item_name']
     prefix = f"batch_{job_id}_{item['item_key']}"
     with st.container(border=confirmed):
-        st.markdown(f"**{'確認済み：' if confirmed else ''}{name}**")
+        st.markdown(f"**{name}**")
         st.caption(item.get('reason', item.get('item_reason', '')))
         if name == '老舗・安定企業':
             st.caption('確認できた設立からの年数を選択してください。経営状況などは補足に記載できます。年数だけで経営の安定性を判断するものではありません。')
@@ -137,5 +145,10 @@ def _batch_fields(job_id, item, confirmed):
             elif kind == 'time':
                 value = st.time_input(name, value=value, step=60, key=prefix+'_value')
             notes = st.text_area('確認した内容' if kind == 'text' else '補足（任意）', value=notes, max_chars=2000, key=prefix+'_notes')
-        action = st.checkbox('保存済みの確認結果を取り消す' if confirmed else '確認不要', key=prefix+'_action')
-    return item, value, notes, action
+        accepted = st.checkbox('許容', value=bool(item.get('accepted')), key=prefix+'_accepted')
+        options = ['そのまま', '加点', '減点']
+        adjustment = st.selectbox('点数への反映', options,
+            index={0:0, 1:1, -1:2}.get(item.get('score_adjustment', 0), 0), key=prefix+'_adjustment')
+        st.caption('「許容」にチェックした場合に反映します。加点＋1点・減点−1点、合計±5点まで。')
+        remove_fact = st.checkbox('保存済みの確認結果を取り消す', key=prefix+'_action') if item.get('status') == 'confirmed' else False
+    return item, value, notes, remove_fact, accepted, {'そのまま':0, '加点':1, '減点':-1}[adjustment]

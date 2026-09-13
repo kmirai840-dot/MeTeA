@@ -56,6 +56,8 @@ def render_evaluation_area(job_id, snapshot, render_score, render_detail):
     def detail():
         saved = st.session_state.pop(f'confirmation_detail_saved_{job_id}', None)
         if saved is not None:
+            for key in st.session_state.pop(f'confirmation_reset_keys_{job_id}', []):
+                st.session_state.pop(key, None)
             records = load_confirmation_records(job_id)
             detail_snapshot.update(confirmation_records=records,
                                    resolutions={r['item_key']: r['status'] for r in records})
