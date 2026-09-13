@@ -3,6 +3,7 @@
 from datetime import date
 from html import escape
 import json
+from services.evaluation_categories import CATEGORIES, categorize_details
 
 import streamlit as st
 
@@ -1072,10 +1073,12 @@ def render_ai_matching_result(
 
                 with required_col:
                     render_score(
-                        "必須条件",
+                        "求人側の応募必須条件",
                         evaluation.required_condition_score,
                         "tone-purple",
                     )
+
+                st.caption("各グラフの判定項目・理由は、下の「評価一覧と確認項目を見る」で同じカテゴリ・色に分けて確認できます。")
 
             st.markdown(
                 '<div class="ai-score-row-spacer"></div>',
@@ -1259,6 +1262,7 @@ def render_evaluation_detail_table(
             "</div>"
             "<div class=\"matching-detail-item-name\">"
             f"{escape(item.get('item_name', '評価項目'))}"
+            + (f"<br><small>{escape(item['subgroup'])}</small>" if item.get('subgroup') else "") +
             "</div>"
             "<div class=\"matching-detail-reason\">"
             f"{escape(reason)}"
@@ -1521,14 +1525,25 @@ def render_matching_detail(
             unsafe_allow_html=True,
         )
         st.caption(
-            "AI評価とルール判定で確認した項目を、"
-            "判定理由とともに表示しています。"
+            "上の円グラフと同じカテゴリ・色で分類しています。"
+            "各行の内訳名はグラフ下の内訳に対応します。要確認は点数計算から除外します。"
         )
 
         if detail_items:
-            render_evaluation_detail_table(
-                detail_items
-            )
+            grouped = categorize_details(detail_items, evaluation.evaluation_result_json)
+            for key, (label, color, description) in CATEGORIES.items():
+                rows = grouped[key]
+                if key == "unknown" and not rows:
+                    continue
+                st.markdown(
+                    f'<div style="border-left:5px solid {color};padding:8px 12px;margin-top:18px">'
+                    f'<strong>{escape(label)}</strong><br><small>{escape(description)}</small></div>',
+                    unsafe_allow_html=True,
+                )
+                if rows:
+                    render_evaluation_detail_table(rows)
+                else:
+                    st.caption("このカテゴリの評価項目はありません（未評価）。")
         else:
             st.info(
                 "表示できる評価項目はありません。"
