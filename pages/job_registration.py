@@ -1241,26 +1241,21 @@ def select_registration_mode(mode: str) -> None:
     """登録方式を選択し、入力欄を同一画面に展開する。"""
 
     st.session_state[JOB_REGISTRATION_MODE_KEY] = mode
+    st.session_state["job_show_registration_methods"] = False
     st.session_state[JOB_FORM_STEP_KEY] = "select"
-    st.rerun()
 
 
-def render_method_selection() -> None:
-    """利用頻度で整理した4種類の登録方法を表示する。"""
+def _render_method_cards(selected_mode: str) -> None:
+    """登録方法を選択する4つのカードを表示する。"""
 
     st.markdown(
         """
         <div class="job-method-heading">
             <strong>求人情報をどの方法で登録しますか？</strong>
-            <span>選んだ方法の入力欄が、この画面の下に表示されます。AIが整理した内容は、保存前に確認・修正できます。</span>
+            <span>方法を選ぶと、選択カードが閉じて入力欄が表示されます。AIが整理した内容は、保存前に確認・修正できます。</span>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-    selected_mode = st.session_state.get(
-        JOB_REGISTRATION_MODE_KEY,
-        "",
     )
 
     pdf_col, text_col, url_col, manual_col = st.columns(
@@ -1290,13 +1285,14 @@ def render_method_selection() -> None:
                 unsafe_allow_html=True,
             )
 
-            if st.button(
+            st.button(
                 "この方法を選ぶ",
                 key="select_job_pdf",
                 type="primary",
                 use_container_width=True,
-            ):
-                select_registration_mode("pdf")
+                on_click=select_registration_mode,
+                args=("pdf",),
+            )
 
     # ------------------------
     # 貼り付け（推奨）
@@ -1320,13 +1316,14 @@ def render_method_selection() -> None:
                 unsafe_allow_html=True,
             )
 
-            if st.button(
+            st.button(
                 "この方法を選ぶ",
                 key="select_job_text",
                 type="primary",
                 use_container_width=True,
-            ):
-                select_registration_mode("text")
+                on_click=select_registration_mode,
+                args=("text",),
+            )
 
     # ------------------------
     # URL（補助方法）
@@ -1349,13 +1346,14 @@ def render_method_selection() -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button(
+            st.button(
                 "この方法を選ぶ",
                 key="select_job_url",
                 type="primary",
                 use_container_width=True,
-            ):
-                select_registration_mode("url")
+                on_click=select_registration_mode,
+                args=("url",),
+            )
 
     # ------------------------
     # 手動（補助方法）
@@ -1384,10 +1382,28 @@ def render_method_selection() -> None:
                 type="primary",
                 use_container_width=True,
             ):
+                st.session_state["job_show_registration_methods"] = False
                 st.session_state[JOB_REGISTRATION_MODE_KEY] = "manual"
                 st.session_state[JOB_FORM_STEP_KEY] = "form"
                 st.session_state["job_extraction_completed"] = False
                 st.rerun()
+
+
+def _toggle_method_cards() -> None:
+    st.session_state["job_show_registration_methods"] = not st.session_state.get("job_show_registration_methods", False)
+
+
+def render_method_selection() -> None:
+    """選択後はカードを閉じ、入力欄を上に表示する。"""
+    selected_mode = st.session_state.get(JOB_REGISTRATION_MODE_KEY, "")
+    if selected_mode in {"pdf", "text", "url"}:
+        st.button(
+            "選択カードを閉じる" if st.session_state.get("job_show_registration_methods", False) else "登録方法を変更",
+            key="change_job_registration_method",
+            on_click=_toggle_method_cards,
+        )
+    if selected_mode not in {"pdf", "text", "url"} or st.session_state.get("job_show_registration_methods", False):
+        _render_method_cards(selected_mode)
 
     if selected_mode in {"pdf", "text", "url"}:
         selected_label = (
