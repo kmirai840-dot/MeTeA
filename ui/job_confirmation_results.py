@@ -1,16 +1,30 @@
 """確認結果を求人の追加情報として保存・編集する。"""
 import streamlit as st
 from services.job_confirmation_service import save_confirmation_result, restore_confirmation_item
+from services.confirmation_input_service import CHOICES, NUMBERS, OTHER, UNKNOWN, input_kind, restore_input, format_input
 
 
 def render_result_form(job_id, item):
     with st.expander('確認結果を入力・編集', expanded=False):
         with st.form(f"confirmation_result_{job_id}_{item['item_key']}"):
-            text = st.text_area('確認した内容', value=item.get('result_text', ''), max_chars=2000,
-                                placeholder='例：採用担当者に確認。転勤はありません。')
+            name = item['item_name']
+            kind = input_kind(name)
+            value, notes = restore_input(name, item.get('result_text', ''))
+            if kind == 'choice':
+                options = CHOICES[name] + [UNKNOWN, OTHER]
+                value = st.selectbox('確認結果', options, index=options.index(value) if value in options else None,
+                                     placeholder='確認した結果を選択してください')
+            elif kind == 'number':
+                unit, maximum = NUMBERS[name]
+                value = st.number_input(f'{name}（{unit}）', min_value=0, max_value=maximum, value=value, step=1)
+            elif kind == 'time':
+                value = st.time_input(name, value=value, step=60)
+            notes = st.text_area('確認した内容' if kind == 'text' else '補足（任意）', value=notes, max_chars=2000,
+                                 placeholder='確認先・条件など、必要な補足を入力できます。')
             st.caption('求人の追加情報として保存し、AI評価に反映します。確認した事実を入力してください。')
             if st.form_submit_button('確認結果を保存する'):
                 try:
+                    text = format_input(name, value, notes)
                     save_confirmation_result(job_id, item['item_name'], item['reason'] if 'reason' in item else item['item_reason'], text)
                 except ValueError as error:
                     st.error(str(error))
