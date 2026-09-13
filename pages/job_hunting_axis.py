@@ -2,6 +2,7 @@
 
 from html import escape
 import streamlit as st
+from ui.page_execution import navigate_to_page, rerun_current_page
 
 from pages.self_discovery_theme import apply_self_discovery_theme
 
@@ -476,7 +477,7 @@ def render_regenerate_controls() -> None:
             use_container_width=True,
         ):
             st.session_state[REGENERATE_CONFIRM_KEY] = True
-            st.rerun()
+            rerun_current_page()
         return
 
     st.markdown(
@@ -509,7 +510,7 @@ def render_regenerate_controls() -> None:
                     "入力内容から軸候補を作り直しました。"
                     "内容を確認し、最後に確定してください。"
                 )
-                st.rerun()
+                rerun_current_page()
             st.error(
                 "軸候補を作成できませんでした。"
                 "希望条件または価値観を入力してから、もう一度お試しください。"
@@ -522,9 +523,10 @@ def render_regenerate_controls() -> None:
             use_container_width=True,
         ):
             st.session_state[REGENERATE_CONFIRM_KEY] = False
-            st.rerun()
+            rerun_current_page()
 
 
+@st.fragment
 def render_job_hunting_axis_page() -> None:
     """就活の軸画面を表示する。"""
 
@@ -537,8 +539,7 @@ def render_job_hunting_axis_page() -> None:
         "← 価値観へ戻る",
         key="job_hunting_axis_back_top",
     ):
-        st.query_params["page"] = "work_values"
-        st.rerun()
+        navigate_to_page("work_values")
 
     st.title("就活の軸")
 
@@ -643,14 +644,14 @@ def render_job_hunting_axis_page() -> None:
                                 edit_title_key,
                                 edit_description_key,
                             )
-                            st.rerun()
+                            rerun_current_page()
 
                         else:
                             clear_axis_errors()
                             st.session_state[MESSAGE_KEY] = (
                                 "就活の軸を下書きへ反映しました。"
                             )
-                            st.rerun()
+                            rerun_current_page()
 
                 with edit_columns[1]:
                     if st.button(
@@ -659,7 +660,7 @@ def render_job_hunting_axis_page() -> None:
                         use_container_width=True,
                     ):
                         st.session_state[EDITING_INDEX_KEY] = None
-                        st.rerun()
+                        rerun_current_page()
 
             else:
                 st.markdown(
@@ -693,7 +694,7 @@ def render_job_hunting_axis_page() -> None:
                         update_axis_draft_state(updated_axes)
                         clear_axis_errors()
                         st.session_state[MESSAGE_KEY] = "優先順位を変更しました。"
-                        st.rerun()
+                        rerun_current_page()
 
 
 
@@ -709,7 +710,7 @@ def render_job_hunting_axis_page() -> None:
                         update_axis_draft_state(updated_axes)
                         clear_axis_errors()
                         st.session_state[MESSAGE_KEY] = "優先順位を変更しました。"
-                        st.rerun()
+                        rerun_current_page()
 
 
                 with control_columns[2]:
@@ -725,7 +726,7 @@ def render_job_hunting_axis_page() -> None:
                         st.session_state[
                             DELETE_CONFIRM_INDEX_KEY
                         ] = None
-                        st.rerun()
+                        rerun_current_page()
 
                 with control_columns[3]:
                     if st.button(
@@ -740,7 +741,7 @@ def render_job_hunting_axis_page() -> None:
                          st.session_state[
                              EDITING_INDEX_KEY
                          ] = None
-                         st.rerun()
+                         rerun_current_page()
 
                 if(
                     st.session_state.get(
@@ -778,7 +779,7 @@ def render_job_hunting_axis_page() -> None:
                             st.session_state[MESSAGE_KEY] = (
                                 "就活の軸を削除しました。"
                             )
-                            st.rerun()
+                            rerun_current_page()
 
                     with delete_columns[1]:
                         if st.button(
@@ -792,7 +793,7 @@ def render_job_hunting_axis_page() -> None:
                             st.session_state[
                                 DELETE_CONFIRM_INDEX_KEY
                             ] = None
-                            st.rerun()
+                            rerun_current_page()
 
     render_regenerate_controls()
 
@@ -809,7 +810,7 @@ def render_job_hunting_axis_page() -> None:
             st.session_state[
                 ADD_FORM_VISIBLE_KEY
             ] = True
-            st.rerun()
+            rerun_current_page()
 
     if st.session_state.get(
         ADD_FORM_VISIBLE_KEY
@@ -861,14 +862,14 @@ def render_job_hunting_axis_page() -> None:
                             new_title_key,
                             new_description_key,
                         )
-                        st.rerun()
+                        rerun_current_page()
 
                     else:
                         clear_axis_errors()
                         st.session_state[MESSAGE_KEY] = (
                             "就活の軸を下書きへ追加しました。"
                         )
-                        st.rerun()
+                        rerun_current_page()
 
             with add_columns[1]:
                 if st.button(
@@ -879,7 +880,7 @@ def render_job_hunting_axis_page() -> None:
                     st.session_state[
                         ADD_FORM_VISIBLE_KEY
                     ] = False
-                    st.rerun()
+                    rerun_current_page()
 
     st.divider()
 
@@ -891,8 +892,7 @@ def render_job_hunting_axis_page() -> None:
             key="job_hunting_axis_back_bottom",
             use_container_width=True,
         ):
-            st.query_params["page"] = "work_values"
-            st.rerun()
+            navigate_to_page("work_values")
 
     with action_columns[1]:
         if st.button(
@@ -938,12 +938,11 @@ def render_job_hunting_axis_page() -> None:
 
                 if errors:
                     set_axis_form_errors(errors)
-                    st.rerun()
+                    rerun_current_page()
 
                 else:
                     clear_axis_errors()
-                    st.query_params["page"] = "career"
-                    st.rerun()
+                    navigate_to_page("career")
 
             except Exception:
                 render_save_failure(

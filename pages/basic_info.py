@@ -2,6 +2,7 @@
 
 from datetime import date
 import streamlit as st
+from ui.page_execution import navigate_to_page, rerun_current_page
 
 from data.master_data import GENDER_LABELS, PREFECTURES
 from pages.self_discovery_theme import apply_self_discovery_theme
@@ -597,7 +598,7 @@ def render_basic_info_page() -> None:
     if st.button("← 戻る",key="basic_back"):
         st.session_state[ERRORS_KEY] = {}
         st.query_params.clear()
-        st.rerun()
+        navigate_to_page("home")
 
     st.title("基本情報")
     st.write("あなたについて教えてください")
@@ -857,7 +858,7 @@ def render_basic_info_page() -> None:
             st.session_state[ERRORS_KEY][
                 NEAREST_STATION_ERROR_KEY
             ] = "検索する駅名を入力してください"
-            st.rerun(scope="fragment")
+            rerun_current_page()
 
         try:
             station_candidates = search_station_candidates(
@@ -872,7 +873,7 @@ def render_basic_info_page() -> None:
             st.session_state[ERRORS_KEY][
                 NEAREST_STATION_ERROR_KEY
             ] = str(error)
-            st.rerun(scope="fragment")
+            rerun_current_page()
 
         if not station_candidates:
             st.session_state[STATION_CANDIDATES_KEY] = []
@@ -886,7 +887,7 @@ def render_basic_info_page() -> None:
                 "該当する駅が見つかりませんでした。"
                 "駅名を確認して、もう一度検索してください"
             )
-            st.rerun(scope="fragment")
+            rerun_current_page()
 
         st.session_state[STATION_CANDIDATES_KEY] = [
             {
@@ -912,7 +913,7 @@ def render_basic_info_page() -> None:
             None,
         )
 
-        st.rerun(scope="fragment")
+        rerun_current_page()
 
     if not submitted:
         return
@@ -958,7 +959,7 @@ def render_basic_info_page() -> None:
     st.session_state[ERRORS_KEY] = validation_errors
 
     if validation_errors:
-        st.rerun(scope="fragment")
+        rerun_current_page()
 
     assert basic_info is not None
 
@@ -979,5 +980,4 @@ def render_basic_info_page() -> None:
         "続けて希望条件を入力してください。"
     )
 
-    st.query_params["page"] = "hope_conditions"
-    st.rerun()
+    navigate_to_page("hope_conditions")

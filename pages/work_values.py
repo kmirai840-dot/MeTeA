@@ -5,6 +5,7 @@ from html import escape
 from pathlib import Path
 
 import streamlit as st
+from ui.page_execution import navigate_to_page, rerun_current_page
 
 from constants.work_values import (
     IMPORTANT_VALUE_OPTIONS,
@@ -541,7 +542,7 @@ def ranking_section(
                             )
                         st.session_state[WORK_VALUES_EDITING_KEY] = True
                         save_work_values_draft(collect_work_values_draft())
-                        st.rerun()
+                        rerun_current_page()
 
         if selected_values:
             rank_up_icon = _asset_data_uri("rank-up.svg")
@@ -1115,6 +1116,7 @@ def work_style_section(
                         unsafe_allow_html=True,
                     )
 
+@st.fragment
 def show_page() -> None:
     """価値観入力画面を表示する。"""
 
@@ -1306,8 +1308,7 @@ def show_page() -> None:
         "← 希望条件へ戻る",
         key="work_values_back_top",
     ):
-        st.query_params["page"] = "hope_conditions"
-        st.rerun()
+        navigate_to_page("hope_conditions")
 
     st.title("価値観")
 
@@ -1403,8 +1404,7 @@ def show_page() -> None:
             key="work_values_back_bottom",
             use_container_width=True,
         ):
-            st.query_params["page"] = "hope_conditions"
-            st.rerun()
+            navigate_to_page("hope_conditions")
 
     with action_columns[1]:
         if st.button(
@@ -1453,7 +1453,7 @@ def show_page() -> None:
             st.session_state[WORK_VALUES_ERRORS_KEY] = validation_errors
 
             if validation_errors:
-                st.rerun()
+                rerun_current_page()
 
             rankings: list[WorkValueRanking] = []
 
@@ -1551,5 +1551,4 @@ def show_page() -> None:
                 st.session_state[WORK_VALUES_ERRORS_KEY] = {}
                 st.session_state.pop("job_hunting_axes_loaded", None)
                 st.session_state.pop("job_hunting_axes", None)
-                st.query_params["page"] = "job_hunting_axis"
-                st.rerun()
+                navigate_to_page("job_hunting_axis")

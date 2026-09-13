@@ -8,6 +8,7 @@ import base64
 from textwrap import dedent
 
 import streamlit as st
+from ui.page_execution import rerun_current_page
 
 from data.master_data import GENDER_LABELS, PRIORITY_LABELS, CAREER_PRIORITY_LABELS
 from constants.work_values import MAX_RANKING_SELECTIONS, WORK_STYLE_QUESTIONS, WORK_STYLE_SCORE_LABELS
@@ -126,7 +127,7 @@ def _edit_key(category: str, card: str) -> str:
 def _edit_button(category: str, card: str) -> None:
     if st.button("編集", key=f"edit_{category}_{card}", type="tertiary"):
         st.session_state[_edit_key(category, card)] = True
-        st.rerun()
+        rerun_current_page()
 
 
 def _finish_edit(category: str, card: str) -> None:
@@ -158,7 +159,7 @@ def _basic_profile_dialog(info: object) -> None:
 
     if cancelled:
         _finish_edit("basic", "profile")
-        st.rerun()
+        st.rerun()  # ダイアログを閉じて親画面へ保存結果を反映する。
     if submitted:
         new, errors = validate_basic_info(
             family,
@@ -178,7 +179,7 @@ def _basic_profile_dialog(info: object) -> None:
             save_basic_info(new)
             _finish_edit("basic", "profile")
             st.session_state["profile_review_notice"] = "基本情報を更新しました。"
-            st.rerun()
+            st.rerun()  # ダイアログを閉じて親画面へ保存結果を反映する。
 
 
 @st.dialog("居住地・最寄駅を編集", width="large")
@@ -196,7 +197,7 @@ def _basic_location_dialog(info: object) -> None:
 
     if cancelled:
         _finish_edit("basic", "location")
-        st.rerun()
+        st.rerun()  # ダイアログを閉じて親画面へ保存結果を反映する。
     if submitted:
         new, errors = validate_basic_info(
             info.family_name,
@@ -216,7 +217,7 @@ def _basic_location_dialog(info: object) -> None:
             save_basic_info(new)
             _finish_edit("basic", "location")
             st.session_state["profile_review_notice"] = "居住地・最寄駅を更新しました。"
-            st.rerun()
+            st.rerun()  # ダイアログを閉じて親画面へ保存結果を反映する。
 
 
 def _field(label: str, value: object) -> str:
@@ -276,7 +277,7 @@ def _consume_edit_query(category: str) -> str | None:
                 st.session_state[key] = False
         st.session_state[_edit_key(category, requested)] = True
         st.query_params.pop("edit", None)
-        st.rerun()
+        # 描画前の状態変更なので、そのまま編集画面を描画できる。
     prefix = f"profile_review_edit_{category}_"
     return next((key.removeprefix(prefix) for key, value in st.session_state.items() if key.startswith(prefix) and value), None)
 
@@ -378,7 +379,7 @@ def _render_basic() -> None:
         st.session_state[_edit_key("basic", "location")] = False
         st.session_state[_edit_key("basic", requested_edit)] = True
         st.query_params.pop("edit", None)
-        st.rerun()
+        # 描画前の状態変更なので、そのまま編集画面を描画できる。
 
     updated_at = load_basic_info_updated_at()
     updated_label = "未登録"
@@ -669,6 +670,7 @@ def _render_career() -> None:
     if active:_career_dialog(active,careers)
 
 
+@st.fragment
 def show_page() -> None:
     # 共通テーマの公開済み呼び出し方を維持し、起動中のStreamlitが
     # 変更前モジュールを保持していても画面を描画できるようにする。
@@ -683,5 +685,5 @@ def show_page() -> None:
     if not category:_render_category_selector();return
     renderers={"basic":_render_basic,"hope":_render_hope,"values":_render_values,"axis":_render_axis,"career":_render_career}
     renderer=renderers.get(category)
-    if renderer is None:st.query_params["page"]="profile_review";st.query_params.pop("category",None);st.rerun()
+    if renderer is None:st.query_params["page"]="profile_review";st.query_params.pop("category",None);rerun_current_page()
     renderer()

@@ -2,6 +2,7 @@
 
 from datetime import date
 import streamlit as st
+from ui.page_execution import navigate_to_page, rerun_current_page
 
 from data.master_data import (
     AGE_GROUP_OPTIONS,
@@ -1256,8 +1257,7 @@ def render_hope_conditions_page() -> None:
         "← 基本情報へ戻る",
         key="hope_conditions_back_top",
     ):
-        st.query_params["page"] = "basic_info"
-        st.rerun()
+        navigate_to_page("basic_info")
 
     st.title("希望条件")
     st.write("これからの働き方について教えてください")
@@ -1884,8 +1884,7 @@ def render_hope_conditions_page() -> None:
             key="hope_conditions_back_bottom",
             use_container_width=True,
         ):
-            st.query_params["page"] = "basic_info"
-            st.rerun()
+            navigate_to_page("basic_info")
 
     with action_columns[1]:
         if st.button(
@@ -1921,7 +1920,7 @@ def render_hope_conditions_page() -> None:
                 st.session_state[ERRORS_KEY] = validation_errors
 
                 if validation_errors:
-                    st.rerun(scope="fragment")
+                    rerun_current_page()
 
                 hope_condition = build_hope_condition()
                 hope_condition_items = (
@@ -1937,8 +1936,7 @@ def render_hope_conditions_page() -> None:
                     "希望条件を保存しました。"
                 )
                 st.session_state[ERRORS_KEY] = {}
-                st.query_params["page"] = "work_values"
-                st.rerun()
+                navigate_to_page("work_values")
 
             except Exception:
                 render_save_failure(

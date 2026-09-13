@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 import streamlit as st
+from ui.page_execution import navigate_to_page, rerun_current_page
 
 from pages.self_discovery_theme import apply_self_discovery_theme
 
@@ -2233,7 +2234,7 @@ def render_company_list() -> None:
             use_container_width=True,
         ):
             st.session_state[CAREER_ENTRY_MODE_KEY] = None
-            st.rerun()
+            rerun_current_page()
 
     with header_right:
         if st.button(
@@ -2251,7 +2252,7 @@ def render_company_list() -> None:
                 CAREER_SCROLL_TO_FORM_KEY
             ] = True
 
-            st.rerun()
+            rerun_current_page()
 
     if not career_items:
         st.markdown(
@@ -2392,7 +2393,7 @@ def render_career_review_summary() -> None:
                     st.session_state[CAREER_COMPLETE_KEY] = False
                     st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
                     load_company_for_edit(company_index)
-                    st.rerun()
+                    rerun_current_page()
 
             st.markdown('<div class="metea-career-review-section-title">会社情報</div>', unsafe_allow_html=True)
             company_details = st.columns(3)
@@ -2437,6 +2438,7 @@ def render_career_review_summary() -> None:
 # 職務経歴画面
 # ==========================================
 
+@st.fragment
 def show_page() -> None:
     """職務経歴入力画面を表示する。"""
 
@@ -2464,8 +2466,7 @@ def show_page() -> None:
         "← 就活の軸へ戻る",
         key="career_back_top",
     ):
-        st.query_params["page"] = "job_hunting_axis"
-        st.rerun()
+        navigate_to_page("job_hunting_axis")
 
     st.title("職務経歴・スキル")
 
@@ -2642,7 +2643,7 @@ def show_page() -> None:
                                 with st.spinner("AIが職務経歴を整理しています..."):
                                     parsed_careers = parse_career_document(extracted_text)
                                 st.session_state["career_ai_parsed"] = parsed_careers
-                                st.rerun()
+                                rerun_current_page()
 
         # ----------------------------------
         # 手入力
@@ -2691,7 +2692,7 @@ def show_page() -> None:
 
                     reset_current_career_form_state()
 
-                    st.rerun()
+                    rerun_current_page()
 
         with guidance_col:
             st.markdown(
@@ -2806,8 +2807,7 @@ def show_page() -> None:
                 ):
                     st.session_state[CAREER_COMPLETE_KEY] = False
                     st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
-                    st.query_params["page"] = "job_list"
-                    st.rerun()
+                    navigate_to_page("job_list")
             with top_column:
                 if st.button(
                     "トップへ戻る",
@@ -2817,7 +2817,7 @@ def show_page() -> None:
                     st.session_state[CAREER_COMPLETE_KEY] = False
                     st.session_state[CAREER_REVIEW_CONFIRMED_KEY] = False
                     st.query_params.clear()
-                    st.rerun()
+                    navigate_to_page("home")
         st.stop()
 
     # AI取込確認中は確認対象だけに集中できるよう、登録済み一覧を表示しない。
@@ -3018,7 +3018,7 @@ def show_page() -> None:
                     CAREER_HISTORY_EDIT_INDEX_KEY
                 ] = -1
 
-                st.rerun()
+                rerun_current_page()
 
         elif history_edit_index == -1:
 

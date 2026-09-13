@@ -6,6 +6,7 @@ import base64
 import importlib
 
 import streamlit as st
+from ui.page_execution import resolve_current_page
 
 st.set_page_config(
     page_title="MeTeA",
@@ -101,10 +102,7 @@ def render_reloaded_page(
 # 表示画面の判定
 # ========================================
 
-current_page = st.query_params.get(
-    "page",
-    "home",
-)
+current_page = resolve_current_page()
 
 valid_pages = {
     "home",

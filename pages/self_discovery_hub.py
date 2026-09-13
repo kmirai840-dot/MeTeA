@@ -19,6 +19,7 @@ def _asset_data_uri(filename: str) -> str:
     return f"data:image/svg+xml;base64,{encoded}"
 
 
+@st.fragment
 def show_page() -> None:
     apply_self_discovery_theme(1, render_stepper=False)
     render_job_navigation("self_discovery")
