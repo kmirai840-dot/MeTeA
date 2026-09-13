@@ -4,11 +4,14 @@ from services.user_skill_choices import format_skill_choices, parse_skill_choice
 
 
 class SkillChoicesTest(unittest.TestCase):
+    def test_pivot_is_independent_from_functions(self):
+        self.assertEqual(parse_skill_choices(format_skill_choices(['ピボットテーブル'], ['Excel関数'], '')), (['ピボットテーブル'], ['Excel関数'], ''))
+
     def test_old_excel_details_are_preserved_without_inventing_skills(self):
         old = "【選択したスキル】\n仕事で使用：Excel：VLOOKUP／Excel：IF\n学習・個人活動で使用：Excel：ピボットテーブル\n補足：元のメモ"
         work, learning, notes = parse_skill_choices(old)
         self.assertEqual(work, ["Excel関数"])
-        self.assertEqual(learning, [])
+        self.assertEqual(learning, ["ピボットテーブル"])
         self.assertIn("Excel：VLOOKUP", notes)
         self.assertIn("Excel：ピボットテーブル", notes)
         self.assertIn("元のメモ", notes)

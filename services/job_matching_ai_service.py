@@ -526,7 +526,20 @@ def filter_unavailable_categories(
     }
 
 
-def matching_response_schema() -> dict:
+def required_targets(matching_context):
+    conditions = (matching_context or {}).get("job", {}).get("required_conditions", {})
+    result = []
+    for field in ("required_experience", "required_skills", "required_qualifications"):
+        values = conditions.get(field, [])
+        if isinstance(values, str):
+            values = [values]
+        for value in values:
+            if isinstance(value, str) and value.strip() and value.strip() not in result:
+                result.append(value.strip())
+    return result
+
+
+def matching_response_schema(matching_context=None) -> dict:
     """Pydanticの検証条件を保ったままstrict JSON Schemaへ変換する。"""
     schema = OpenAIMatchResponse.model_json_schema()
     def strict(node):
@@ -558,6 +571,50 @@ def matching_response_schema() -> dict:
     major["properties"]["evidence"]["minLength"] = 1
     major["properties"]["evidence"]["pattern"] = r"[\s\S]*\S[\s\S]*"
     schema["$defs"]["OpenAIMatchItem"] = {"anyOf": [ordinary, major, unknown]}
+    targets = required_targets(matching_context)
+    if targets:
+        if len(targets) > MAX_AI_ITEMS:
+            raise JobMatchingAIResultError("求人の応募必須条件が評価可能な項目数を超えています。")
+        # 必須条件は自由配列から分離し、求人側の各条件を必須プロパティとして要求する。
+        general = deepcopy(ordinary)
+        general_unknown = deepcopy(unknown)
+        for branch in (general, general_unknown):
+            branch["properties"]["category"] = {"type": "string", "enum": ["hope_condition", "work_value", "career_skill"]}
+        schema["$defs"]["OpenAIMatchItem"] = {"anyOf": [general, general_unknown]}
+        properties = {}
+        for index, target in enumerate(targets):
+            branches = deepcopy([ordinary, major, unknown])
+            for branch in branches:
+                branch["properties"]["category"] = {"type": "string", "enum": ["required_condition"]}
+                branch["properties"]["item_name"] = {"type": "string", "enum": [target[:MAX_ITEM_NAME_LENGTH]]}
+                branch["properties"]["evaluation_group"] = {"type": "string", "enum": [""]}
+                branch["properties"]["weight"] = {"type": "integer", "enum": [1]}
+            properties[f"condition_{index}"] = {"anyOf": branches, "description": target}
+        schema["properties"]["required_conditions"] = {"type": "object", "properties": properties,
+            "required": list(properties), "additionalProperties": False}
+        schema["required"].append("required_conditions")
+        schema["properties"]["items"]["maxItems"] = MAX_AI_ITEMS - len(targets)
+    # カテゴリごとの制約も生成時に指定し、別カテゴリのグループ混入を防ぐ。
+    def specialize(branches):
+        result = []
+        for branch in branches:
+            for category in branch['properties']['category']['enum']:
+                variant = deepcopy(branch)
+                props = variant['properties']
+                props['category'] = {'type': 'string', 'enum': [category]}
+                props['hope_group'] = {'type': 'string', 'enum': sorted(ALLOWED_HOPE_GROUPS) if category == 'hope_condition' else ['']}
+                groups = {'hope_condition': [''], 'required_condition': [''],
+                          'work_value': ['', 'confirmed_axis', 'work_style'],
+                          'career_skill': ['', 'direct_experience', 'portable_skill', 'achievement_reproducibility']}
+                props['evaluation_group'] = {'type': 'string', 'enum': groups[category]}
+                if category in {'career_skill', 'required_condition'}:
+                    props['weight'] = {'type': 'integer', 'enum': [1]}
+                result.append(variant)
+        return result
+    definition = schema['$defs']['OpenAIMatchItem']
+    definition['anyOf'] = specialize(definition['anyOf'])
+    for condition in schema['properties'].get('required_conditions', {}).get('properties', {}).values():
+        condition['anyOf'] = specialize(condition['anyOf'])
     return schema
 
 
@@ -599,7 +656,7 @@ def request_ai_semantic_evaluation(
             model=normalized_model_name,
             input=messages,
             text={"format": {"type": "json_schema", "name": "OpenAIMatchResponse",
-                             "strict": True, "schema": matching_response_schema()}},
+                             "strict": True, "schema": matching_response_schema(matching_context)}},
             max_output_tokens=(
                 MAX_AI_OUTPUT_TOKENS
             ),
@@ -622,11 +679,25 @@ def request_ai_semantic_evaluation(
     if not response.output_text:
         raise JobMatchingAIResultError("AIマッチングの構造化結果を取得できませんでした")
     try:
-        parsed_response = OpenAIMatchResponse.model_validate_json(response.output_text)
-    except ValueError:
+        payload = json.loads(response.output_text)
+        targets = required_targets(matching_context)
+        if targets:
+            required = payload.get("required_conditions", {})
+            keys = [f"condition_{index}" for index in range(len(targets))]
+            if not isinstance(required, dict) or set(required) != set(keys):
+                raise ValueError("Missing required condition")
+            checks = [required[key] for key in keys]
+            for target, check in zip(targets, checks):
+                if check.get("category") != "required_condition" or check.get("item_name") != target[:MAX_ITEM_NAME_LENGTH]:
+                    raise ValueError("Invalid required condition")
+            payload = {"items": [*payload.get("items", []), *checks]}
+        parsed_response = OpenAIMatchResponse.model_validate(payload)
+    except (ValueError, TypeError, AttributeError):
         # 入力・生成本文を例外ログに含めない。
         raise JobMatchingAIResultError("AI評価の回答形式を検証できませんでした。") from None
     payload = parsed_response.model_dump()
+    from services.selected_skill_rules import apply_selected_skill_rules
+    payload = apply_selected_skill_rules(payload, matching_context)
 
     filtered_payload = (
         filter_unavailable_categories(

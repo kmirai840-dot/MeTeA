@@ -38,6 +38,8 @@ class ResponseCompletionTest(unittest.TestCase):
         valid=dict(category='work_value',evaluation_group='confirmed_axis',item_name='test',judgment='一致',reason='reason',weight=1,hope_group='',evidence='求人と本人の根拠',is_major_required_mismatch=False)
         jsonschema.validate({'items':[valid]},schema)
         with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate({'items':[dict(valid, hope_group='salary_employment')]}, schema)
+        with self.assertRaises(jsonschema.ValidationError):
             jsonschema.validate({'items':[dict(valid,is_major_required_mismatch=True)]},schema)
         jsonschema.validate({'items':[dict(valid,category='required_condition',evaluation_group='',judgment='不一致',is_major_required_mismatch=True)]},schema)
         for evidence in ('', '  \n\t'):

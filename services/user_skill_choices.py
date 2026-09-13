@@ -1,7 +1,7 @@
 """選択式スキルを既存の文章形式へ変換する。旧文章は補足として保持する。"""
 
 SKILL_OPTIONS = (
-    "Excel入力", "Excel関数", "Excel VBA",
+    "Excel入力", "Excel関数", "ピボットテーブル", "Excel VBA",
     "Word：文書作成・書式設定", "PowerPoint：スライド作成",
     "Googleスプレッドシート：表作成・集計", "Googleドキュメント：文書作成",
     "Googleスライド：資料作成", "SQL：データ抽出・集計",
@@ -20,7 +20,7 @@ LEGACY_EXCEL = {
     "Excel：IF": "Excel関数", "Excel：SUMIF・SUMIFS": "Excel関数",
     "Excel：COUNTIF・COUNTIFS": "Excel関数", "Excel：VLOOKUP": "Excel関数",
     "Excel：XLOOKUP": "Excel関数", "Excel：マクロ・VBA": "Excel VBA",
-    "Excel：ピボットテーブル": None, "Excel：グラフ作成": None,
+    "Excel：ピボットテーブル": "ピボットテーブル", "Excel：グラフ作成": None,
     "Excel：Power Query": None,
 }
 

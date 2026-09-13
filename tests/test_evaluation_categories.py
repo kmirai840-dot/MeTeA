@@ -25,5 +25,7 @@ class CategoryTest(unittest.TestCase):
         from unittest.mock import patch
         from pages.job_detail import render_evaluation_detail_table
         with patch("pages.job_detail.st.markdown") as render:
-            render_evaluation_detail_table([dict(item_name="Excel",judgment="一致",reason="確認",subgroup="<script>")])
+            render_evaluation_detail_table([dict(item_name="Excel",judgment="一致",reason="確認",subgroup="<script>",category="required_condition")])
         self.assertIn("&lt;script&gt;",render.call_args.args[0])
+        self.assertIn('<div>分類</div>', render.call_args.args[0])
+        self.assertIn('求人側の応募必須条件', render.call_args.args[0])

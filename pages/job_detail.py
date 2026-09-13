@@ -1080,7 +1080,6 @@ def render_ai_matching_result(
                         "tone-purple",
                     )
 
-                st.caption("各グラフの判定項目・理由は、下の「評価一覧と確認項目を見る」で同じカテゴリ・色に分けて確認できます。")
 
             st.markdown(
                 '<div class="ai-score-row-spacer"></div>',
@@ -1258,6 +1257,8 @@ def render_evaluation_detail_table(
 
         rows_html.append(
             "<div class=\"matching-detail-row\">"
+            f'<div class="matching-detail-category"><span style="border-left:4px solid {CATEGORIES.get(item.get("category"), CATEGORIES["unknown"])[1]};padding-left:8px">'
+            f'{escape(CATEGORIES.get(item.get("category"), CATEGORIES["unknown"])[0])}</span></div>'
             "<div class=\"matching-detail-judgment\">"
             f"<span class=\"matching-judgment-badge {judgment_class}\">"
             f"{escape(judgment)}"
@@ -1277,6 +1278,7 @@ def render_evaluation_detail_table(
         """
         <div class="matching-detail-table">
             <div class="matching-detail-table-header">
+                <div>分類</div>
                 <div>判定</div>
                 <div>評価項目</div>
                 <div>評価理由</div>
@@ -1530,25 +1532,13 @@ def render_matching_detail(
             unsafe_allow_html=True,
         )
         st.caption(
-            "上の円グラフと同じカテゴリ・色で分類しています。"
-            "各行の内訳名はグラフ下の内訳に対応します。要確認は点数計算から除外します。"
+            "各行の「分類」が上の4つの円グラフに対応します。要確認は点数計算から除外します。"
         )
 
         if detail_items:
-            grouped = categorize_details(detail_items, evaluation.evaluation_result_json)
-            for key, (label, color, description) in CATEGORIES.items():
-                rows = grouped[key]
-                if key == "unknown" and not rows:
-                    continue
-                st.markdown(
-                    f'<div style="border-left:5px solid {color};padding:8px 12px;margin-top:18px">'
-                    f'<strong>{escape(label)}</strong><br><small>{escape(description)}</small></div>',
-                    unsafe_allow_html=True,
-                )
-                if rows:
-                    render_evaluation_detail_table(rows)
-                else:
-                    st.caption("このカテゴリの評価項目はありません（未評価）。")
+            grouped = categorize_details([dict(item, row_index=index) for index, item in enumerate(detail_items)], evaluation.evaluation_result_json)
+            classified = [dict(item, category=key) for key, rows in grouped.items() for item in rows]
+            render_evaluation_detail_table(sorted(classified, key=lambda item: item["row_index"]))
         else:
             st.info(
                 "表示できる評価項目はありません。"
@@ -2229,7 +2219,7 @@ def render_job_detail_styles() -> None:
         .matching-detail-table-header,
         .matching-detail-row {
             display: grid;
-            grid-template-columns: 116px minmax(180px, 0.8fr) minmax(320px, 2fr);
+            grid-template-columns: minmax(110px, 0.65fr) 90px minmax(140px, 0.8fr) minmax(200px, 2fr);
             column-gap: 18px;
             align-items: start;
         }
