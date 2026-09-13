@@ -545,12 +545,19 @@ def matching_response_schema() -> dict:
     item = schema["$defs"]["OpenAIMatchItem"]
     ordinary = deepcopy(item)
     ordinary["properties"]["is_major_required_mismatch"] = {"type": "boolean", "enum": [False]}
+    unknown = deepcopy(ordinary)
+    unknown["properties"]["judgment"] = {"type": "string", "enum": [NEEDS_CONFIRMATION]}
+    ordinary["properties"]["judgment"] = {"type": "string", "enum": ["一致", "一部一致", MISMATCH]}
+    ordinary["properties"]["evidence"]["minLength"] = 1
+    ordinary["properties"]["evidence"]["pattern"] = r"[\s\S]*\S[\s\S]*"
     major = deepcopy(item)
     major["properties"]["is_major_required_mismatch"] = {"type": "boolean", "enum": [True]}
     major["properties"]["category"] = {"type": "string", "enum": ["required_condition"]}
     major["properties"]["judgment"] = {"type": "string", "enum": [MISMATCH]}
     major["properties"]["weight"] = {"type": "integer", "enum": [1]}
-    schema["$defs"]["OpenAIMatchItem"] = {"anyOf": [ordinary, major]}
+    major["properties"]["evidence"]["minLength"] = 1
+    major["properties"]["evidence"]["pattern"] = r"[\s\S]*\S[\s\S]*"
+    schema["$defs"]["OpenAIMatchItem"] = {"anyOf": [ordinary, major, unknown]}
     return schema
 
 

@@ -35,10 +35,15 @@ class ResponseCompletionTest(unittest.TestCase):
         self.assertEqual(item['properties']['reason']['maxLength'],ai.MAX_REASON_LENGTH)
         self.assertEqual(schema['properties']['items']['maxItems'],40)
         import jsonschema
-        valid=dict(category='work_value',evaluation_group='confirmed_axis',item_name='test',judgment='一致',reason='reason',weight=1,hope_group='',evidence='',is_major_required_mismatch=False)
+        valid=dict(category='work_value',evaluation_group='confirmed_axis',item_name='test',judgment='一致',reason='reason',weight=1,hope_group='',evidence='求人と本人の根拠',is_major_required_mismatch=False)
         jsonschema.validate({'items':[valid]},schema)
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.validate({'items':[dict(valid,is_major_required_mismatch=True)]},schema)
         jsonschema.validate({'items':[dict(valid,category='required_condition',evaluation_group='',judgment='不一致',is_major_required_mismatch=True)]},schema)
+        for evidence in ('', '  \n\t'):
+            for judgment in ('一致', '一部一致', '不一致'):
+                with self.assertRaises(jsonschema.ValidationError):
+                    jsonschema.validate({'items':[dict(valid,evidence=evidence,judgment=judgment)]},schema)
+            jsonschema.validate({'items':[dict(valid,evidence=evidence,judgment='要確認')]},schema)
 
 if __name__=='__main__': unittest.main()
