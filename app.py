@@ -15,10 +15,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 既存のリンクを同じ接続で処理し、遷移中の表示を共通化する。
-from ui.navigation_bridge import install_navigation
-install_navigation()
-
 # 重いサービスのimport・認証・DB通信より先に表示する。
 _loading_notice = st.empty()
 _loading_notice.info("MeTeAを読み込んでいます。接続とログイン状態を確認しています…")
@@ -77,6 +73,10 @@ try:
 except UserIdentityRequired as error:
     st.info(str(error))
     st.stop()
+# 認証時のセッション初期化より後に登録し、初回クリックも受け取る。
+from ui.navigation_bridge import install_navigation
+install_navigation()
+
 if not google_login_enabled:
     initialize_database()
     if is_demo_environment():

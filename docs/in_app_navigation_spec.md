@@ -10,7 +10,7 @@
 
 ## 実装
 
-- `ui/navigation_bridge.py`：Streamlit v2 componentを1回定義、全ページ共通のapp.py先頭で配置。コールバックは遷移パラメータのみ更新する。ページ名と入力サイズをサーバー側でも検証。保存や認証を代行しない。
+- `ui/navigation_bridge.py`：Streamlit v2 componentを1回定義、全ページ共通のapp.pyで認証と本人ID確認の直後に配置。コールバックは遷移パラメータのみ更新する。ページ名と入力サイズをサーバー側でも検証。保存や認証を代行しない。
 - `ui/navigation_bridge.js`：documentのリンククリックを委譲受信。同一origin・同一pathname・対応page・通常クリックに限定。URLや入力内容をHTML化しない。書換え対象はサーバーの遷移先だけで、既存リンクの見た目を維持。
 - 求人ID、比較ID、応募ID、focusなどのクエリを渡し、以前のクエリは置換する。既存の本人確認・所有者確認と保存後のnavigate_to_pageは維持。
 - ネイティブの保存ボタン自体は引き続きStreamlitのコールバックと再実行を使用する。ブラウザ文書を読み直さないことと、サーバー処理がなくなることを混同しない。
@@ -23,3 +23,5 @@
 初めてサイトを開くとき、ブラウザの再読み込み、Googleログイン等の外部遷移、接続切断からの復旧では読み込みが発生する。JavaScriptコンポーネントが利用できない場合は通常リンクへ戻る。DB/AI処理そのものの時間をなくしたり、全ケース3秒以内を保証する変更ではない。公開検証はpublic_release_status.mdへ記録。
 
 [Streamlit公式v2 component仕様](https://docs.streamlit.io/develop/api-reference/custom-components/st.components.v2.component)のリンクをPythonへ通知する方式を使用。
+
+公開初回確認で、認証前のコンポーネント登録は初回本人設定時のsession_state初期化に消され、1回目のクリックが反映されないことを確認。登録を認証後へ移して対応。未ログイン画面・データ説明単独画面は従来の通常遷移となる。
