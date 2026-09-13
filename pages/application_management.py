@@ -1,6 +1,6 @@
 """応募管理・選考通過率レポート画面（カード内編集対応）。"""
 
-from ui.schedule_responsive import SCHEDULE_RESPONSIVE_CSS, mobile_schedule_html
+from ui.schedule_responsive import SCHEDULE_RESPONSIVE_CSS, mobile_schedule_html, install_mobile_calendar
 
 import calendar
 import base64
@@ -2017,6 +2017,7 @@ def _render_application_table(views: list[dict], view_mode: str) -> None:
         '</script>',
         unsafe_allow_javascript=True,
     )
+    install_mobile_calendar()
     # 起動要求は一度だけ消費する。IDを保持したままにすると、絞り込みや
     # 表示切替など無関係な再描画でも応募詳細が勝手に再表示される。
     selected_application_id = int(
