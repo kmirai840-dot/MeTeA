@@ -2828,7 +2828,7 @@ def render_selection_preparation_page() -> None:
     visible = sorted(visible, key=lambda item: (item.sort_order, item.id))
     completed = sum(item.is_completed for item in visible)
     rate = round(completed / len(visible) * 100) if visible else 0
-    next_date = next((m.scheduled_date for m in detail["milestones"] if m.status == "pending"), "日程未定")
+    next_date = str(next((m.scheduled_date for m in detail["milestones"] if m.status == "pending"), None) or "日程未定")
 
     st.markdown(
         '<a class="prep-action" href="?page=application_list">← 応募管理へ戻る</a>',
