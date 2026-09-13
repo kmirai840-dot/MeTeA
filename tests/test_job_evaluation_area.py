@@ -37,6 +37,7 @@ class EvaluationAreaTest(unittest.TestCase):
             functions[0]()
             self.assertEqual(load.call_count,count)
             fake.rerun.assert_not_called()
+            detail.assert_called_once()  # AIのポーリングでフォームを再描画しない。
 
     def test_confirmation_refresh_requests_local_scope(self):
         with patch.object(area.st,'session_state',{}), patch.object(area,'rerun_current_page') as rerun:

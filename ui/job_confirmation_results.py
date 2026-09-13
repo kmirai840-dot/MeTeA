@@ -48,3 +48,92 @@ def render_confirmed_results(job_id, records):
             if st.button('確認結果を取り消す', key=f"undo_confirmed_{job_id}_{row['item_key']}"):
                 restore_confirmation_item(job_id, row['item_key'])
                 refresh_confirmation_area(job_id)
+
+
+def render_batch_confirmation_form(job_id, items, dismissed, records, render_profile):
+    """選択・入力・確認不要・復元を一回の送信にまとめる。"""
+    from services.job_confirmation_service import save_confirmation_batch
+    confirmed = [r for r in records if r['status'] == 'confirmed']
+    with st.form(f'confirmation_batch_{job_id}'):
+        st.caption('入力内容は、最後の「確認結果をまとめて保存・評価を更新」を押すまで保存されません。未入力の項目は変更しません。')
+        entries = []
+        restores = []
+        company_col, profile_col = st.columns(2, gap='medium')
+        with company_col:
+            with st.container(border=True):
+                st.markdown('**● 企業・求人元へ確認**')
+                st.caption('面談や応募前に、企業へ確認したい内容です。')
+                if not items:
+                    st.success('現在、確認が必要な項目はありません。')
+                for item in items:
+                    entries.append(_batch_fields(job_id, item, False))
+        with profile_col:
+            render_profile()
+        if dismissed:
+            with st.expander(f'確認不要にした項目（{len(dismissed)}件）'):
+                for item in dismissed:
+                    if st.checkbox(f"{item['item_name']}を確認一覧へ戻す", key=f"batch_restore_{job_id}_{item['item_key']}"):
+                        restores.append(item)
+        if confirmed:
+            st.markdown('#### 確認済みの追加情報')
+            for item in confirmed:
+                entries.append(_batch_fields(job_id, item, True))
+        submitted = st.form_submit_button('確認結果をまとめて保存・評価を更新')
+        if submitted:
+            changes, errors = [], []
+            for item, value, notes, action in entries:
+                name = item['item_name']
+                change = dict(item_name=name, item_reason=item.get('reason', item.get('item_reason', '')))
+                if action:
+                    change['status'] = 'restore' if item.get('status') == 'confirmed' else 'not_required'
+                elif value is None and not notes.strip():
+                    continue  # 空欄は保存済み情報も削除しない。
+                else:
+                    try:
+                        change['result_text'] = format_input(name, value, notes)
+                        if not change['result_text'] or len(change['result_text']) > 2000:
+                            raise ValueError('確認結果を1〜2000文字で入力してください。')
+                    except ValueError as error:
+                        errors.append(f'{name}：{error}')
+                        continue
+                changes.append(change)
+            changes.extend(dict(item_name=i['item_name'], item_reason=i.get('reason', i.get('item_reason', '')), status='restore') for i in restores)
+            if errors:
+                for error in errors:
+                    st.error(error)
+            elif not changes:
+                st.info('保存する入力・変更がありません。')
+            else:
+                try:
+                    count = save_confirmation_batch(job_id, changes)
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    st.success(f'{count}項目を保存しました。' if count else '保存済みの内容から変更はありません。')
+                    if count:
+                        # フォームを再生成せず、評価領域だけに更新を通知する。
+                        from ui.job_evaluation_area import notify_evaluation_saved
+                        notify_evaluation_saved(job_id)
+
+
+def _batch_fields(job_id, item, confirmed):
+    name = item['item_name']
+    prefix = f"batch_{job_id}_{item['item_key']}"
+    with st.container(border=True):
+        st.markdown(f"**{'確認済み：' if confirmed else ''}{name}**")
+        st.caption(item.get('reason', item.get('item_reason', '')))
+        with st.expander('確認結果を入力・編集', key=f"confirmation_form_{job_id}_{item['item_key']}"):
+            value, notes = restore_input(name, item.get('result_text', ''))
+            kind = input_kind(name)
+            if kind == 'choice':
+                options = CHOICES[name] + [UNKNOWN, OTHER]
+                value = st.selectbox('確認結果', options, index=options.index(value) if value in options else None,
+                                     placeholder='確認した結果を選択してください', key=prefix+'_value')
+            elif kind == 'number':
+                unit, maximum = NUMBERS[name]
+                value = st.number_input(f'{name}（{unit}）', min_value=0, max_value=maximum, value=value, step=1, key=prefix+'_value')
+            elif kind == 'time':
+                value = st.time_input(name, value=value, step=60, key=prefix+'_value')
+            notes = st.text_area('確認した内容' if kind == 'text' else '補足（任意）', value=notes, max_chars=2000, key=prefix+'_notes')
+        action = st.checkbox('保存済みの確認結果を取り消す' if confirmed else '確認不要', key=prefix+'_action')
+    return item, value, notes, action

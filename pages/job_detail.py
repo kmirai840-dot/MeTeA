@@ -1538,24 +1538,43 @@ def render_matching_detail(
             ),
         ]
 
-        st.markdown(
-            '<div class="matching-detail-section-title">'
-            '評価一覧表'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption(
-            "各行の「分類」が上の4つの円グラフに対応します。要確認は点数計算から除外します。"
-        )
-
-        if detail_items:
-            grouped = categorize_details([dict(item, row_index=index) for index, item in enumerate(detail_items)], evaluation.evaluation_result_json)
-            classified = [dict(item, category=key) for key, rows in grouped.items() for item in rows]
-            render_evaluation_detail_table(sorted(classified, key=lambda item: item["row_index"]))
-        else:
-            st.info(
-                "表示できる評価項目はありません。"
+        @st.fragment
+        def live_detail_table():
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+            from ui.job_evaluation_area import _poll, pending
+            from time import monotonic
+            ctx = get_script_run_ctx()
+            latest = load_job_match_evaluations().get(job_id) if ctx and ctx.fragment_ids_this_run else evaluation
+            _poll(key=f'job_detail_table_poll_{job_id}',
+                  data={'jobId': job_id, 'table': True, 'pending': pending(latest), 'sequence': monotonic()},
+                  on_poll_change=lambda: None, height=0)
+            if latest is None:
+                return
+            table_items = [
+                *parse_evaluation_detail_items(latest.matching_points, '適合'),
+                *parse_evaluation_detail_items(latest.concern_points, '不一致'),
+                *parse_evaluation_detail_items(latest.confirmation_points, '要確認'),
+            ]
+            st.markdown(
+                '<div class="matching-detail-section-title">'
+                '評価一覧表'
+                '</div>',
+                unsafe_allow_html=True,
             )
+            st.caption(
+                "各行の「分類」が上の4つの円グラフに対応します。要確認は点数計算から除外します。"
+            )
+
+            if table_items:
+                grouped = categorize_details([dict(item, row_index=index) for index, item in enumerate(table_items)], latest.evaluation_result_json)
+                classified = [dict(item, category=key) for key, rows in grouped.items() for item in rows]
+                render_evaluation_detail_table(sorted(classified, key=lambda item: item["row_index"]))
+            else:
+                st.info(
+                    "表示できる評価項目はありません。"
+                )
+
+        live_detail_table()
 
         confirmation_items = [
             item
@@ -1589,35 +1608,18 @@ def render_matching_detail(
             unsafe_allow_html=True,
         )
 
-        company_col, user_col = st.columns(
-            2,
-            gap="medium",
-        )
-
-        with company_col:
-            render_actionable_confirmation_group(
-                job_id=job_id,
-                items=active_company_items,
-            )
-
-        with user_col:
-            render_confirmation_group(
-                title="プロフィール入力を確認",
-                description=(
-                    "入力を補うと、次回評価の精度が上がります。"
-                ),
-                items=user_items,
-                tone="user",
-            )
-
-        render_dismissed_confirmation_items(
-            job_id=job_id,
-            items=dismissed_company_items,
-        )
-        from ui.job_confirmation_results import render_confirmed_results
+        from ui.job_confirmation_results import render_batch_confirmation_form
         from services.job_confirmation_service import load_confirmation_records
         records = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
-        render_confirmed_results(job_id, records)
+        render_batch_confirmation_form(
+            job_id, active_company_items, dismissed_company_items, records,
+            lambda: render_confirmation_group(
+                title="プロフィール入力を確認",
+                description="入力を補うと、次回評価の精度が上がります。",
+                items=user_items, tone="user",
+            ),
+        )
+
 
 
 def _render_application_decision_content(

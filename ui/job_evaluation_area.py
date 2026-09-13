@@ -31,7 +31,8 @@ def load_area_updates(job_id):
 
 def render_evaluation_area(job_id, snapshot, render_score, render_detail):
     # ページの通常描画時に作成する、当該ブラウザ専用のスナップショット。
-    current = snapshot
+    current = dict(snapshot)
+    detail_snapshot = dict(snapshot)
 
     @st.fragment
     def area():
@@ -48,8 +49,20 @@ def render_evaluation_area(job_id, snapshot, render_score, render_detail):
         _poll(key=f'job_evaluation_poll_{job_id}', data={'jobId': job_id, 'pending': pending(evaluation), 'sequence': monotonic()},
               on_poll_change=lambda: None, height=0)
         render_score(job_id=job_id, job=current['job'], evaluations=current['evaluations'], snapshot=current)
-        st.divider()
-        render_detail(job_id, evaluations=current['evaluations'], snapshot=current)
+
+
+    # 詳細フォームは別fragment。スコアのポーリングでは再実行しない。
+    @st.fragment
+    def detail():
+        render_detail(job_id, evaluations=detail_snapshot['evaluations'], snapshot=detail_snapshot)
 
     with st.container(key='local_job_evaluation'):
         area()
+        st.divider()
+        detail()
+
+
+def notify_evaluation_saved(job_id):
+    st.session_state[f'confirmation_refresh_{job_id}'] = True
+    # 保存完了の通知だけを描画。フォームの再生成は要求しない。
+    st.html(f'<span data-metea-saved="{job_id}" data-sequence="{monotonic()}" style="display:none"></span>')

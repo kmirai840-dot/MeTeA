@@ -12,6 +12,7 @@ export default function({data, setTriggerValue}) {
   function capture(event) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest('.st-key-local_job_evaluation [data-testid="stFormSubmitButton"]')) return;
+    if (target.closest('[class*=st-key-confirmation_batch_]')) return;
     const form = target.closest(selector);
     if (!form) return;
     const forms = [...doc.querySelectorAll(selector)];
@@ -57,9 +58,25 @@ export default function({data, setTriggerValue}) {
     if (editing) { timer=setTimeout(poll,3000); return; }
     setTriggerValue('poll',Date.now());
   }
+  function saved(event) {
+    if (event.detail !== data.jobId) return;
+    clearTimeout(timer);
+    setTriggerValue('poll',Date.now());
+  }
+  const watcherKey = `${data.jobId}_${data.table ? 'table' : 'score'}`;
+  const seen = doc.__meteaSavedSequences || (doc.__meteaSavedSequences = {});
+  const watcher = setInterval(() => {
+    const marker = doc.querySelector(`[data-metea-saved="${data.jobId}"]`);
+    const sequence = marker?.getAttribute('data-sequence');
+    if (sequence && seen[watcherKey] !== sequence) {
+      seen[watcherKey] = sequence;
+      saved({detail:data.jobId});
+    }
+  }, 500);
   if (data.pending) timer=setTimeout(poll,3000);
   return () => {
     clearTimeout(timer); clearTimeout(restoreTimer);
+    clearInterval(watcher);
     doc.removeEventListener('click',capture,true);
     doc.removeEventListener('wheel',cancelRestore);
     doc.removeEventListener('touchstart',cancelRestore);

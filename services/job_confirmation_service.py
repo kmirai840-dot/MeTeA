@@ -113,3 +113,41 @@ def _invalidate_confirmation(job_id, reason):
         connection.commit()
     finally:
         connection.close()
+
+@database_operation
+def save_confirmation_batch(job_id, changes):
+    """一括保存を一つのトランザクションで行い、評価は一度だけ無効化する。"""
+    user_id = get_current_user_id()
+    previous = {row['item_key']: row for row in load_confirmation_records(job_id)}
+    prepared = []
+    seen = set()
+    for change in changes:
+        name, reason = change['item_name'].strip(), change['item_reason'].strip()
+        key = build_confirmation_item_key(name, reason)
+        status = change.get('status', 'confirmed')
+        text = change.get('result_text', '').strip()
+        if key in seen:
+            raise ValueError('同じ確認項目が重複しています。')
+        seen.add(key)
+        if status not in {'confirmed', 'not_required', 'restore'}:
+            raise ValueError('確認状態を確認してください。')
+        if status == 'confirmed' and (not text or len(text) > 2000):
+            raise ValueError(f'{name}：確認結果を1〜2000文字で入力してください。')
+        prepared.append((key, name, reason, status, text))
+    changed = 0
+    needs_evaluation = False
+    for key, name, reason, status, text in prepared:
+        old = previous.get(key)
+        if status == 'restore':
+            if not old:
+                continue
+            delete_job_confirmation_resolution(user_id, job_id, key)
+        else:
+            if old and old['status'] == status and (status != 'confirmed' or old['result_text'] == text):
+                continue
+            save_job_confirmation_resolution(user_id, job_id, key, name, reason, status, text)
+        changed += 1
+        needs_evaluation |= status == 'confirmed' or bool(old and old['status'] == 'confirmed')
+    if needs_evaluation:
+        _invalidate_confirmation(job_id, '企業・求人元への確認結果がまとめて更新されました。')
+    return changed

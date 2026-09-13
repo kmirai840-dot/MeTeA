@@ -49,4 +49,5 @@ class DetailDataTest(unittest.TestCase):
             app = AppTest.from_string('import streamlit as st\nst.query_params["job_id"]="157"\nfrom pages.job_detail import show_page\nshow_page()').run()
             self.assertFalse(app.exception)
             for render in renders.values():
-                self.assertIs(render.call_args.kwargs['snapshot'],snapshot)
+                self.assertEqual(render.call_args.kwargs['snapshot'],snapshot)
+            self.assertIs(render.call_args.kwargs['snapshot']['job'], snapshot['job'])
