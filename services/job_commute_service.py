@@ -1,6 +1,8 @@
 """求人ごとの電車移動時間に関する処理を担当する。"""
 
 from datetime import date
+import hashlib
+import json
 from urllib.parse import urlencode
 
 from database.repositories.job_commute_repository import (
@@ -15,6 +17,15 @@ GOOGLE_MAPS_DIRECTIONS_URL = (
     "https://www.google.com/maps/dir/"
 )
 MAX_TRAIN_COMMUTE_MINUTES = 600
+
+
+def commute_job_context(job) -> str:
+    """勤務地・求人原文が変わった場合、確認済み時間を再利用しない。"""
+    values = [getattr(job, name, "") or "" for name in
+              ("prefecture", "municipality", "nearest_station", "source_text")]
+    return "manual:v1:" + hashlib.sha256(
+        json.dumps(values, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
 
 
 def build_google_maps_transit_url(
@@ -69,6 +80,7 @@ def save_manual_job_commute(
     origin_station_place_id: str,
     destination_station_name: str,
     duration_minutes: int | None,
+    job=None,
 ) -> JobCommuteCheck:
     """利用者が確認した電車移動時間を保存する。"""
 
@@ -93,7 +105,7 @@ def save_manual_job_commute(
 
     if not normalized_destination_name:
         raise ValueError(
-            "求人情報に勤務地の最寄駅が登録されていません"
+            "勤務地の最寄駅または実際の勤務地の住所を入力してください"
         )
 
     validation_error = validate_train_commute_minutes(
@@ -115,7 +127,7 @@ def save_manual_job_commute(
             normalized_destination_name
         ),
         duration_minutes=duration_minutes,
-        source_type="manual",
+        source_type=commute_job_context(job) if job is not None else "manual",
         checked_at=date.today().isoformat(),
     )
 
@@ -131,6 +143,7 @@ def load_current_job_commute(
     job_id: int,
     current_origin_station_place_id: str,
     current_destination_station_name: str,
+    job=None,
 ) -> JobCommuteCheck | None:
     """現在の駅情報と一致する保存済み電車時間を取得する。"""
 
@@ -141,6 +154,13 @@ def load_current_job_commute(
 
     if commute_check is None:
         return None
+
+    if commute_check.source_type.startswith("manual:v1:"):
+        if job is None or commute_check.source_type != commute_job_context(job):
+            return None
+        # 最寄駅が未登録の求人では、利用者が確認した住所を保存している。
+        if not current_destination_station_name.strip():
+            current_destination_station_name = commute_check.destination_station_name
 
     normalized_origin_place_id = (
         current_origin_station_place_id.strip()

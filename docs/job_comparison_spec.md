@@ -244,3 +244,7 @@ To-Be（今回実装）：起動直後と画面読込中に案内を表示する
 確認範囲：実装から出力したナビ・3求人の比較HTMLを、Edgeで360・390・430・1280px幅で描画。携帯幅でページ全体の横はみ出しがないこと、メニューの開閉・リンク表示、表内スクロール、PCでは携帯メニュー非表示を確認。これは画面部品の検証であり、全画面の実機検証・LINE内からのGoogleログイン成功確認ではない。入力画面・応募管理を含む携帯実機での受入確認は残る。
 
 Googleログインは埋め込みブラウザで制限される場合があるため、Safari／Chromeへ案内する。[Googleの説明](https://developers.googleblog.com/en/upcoming-security-changes-to-googles-oauth-20-authorization-endpoint-in-embedded-webviews/)。iPhone/iPadではLINEの標準ブラウザ設定も利用できる：[LINE公式ヘルプ](https://help.line.me/line/smartphone?contentId=20023875&lang=ja)。アプリから外部ブラウザへの強制遷移は実装しない。
+
+## 2026-09-13 最寄駅未登録時の通勤確認
+
+As-Is：求人の最寄駅がないと通勤時間の入力ができなかった。To-Be：本人が実際の勤務地住所を入力し、Googleマップで経路を確認して電車移動時間を保存できる。保存値はAI評価・求人比較で共通利用する。住所から時間を自動取得するAPIは追加していない。保存仕様・互換性・検証範囲は job_commute_spec.md を参照。

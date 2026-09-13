@@ -699,17 +699,8 @@ def render_commute_confirmation(
             else ""
         )
 
-        if not destination_station_name:
-            st.info(
-                "アプリの求人情報に勤務地の最寄駅が未登録のため、"
-                "駅間の電車移動時間はまだ確認できていません。"
-                "求人票に住所が記載されていても、現在は住所からの自動計算には対応していません。"
-                "実際の勤務地の最寄駅を確認して求人情報に登録すると、経路の確認に進めます。"
-                "未確認の電車移動時間はAI評価で減点しません。"
-            )
-            return
-
         saved_commute = load_current_job_commute(
+            job=job,
             job_id=job_id,
             current_origin_station_place_id=(
                 origin_station_place_id
@@ -718,6 +709,23 @@ def render_commute_confirmation(
                 destination_station_name
             ),
         )
+
+        address_destination = not destination_station_name
+        if address_destination:
+            st.info(
+                "勤務地の最寄駅が未登録でも、求人票の勤務地の住所から経路を確認できます。"
+                "会社の本社所在地ではなく、実際に働く場所の住所を入力してください。"
+            )
+            destination_station_name = st.text_input(
+                "実際の勤務地の住所（建物名・番地まで）",
+                value=saved_commute.destination_station_name if saved_commute else "",
+                key=f"commute_address_{job_id}",
+            ).strip()
+            if saved_commute and destination_station_name != saved_commute.destination_station_name:
+                saved_commute = None
+            if not destination_station_name:
+                st.caption("住所を入力すると経路リンクと時間の保存欄が表示されます。未確認の時間はAI評価で減点しません。")
+                return
 
         maps_origin = " ".join(
             value
@@ -738,6 +746,8 @@ def render_commute_confirmation(
             ]
             if value
         )
+        if address_destination:
+            maps_destination = destination_station_name
 
         maps_url = build_google_maps_transit_url(
             origin_station_name=maps_origin,
@@ -752,8 +762,9 @@ def render_commute_confirmation(
         )
 
         st.caption(
-            "求人票に記載された最寄駅を使って、"
-            "駅間の電車移動時間を確認します。"
+            "Googleマップで利用する駅と電車経路を確認し、片道の電車移動時間を入力してください。"
+            "住所までの徒歩・バスを含む合計時間ではなく、電車での移動時間を入力します。"
+            "時間は自動取得されません。"
         )
 
         if save_message:
@@ -803,6 +814,7 @@ def render_commute_confirmation(
             try:
                 saved_commute_result = (
                     save_manual_job_commute(
+                        job=job,
                         job_id=job_id,
                         origin_station_name=(
                             origin_station_name

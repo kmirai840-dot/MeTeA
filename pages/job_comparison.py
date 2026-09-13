@@ -805,9 +805,9 @@ def load_rule_comparison_data(selected_jobs):
         if (
             basic_info is not None
             and basic_info.nearest_station_place_id
-            and job.nearest_station
         ):
             commute_check = load_current_job_commute(
+                job=job,
                 job_id=job_id,
                 current_origin_station_place_id=(
                     basic_info.nearest_station_place_id
