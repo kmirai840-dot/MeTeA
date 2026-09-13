@@ -675,6 +675,7 @@ page = """
   }
 
   .metea-header-inner {
+    position: relative;
     width: min(1174px, calc(100% - 72px));
     height: 100%;
     margin: 0 auto;
@@ -893,7 +894,10 @@ page = """
     font-weight: 800;
   }
 
-  .metea-announcement-panel { padding: 18px 22px; min-width: 0; }
+  .metea-announcement-menu > summary { cursor: pointer; color: var(--ink); font-size: 15px; font-weight: 700; white-space: nowrap; padding: 12px 0; }
+  .metea-announcement-menu > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  .metea-announcement-menu[open] > summary { color: var(--blue); }
+  .metea-announcement-panel { background: #fff; position: absolute; top: calc(100% + 8px); right: 0; width: min(480px, 100%); max-height: 70vh; overflow-y: auto; padding: 18px 22px; min-width: 0; z-index: 100; box-shadow: 0 8px 28px rgba(20, 39, 73, .14); }
   .metea-announcement-panel time { color: #52627a; font-size: 12px; }
   .metea-announcement-panel h3 { font-size: 15px; margin: 8px 0; line-height: 1.6; }
   .metea-announcement-panel p, .metea-announcement-panel li { font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
@@ -1094,6 +1098,10 @@ page = """
       width: calc(100% - 30px);
     }
 
+    .metea-logo-frame { width: 115px; }
+    .metea-nav { gap: 4px; }
+    .metea-announcement-menu > summary { font-size: 13px; }
+
     .metea-logo {
       width: 115px;
     }
@@ -1158,6 +1166,27 @@ page = """
       </div>
 
       <nav class="metea-nav" aria-label="メインナビゲーション">
+        <details class="metea-announcement-menu">
+          <summary>お知らせ</summary>
+      <article class="metea-panel metea-announcement-panel" aria-labelledby="metea-announcement-heading">
+        <div class="metea-panel-head"><h2 id="metea-announcement-heading">お知らせ</h2></div>
+        <time datetime="2026-09-13">2026年9月13日</time>
+        <h3>AI評価・求人一覧の不具合を修正しました</h3>
+        <p>AI評価が繰り返し失敗する問題と、求人一覧がエラーで開けない問題を修正しました。ご不便をおかけしました。</p>
+        <details>
+          <summary>修正内容とご利用時のお願い</summary>
+          <ul>
+            <li>AI評価の回答が途中で切れる問題と、判定の組み合わせが不正になり評価に失敗する問題を修正しました。</li>
+            <li>求人一覧を開いたときのエラーを修正しました。</li>
+            <li>ホームの「次の一歩」が、保存済みの入力内容や応募状況に応じて表示されるようになりました。</li>
+            <li>「保存して次へ」の待ち時間を短縮しました。引き続き速度改善を進めています。</li>
+          </ul>
+          <p>「求人情報は保存されています」と表示された場合、求人を登録し直す必要はありません。修正後もAI評価の失敗表示が残る場合は、「再試行」を1回押してください。評価には数十秒かかる場合があります。</p>
+          <p>再試行後も失敗する場合は、表示されたメッセージと発生した時刻を運営者へお知らせください。</p>
+        </details>
+      </article>
+
+        </details>
         __NAV_ITEMS_HTML__
         </nav>
     </div>
@@ -1178,24 +1207,6 @@ page = """
     </section>
 
     <section class="metea-right-column">
-      <article class="metea-panel metea-announcement-panel" aria-labelledby="metea-announcement-heading">
-        <div class="metea-panel-head"><h2 id="metea-announcement-heading">お知らせ</h2></div>
-        <time datetime="2026-09-13">2026年9月13日</time>
-        <h3>AI評価・求人一覧の不具合を修正しました</h3>
-        <p>AI評価が繰り返し失敗する問題と、求人一覧がエラーで開けない問題を修正しました。ご不便をおかけしました。</p>
-        <details>
-          <summary>修正内容とご利用時のお願い</summary>
-          <ul>
-            <li>AI評価の回答が途中で切れる問題と、判定の組み合わせが不正になり評価に失敗する問題を修正しました。</li>
-            <li>求人一覧を開いたときのエラーを修正しました。</li>
-            <li>ホームの「次の一歩」が、保存済みの入力内容や応募状況に応じて表示されるようになりました。</li>
-            <li>「保存して次へ」の待ち時間を短縮しました。引き続き速度改善を進めています。</li>
-          </ul>
-          <p>「求人情報は保存されています」と表示された場合、求人を登録し直す必要はありません。修正後もAI評価の失敗表示が残る場合は、「再試行」を1回押してください。評価には数十秒かかる場合があります。</p>
-          <p>再試行後も失敗する場合は、表示されたメッセージと発生した時刻を運営者へお知らせください。</p>
-        </details>
-      </article>
-
       <article class="metea-panel metea-next-step">
         <div class="metea-next-icon">
           <img src="__SPARKLE__" alt="">
