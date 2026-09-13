@@ -659,8 +659,6 @@ def render_recommendation_candidate(
         f"?page=job_detail&job_id={job_id}"
     )
 
-    evaluations = render_evaluation_progress()
-
     info_icon_uri = svg_data_uri("info.svg")
 
     card_html = (
@@ -763,8 +761,7 @@ def show_page() -> None:
         ] = 1
 
     jobs = load_jobs()
-
-
+    evaluations = render_evaluation_progress()
 
     for evaluated_job_id, current_evaluation in evaluations.items():
         if current_evaluation.evaluation_status == "failed":
