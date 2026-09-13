@@ -6,7 +6,7 @@ from ui.job_evaluation_area import refresh_confirmation_area
 
 
 def render_result_form(job_id, item):
-    with st.expander('確認結果を入力・編集', expanded=False):
+    with st.expander('確認結果を入力・編集', expanded=False, key=f"confirmation_form_{job_id}_{item['item_key']}"):
         with st.form(f"confirmation_result_{job_id}_{item['item_key']}"):
             name = item['item_name']
             kind = input_kind(name)

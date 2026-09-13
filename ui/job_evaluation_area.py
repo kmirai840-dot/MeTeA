@@ -42,9 +42,10 @@ def render_evaluation_area(job_id, snapshot, render_score, render_detail):
             evaluation = current['evaluations'].get(job_id)
         if evaluation and evaluation.is_stale and evaluation.evaluation_status not in {'queued', 'running', 'failed'}:
             enqueue_job_evaluation(job_id)
-        if pending(evaluation):
-            st.info('確認内容は保存されています。AI評価を更新中です。完了するとこの欄へ反映します。')
-        _poll(key=f'job_evaluation_poll_{job_id}', data={'pending': pending(evaluation), 'sequence': monotonic()},
+        with st.container(key=f'evaluation_progress_notice_{job_id}'):
+            if pending(evaluation):
+                st.info('確認内容は保存されています。AI評価を更新中です。完了するとこの欄へ反映します。')
+        _poll(key=f'job_evaluation_poll_{job_id}', data={'jobId': job_id, 'pending': pending(evaluation), 'sequence': monotonic()},
               on_poll_change=lambda: None, height=0)
         render_score(job_id=job_id, job=current['job'], evaluations=current['evaluations'], snapshot=current)
         st.divider()

@@ -1514,6 +1514,7 @@ def render_matching_detail(
     with st.expander(
         "評価一覧と確認項目を見る",
         expanded=False,
+        key=f'job_evaluation_details_{job_id}',
     ):
         if evaluation is None:
             st.info(
