@@ -66,11 +66,13 @@ CALENDAR_CSS = """
 """
 SCHEDULE_RESPONSIVE_CSS += CALENDAR_CSS
 
+from pathlib import Path
+from streamlit.components.v2 import component
+
+_calendar = component('metea_schedule_calendar', js=Path(__file__).with_name('schedule_calendar.js').read_text(encoding='utf-8'))
+
 def install_mobile_calendar():
-    from pathlib import Path
-    from streamlit.components.v2 import component
-    calendar = component('metea_schedule_calendar', js=Path(__file__).with_name('schedule_calendar.js').read_text(encoding='utf-8'))
-    calendar(key='metea_schedule_calendar', height=0)
+    _calendar(key='metea_schedule_calendar', height=0)
 
 
 def mobile_schedule_html(views, today=None):
