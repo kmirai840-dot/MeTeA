@@ -1,6 +1,7 @@
 """求人AIマッチングの構造化結果を検証・変換する。"""
 
 import json
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Literal
 
@@ -33,7 +34,8 @@ MAX_AI_ITEMS = 40
 MAX_ITEM_NAME_LENGTH = 100
 MAX_REASON_LENGTH = 240
 MAX_EVIDENCE_LENGTH = 240
-MAX_AI_OUTPUT_TOKENS = 3000
+# 日本語の理由・根拠を含む全評価項目が途中で切れないよう余裕を確保する。
+MAX_AI_OUTPUT_TOKENS = 12000
 AI_REQUEST_TIMEOUT_SECONDS = 75.0
 
 ALLOWED_CATEGORIES = {
@@ -524,6 +526,34 @@ def filter_unavailable_categories(
     }
 
 
+def matching_response_schema() -> dict:
+    """Pydanticの検証条件を保ったままstrict JSON Schemaへ変換する。"""
+    schema = OpenAIMatchResponse.model_json_schema()
+    def strict(node):
+        if isinstance(node, dict):
+            node.pop("default", None)
+            if node.get("type") == "object":
+                node["additionalProperties"] = False
+                node["required"] = list(node.get("properties", {}))
+            for value in node.values():
+                strict(value)
+        elif isinstance(node, list):
+            for value in node:
+                strict(value)
+    strict(schema)
+    # 既存の採点検証と同じ制約を生成時にも適用する。
+    item = schema["$defs"]["OpenAIMatchItem"]
+    ordinary = deepcopy(item)
+    ordinary["properties"]["is_major_required_mismatch"] = {"type": "boolean", "enum": [False]}
+    major = deepcopy(item)
+    major["properties"]["is_major_required_mismatch"] = {"type": "boolean", "enum": [True]}
+    major["properties"]["category"] = {"type": "string", "enum": ["required_condition"]}
+    major["properties"]["judgment"] = {"type": "string", "enum": [MISMATCH]}
+    major["properties"]["weight"] = {"type": "integer", "enum": [1]}
+    schema["$defs"]["OpenAIMatchItem"] = {"anyOf": [ordinary, major]}
+    return schema
+
+
 def request_ai_semantic_evaluation(
     job_id: int,
     matching_context: dict[str, Any],
@@ -558,10 +588,11 @@ def request_ai_semantic_evaluation(
     )
 
     try:
-        response = openai_client.responses.parse(
+        response = openai_client.responses.create(
             model=normalized_model_name,
             input=messages,
-            text_format=OpenAIMatchResponse,
+            text={"format": {"type": "json_schema", "name": "OpenAIMatchResponse",
+                             "strict": True, "schema": matching_response_schema()}},
             max_output_tokens=(
                 MAX_AI_OUTPUT_TOKENS
             ),
@@ -575,14 +606,19 @@ def request_ai_semantic_evaluation(
             f"（{type(error).__name__}）"
         ) from error
 
-    parsed_response = response.output_parsed
-
-    if parsed_response is None:
-        raise JobMatchingAIResultError(
-            "AIマッチングの構造化結果を"
-            "取得できませんでした"
-        )
-
+    # SDKの自動parseより先に完了状態を見る。途中のJSONは採点・保存しない。
+    if response.status != "completed":
+        reason = getattr(response.incomplete_details, "reason", None)
+        if reason == "max_output_tokens":
+            raise JobMatchingAIResultError("AI評価の回答が出力上限に達し、途中で終了しました。")
+        raise JobMatchingAIResultError("AI評価の回答が完了しませんでした。")
+    if not response.output_text:
+        raise JobMatchingAIResultError("AIマッチングの構造化結果を取得できませんでした")
+    try:
+        parsed_response = OpenAIMatchResponse.model_validate_json(response.output_text)
+    except ValueError:
+        # 入力・生成本文を例外ログに含めない。
+        raise JobMatchingAIResultError("AI評価の回答形式を検証できませんでした。") from None
     payload = parsed_response.model_dump()
 
     filtered_payload = (
