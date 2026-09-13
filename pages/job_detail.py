@@ -657,7 +657,7 @@ def render_commute_confirmation(
         f"job_commute_saved_message_{job_id}"
     )
 
-    save_message = st.session_state.pop(
+    save_message = st.session_state.get(
         save_message_key,
         None,
     )
@@ -1634,6 +1634,7 @@ def render_matching_detail(
 
 
 
+@st.fragment
 def _render_application_decision_content(
     job_id: int,
     snapshot=None,
@@ -1691,20 +1692,19 @@ def _render_application_decision_content(
         except ValueError:
             deadline_value = None
 
-    if save_message:
-        st.toast(save_message)
+    current_status = st.empty()
 
     if (
         decision is not None
         and decision.decision_status
     ):
-        st.info(
+        current_status.info(
             "現在の応募判断："
             f"{decision.decision_status}"
         )
 
     else:
-        st.warning(
+        current_status.warning(
             "応募判断はまだ保存されていません。"
         )
 
@@ -1796,40 +1796,28 @@ def _render_application_decision_content(
         st.rerun()
 
     if submitted:
-        errors = (
-            save_job_application_decision_data(
-                JobApplicationDecision(
-                    job_id=job_id,
-                    decision_status=(
-                        selected_status or ""
-                    ),
-                    next_action=(
-                        next_action.strip()
-                    ),
-                    action_deadline=(
-                        action_deadline.isoformat()
-                        if action_deadline
-                        is not None
-                        else None
-                    ),
-                    memo=memo.strip(),
-                )
-            )
+        candidate = JobApplicationDecision(
+            job_id=job_id,
+            decision_status=selected_status or "",
+            next_action=next_action.strip(),
+            action_deadline=action_deadline.isoformat() if action_deadline is not None else None,
+            memo=memo.strip(),
         )
-
+        # 成功表示は保存処理が完了した後に出す。保存後の全画面再実行は不要。
+        st.session_state.pop(save_message_key, None)
+        save_message = None
+        errors = save_job_application_decision_data(candidate)
         if errors:
             for error in errors:
                 st.error(error)
-
         else:
-            st.session_state[
-                save_message_key
-            ] = (
-                f"応募判断「{selected_status}」を"
-                "保存しました。"
-            )
+            decisions[job_id] = candidate
+            current_status.info(f"現在の応募判断：{selected_status}")
+            save_message = f"応募判断「{selected_status}」を保存しました。次のアクション・期限・メモも保存済みです。"
+            st.session_state[save_message_key] = save_message
 
-            st.rerun()
+    if save_message:
+        st.success(save_message)
 
 
 def render_application_decision(
