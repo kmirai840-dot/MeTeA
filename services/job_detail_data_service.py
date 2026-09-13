@@ -4,7 +4,7 @@ from services.job_service import load_job
 from services.job_evaluation_service import load_job_match_evaluations, load_job_application_decisions
 from services.basic_info_service import load_basic_info
 from services.job_commute_service import load_current_job_commute
-from services.job_confirmation_service import load_job_confirmation_resolutions
+from services.job_confirmation_service import load_job_confirmation_resolutions, load_confirmation_records
 
 
 @database_operation
@@ -19,4 +19,5 @@ def load_job_detail_data(job_id):
     return dict(job=job, basic=basic, commute=commute,
                 evaluations=load_job_match_evaluations(),
                 resolutions=load_job_confirmation_resolutions(job_id),
-                decisions=load_job_application_decisions())
+                decisions=load_job_application_decisions(),
+                confirmation_records=load_confirmation_records(job_id))

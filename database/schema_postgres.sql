@@ -476,6 +476,7 @@ CREATE TABLE IF NOT EXISTS user_job_confirmation_resolutions (
     item_name TEXT NOT NULL DEFAULT '',
     item_reason TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'not_required',
+    result_text TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
     updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
 

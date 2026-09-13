@@ -94,7 +94,7 @@ def load_ai_matching_context(
     careers = load_career_data()
     from services.user_skill_service import load_skills
 
-    return build_ai_matching_context(
+    context = build_ai_matching_context(
         job=job,
         hope_condition=hope_condition,
         hope_items=hope_items,
@@ -111,17 +111,30 @@ def load_ai_matching_context(
         careers=careers,
         user_skills=load_skills(),
     )
+    from services.job_confirmation_service import load_confirmation_records
+    confirmed = [dict(item_name=row['item_name'], result_text=row['result_text'], updated_at=row['updated_at'])
+                 for row in load_confirmation_records(job_id) if row['status'] == 'confirmed']
+    if confirmed:
+        context.setdefault('job', {})['confirmed_information'] = confirmed
+        if hope_condition is not None:
+            context.setdefault('user_matching_information', {}).setdefault('hope_conditions', {})['confirmed_comparison_conditions'] = asdict(hope_condition)
+    return context
 
 
 def evaluate_job_semantics(
     job_id: int,
     model_name: str = DEFAULT_AI_MODEL,
+    rule_groups=None,
 ) -> JobAISemanticEvaluation:
     """入力情報を集めてOpenAIの意味判定を実行する。"""
 
     matching_context = load_ai_matching_context(
         job_id
     )
+    if rule_groups:
+        names = {row['item_name'] for row in matching_context.get('job', {}).get('confirmed_information', [])}
+        matching_context['confirmed_rule_items'] = [dict(item_name=item.item_name, hope_group=group, weight=item.weight)
+            for group, items in rule_groups.items() for item in items if item.item_name in names and item.weight > 0]
 
     return request_ai_semantic_evaluation(
         job_id=job_id,
@@ -442,8 +455,17 @@ def evaluate_complete_job_matching(
         evaluate_job_semantics(
             job_id=job_id,
             model_name=model_name,
+            rule_groups=rule_hope_groups,
         )
     )
+
+    # 確認済み情報の判定が返ったルール項目を置き換え、旧「情報なし」と二重採点しない。
+    from services.job_confirmation_service import load_confirmation_records
+    confirmed_names = {row['item_name'] for row in load_confirmation_records(job_id) if row['status'] == 'confirmed'}
+    replacement_names = {item.item_name for item in semantic_evaluation.items
+                         if item.category == 'hope_condition' and item.item_name in confirmed_names}
+    rule_hope_groups = {group: [item for item in items if item.item_name not in replacement_names]
+                        for group, items in rule_hope_groups.items()}
 
     return build_complete_job_matching_result(
         job_id=job_id,

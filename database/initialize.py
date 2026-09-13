@@ -23,6 +23,8 @@ def initialize_database() -> None:
 
     try:
         connection.executescript(schema)
+        from database.confirmation_schema import ensure_confirmation_schema
+        ensure_confirmation_schema(connection)
         ensure_user_account_schema(connection)
 
         user_profile_columns = {

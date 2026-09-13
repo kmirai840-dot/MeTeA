@@ -11,7 +11,7 @@ class DetailDataTest(unittest.TestCase):
         job = SimpleNamespace(nearest_station="駅")
         basic = SimpleNamespace(nearest_station_place_id="place")
         values = {"load_job":job, "load_basic_info":basic, "load_current_job_commute":None,
-                  "load_job_match_evaluations":{}, "load_job_confirmation_resolutions":{}, "load_job_application_decisions":{}}
+                  "load_job_match_evaluations":{}, "load_job_confirmation_resolutions":{}, "load_job_application_decisions":{}, 'load_confirmation_records':[]}
         connection = MagicMock()
         with ExitStack() as stack:
             connect = stack.enter_context(patch("database.connection._open_connection", return_value=connection))

@@ -1345,6 +1345,10 @@ def partition_company_confirmation_items(
     active_items = []
     dismissed_items = []
 
+    from services.job_confirmation_service import load_confirmation_records
+    records = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
+    confirmed_names = {row['item_name'] for row in records if row['status'] == 'confirmed'}
+
     for item in items:
         item_with_key = dict(item)
         item_key = build_confirmation_item_key(
@@ -1352,6 +1356,9 @@ def partition_company_confirmation_items(
             item.get("reason", ""),
         )
         item_with_key["item_key"] = item_key
+
+        if resolutions.get(item_key) == 'confirmed' or item.get('item_name') in confirmed_names:
+            continue
 
         if resolutions.get(item_key) == (
             CONFIRMATION_STATUS_NOT_REQUIRED
@@ -1427,6 +1434,9 @@ def render_actionable_confirmation_group(
                         ),
                     )
                     st.rerun()
+
+            from ui.job_confirmation_results import render_result_form
+            render_result_form(job_id, item)
 
             if index < len(items) - 1:
                 st.divider()
@@ -1601,6 +1611,10 @@ def render_matching_detail(
             job_id=job_id,
             items=dismissed_company_items,
         )
+        from ui.job_confirmation_results import render_confirmed_results
+        from services.job_confirmation_service import load_confirmation_records
+        records = snapshot.get('confirmation_records', []) if snapshot is not None else load_confirmation_records(job_id)
+        render_confirmed_results(job_id, records)
 
 
 def _render_application_decision_content(

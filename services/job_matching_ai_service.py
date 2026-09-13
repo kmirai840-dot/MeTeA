@@ -615,6 +615,23 @@ def matching_response_schema(matching_context=None) -> dict:
     definition['anyOf'] = specialize(definition['anyOf'])
     for condition in schema['properties'].get('required_conditions', {}).get('properties', {}).values():
         condition['anyOf'] = specialize(condition['anyOf'])
+    confirmed_rules = (matching_context or {}).get('confirmed_rule_items', [])
+    if confirmed_rules:
+        properties = {}
+        for index, target in enumerate(confirmed_rules):
+            branches = deepcopy([ordinary, unknown])
+            for branch in branches:
+                props = branch['properties']
+                for name, value in dict(category='hope_condition', evaluation_group='',
+                                        item_name=target['item_name'], hope_group=target['hope_group'], weight=target['weight']).items():
+                    props[name] = {'type': 'integer' if name == 'weight' else 'string', 'enum': [value]}
+            properties[f'confirmed_{index}'] = {'anyOf': branches}
+        schema['properties']['confirmed_rules'] = dict(type='object', properties=properties, required=list(properties), additionalProperties=False)
+        schema['required'].append('confirmed_rules')
+        remaining = MAX_AI_ITEMS - len(targets) - len(confirmed_rules)
+        if remaining < 0:
+            raise JobMatchingAIResultError('確認項目数が評価可能な上限を超えています。')
+        schema['properties']['items']['maxItems'] = remaining
     return schema
 
 
@@ -680,6 +697,7 @@ def request_ai_semantic_evaluation(
         raise JobMatchingAIResultError("AIマッチングの構造化結果を取得できませんでした")
     try:
         payload = json.loads(response.output_text)
+        confirmed_payload = payload.get('confirmed_rules', {}) if isinstance(payload, dict) else {}
         targets = required_targets(matching_context)
         if targets:
             required = payload.get("required_conditions", {})
@@ -691,6 +709,18 @@ def request_ai_semantic_evaluation(
                 if check.get("category") != "required_condition" or check.get("item_name") != target[:MAX_ITEM_NAME_LENGTH]:
                     raise ValueError("Invalid required condition")
             payload = {"items": [*payload.get("items", []), *checks]}
+        confirmed_rules = matching_context.get('confirmed_rule_items', [])
+        if confirmed_rules:
+            keys = [f'confirmed_{index}' for index in range(len(confirmed_rules))]
+            if not isinstance(confirmed_payload, dict) or set(confirmed_payload) != set(keys):
+                raise ValueError('Missing confirmed result')
+            for key, target in zip(keys, confirmed_rules):
+                check = confirmed_payload[key]
+                if (check.get('category') != 'hope_condition' or check.get('item_name') != target['item_name']
+                        or check.get('hope_group') != target['hope_group'] or check.get('weight') != target['weight']):
+                    raise ValueError('Invalid confirmed result')
+            names = {target['item_name'] for target in confirmed_rules}
+            payload = {'items': [item for item in payload.get('items', []) if not (item.get('category') == 'hope_condition' and item.get('item_name') in names)] + [confirmed_payload[key] for key in keys]}
         parsed_response = OpenAIMatchResponse.model_validate(payload)
     except (ValueError, TypeError, AttributeError):
         # 入力・生成本文を例外ログに含めない。

@@ -42,6 +42,7 @@ def save_job_confirmation_resolution(
     item_name: str,
     item_reason: str,
     status: str,
+    result_text: str = '',
 ) -> None:
     """確認項目に対する利用者判断を保存する。"""
     user_id = require_user_id(user_id)
@@ -54,19 +55,20 @@ def save_job_confirmation_resolution(
             """
             INSERT INTO user_job_confirmation_resolutions (
                 user_id, job_id, item_key,
-                item_name, item_reason, status
+                item_name, item_reason, status, result_text
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (user_id, job_id, item_key)
             DO UPDATE SET
                 item_name = excluded.item_name,
                 item_reason = excluded.item_reason,
                 status = excluded.status,
+                result_text = excluded.result_text,
                 updated_at = CURRENT_TIMESTAMP
             """,
             (
                 user_id, job_id, item_key,
-                item_name, item_reason, status,
+                item_name, item_reason, status, result_text,
             ),
         )
         connection.commit()
@@ -100,5 +102,16 @@ def delete_job_confirmation_resolution(
     except Exception:
         connection.rollback()
         raise
+    finally:
+        connection.close()
+
+
+def get_job_confirmation_records(user_id, job_id):
+    user_id = require_user_id(user_id)
+    connection = get_connection()
+    try:
+        require_job_owner(connection, job_id, user_id)
+        rows = connection.execute('SELECT item_key, item_name, item_reason, status, result_text, updated_at FROM user_job_confirmation_resolutions WHERE user_id = ? AND job_id = ? ORDER BY id', (user_id, job_id)).fetchall()
+        return [dict(row) for row in rows]
     finally:
         connection.close()
